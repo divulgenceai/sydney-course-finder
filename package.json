@@ -1,0 +1,19 @@
+{
+  "name": "sydney-course-finder",
+  "version": "1.0.0",
+  "private": false,
+  "description": "A static Sydney university course finder using imported UAC course records.",
+  "scripts": {
+    "check": "node --check app.js && node --check advisor.js && node --check tools/import-uac-courses.js && node --check tools/audit-site-data.js",
+    "audit:data": "node tools/audit-site-data.js",
+    "import:uac": "node tools/import-uac-courses.js"
+  },
+  "keywords": [
+    "uac",
+    "sydney",
+    "university",
+    "atar",
+    "course-search"
+  ],
+  "license": "MIT"
+}
