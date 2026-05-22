@@ -4,7 +4,8 @@
   "private": false,
   "description": "A static Sydney university course finder using imported UAC course records.",
   "scripts": {
-    "check": "node --check app.js && node --check advisor.js && node --check tools/import-uac-courses.js && node --check tools/audit-site-data.js",
+    "start": "node server.js",
+    "check": "node --check app.js && node --check advisor.js && node --check server.js && node --check api/ask-ai.js && node --check tools/import-uac-courses.js && node --check tools/audit-site-data.js",
     "audit:data": "node tools/audit-site-data.js",
     "import:uac": "node tools/import-uac-courses.js"
   },

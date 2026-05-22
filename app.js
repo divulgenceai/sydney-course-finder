@@ -895,16 +895,30 @@ function renderAskDrawer() {
 function renderAskMessage(message) {
   const lines = String(message.text || "").split(/\n+/).filter(Boolean);
   return `
-    <div class="ask-message ${escapeHtml(message.role)}">
-      <strong>${message.role === "user" ? "You" : "Ask helper"}</strong>
+    <div class="ask-message ${escapeHtml(message.role)}${message.pending ? " pending" : ""}">
+      <strong>
+        ${message.role === "user" ? "You" : "Ask helper"}
+        ${message.provider ? `<span>${escapeHtml(message.provider)}</span>` : ""}
+      </strong>
       ${lines.map((line) => `<p>${highlight(line)}</p>`).join("")}
     </div>
   `;
 }
 
-function askReply(message) {
+async function askReply(message) {
+  const local = localAskReply(message);
+  if (shouldUseLocalOnly(message)) return { text: local, provider: "UAC rule check" };
+  const aiReply = await askAiReply(message, local);
+  return aiReply || { text: local, provider: "Site data" };
+}
+
+function localAskReply(message) {
   const question = cleanSearchText(message);
   if (!question) return "Ask me a question about UAC, ATAR, pathways, subjects or finding courses.";
+
+  if (isCourtOrHardshipQuestion(question)) {
+    return "No, being a witness in a trial or having a case dismissed does not automatically give you a free ATAR or guaranteed bonus points. Your ATAR itself does not change. If the court matter seriously disrupted your schooling over time, you may be able to apply for EAS or another access scheme, but UAC or the university would need evidence and they decide eligibility. The right move is to check EAS, speak to your school careers adviser, and keep backup preferences/pathways as well.";
+  }
 
   if (/bonus|extra point|adjust|adjustment|selection rank|scheme|points? for|marks? for/.test(question)) {
     return "There is no universal bonus-mark number. UAC and universities usually call these selection-rank adjustments, and the amount depends on the provider, course and your eligibility. Common categories include subject adjustments, location or school schemes, equity or EAS, elite athlete/performer schemes and other access programs. I can help you narrow it down if you tell me the course/provider plus your subjects or circumstances, but the exact number must be checked on UAC or that university's adjustment-factor page.";
@@ -918,7 +932,7 @@ function askReply(message) {
     return "Schools Recommendation Scheme is an early-offer pathway using school recommendations and other criteria, not just ATAR. It can be useful if your ATAR is uncertain, but each institution decides which courses participate and what conditions apply.";
   }
 
-  if (/low atar|below|too low|miss|missed|pathway|backup|alternative|didnt get|don't get|do not get/.test(question)) {
+  if (/\b(low atar|below|too low|miss|missed|pathway|backup|alternative|didnt get|don't get|do not get)\b/.test(question)) {
     return "If your ATAR is below a course profile, use a ladder: keep the dream course in your preferences, add related lower-entry courses, check selection-rank adjustments, EAS/SRS, diplomas, TAFE-to-uni pathways and internal transfer options after first year. For a very low ATAR, pathways and related courses usually matter more than trying to force direct entry.";
   }
 
@@ -930,13 +944,16 @@ function askReply(message) {
     return "Use Save on course rows to build your library, then Compare on up to four courses to check ATAR, campus, duration, prerequisites, assumed knowledge, fees and links side by side. Different campuses stay separate, so do not delete a row just because the course name is similar.";
   }
 
+  if (/choose|which uni|best uni|prestige|employment|employability|graduate|between|uts|unsw|usyd|macquarie|western sydney/.test(question)) {
+    if (/uts|unsw/.test(question) && /computer|software|coding|technology|it|data|cyber|artificial intelligence/.test(question)) {
+      return "For computing or IT, UNSW usually wins on broad prestige and employer reputation, while UTS is very strong for industry focus, city access and practical project-style learning. Use that as a starting point, then compare the actual course structure, ATAR profile, commute, internships, flexibility and whether the subjects look like work you can keep doing for years. Do not choose only on reputation if the other course has a better fit, clearer pathway or easier commute.";
+    }
+    return "Use a few factors together: course accreditation, placements or industry projects, commute, campus fit, flexibility, fees/CSP status, prerequisites, student support and whether the actual day-to-day work sounds tolerable. Prestige helps, but it should not beat a course you can realistically enter, finish and use.";
+  }
+
   const matches = askCourseMatches(question, 4);
   if (questionMentionsCourse(question) && matches.length) {
     return `From the imported Sydney UAC records, start by checking ${formatAskCourses(matches)}. Search the course name, then expand each row for ATAR, prerequisites, assumed knowledge, campus, fees and official links.`;
-  }
-
-  if (/choose|which uni|best uni|prestige|employment|employability|graduate|job/.test(question)) {
-    return "Use a few factors together: course accreditation, placements or industry projects, commute, campus fit, flexibility, fees/CSP status, prerequisites, student support and whether the actual day-to-day work sounds tolerable. Prestige helps, but it should not beat a course you can realistically enter, finish and use.";
   }
 
   if (/fee|fees|cost|csp|commonwealth|hecs|help loan/.test(question)) {
@@ -944,6 +961,99 @@ function askReply(message) {
   }
 
   return "I can help with ATAR adjustments, pathways, subjects, prerequisites, saved courses, comparing courses or finding Sydney options. For exact entry numbers, I will use this site's imported UAC data when it is available and point you back to official pages when the rule is provider-specific.";
+}
+
+function isCourtOrHardshipQuestion(question) {
+  return /witness|trial|court|case|dismissed|legal matter|police|victim|subpoena|testif|charge|crime/.test(question)
+    && /atar|bonus|mark|point|adjust|selection rank|eas|scheme|access|free/.test(question);
+}
+
+function shouldUseLocalOnly(message) {
+  const question = cleanSearchText(message);
+  return isCourtOrHardshipQuestion(question) || /exact|guarantee|guaranteed|definitely|am i eligible|do i qualify/.test(question);
+}
+
+async function askAiReply(message, localAnswer) {
+  try {
+    const prompt = buildAskAiPrompt(message, localAnswer);
+    const text = await withTimeout(fetchPollinationsText(prompt), 10000);
+    const cleaned = cleanAskAiText(text);
+    if (!cleaned || cleaned.length < 45 || isProviderNotice(cleaned)) return null;
+    return { text: cleaned, provider: "Free AI + site data" };
+  } catch {
+    return null;
+  }
+}
+
+function buildAskAiPrompt(message, localAnswer) {
+  const question = cleanSearchText(message);
+  const courses = askCourseMatches(question, 5)
+    .map(({ course }, index) => `${index + 1}. ${course.name} | ${course.university} | ${course.campus} | ATAR ${displayRank(course.atar)} | prereq ${shortPlainField(course.prerequisites)} | assumed ${shortPlainField(course.assumed)}`)
+    .join("\n") || "No specific course matches from the local dataset.";
+  const prompt = [
+    "Use the local answer as truth. Improve wording only. Do not invent exact bonus points, eligibility, fees, prerequisites, campus availability, legal advice or guarantees. Calm, direct, 3-5 sentences, plain text only.",
+    `Local answer: ${localAnswer}`,
+    `Course records:\n${courses}`,
+    `Student question: ${message}`,
+    "Answer:"
+  ].join("\n\n");
+  return prompt.slice(0, 2200);
+}
+
+async function fetchPollinationsText(prompt) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 9800);
+  try {
+    const response = await fetch("/api/ask-ai", {
+      method: "POST",
+      cache: "no-store",
+      signal: controller.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
+    if (!response.ok) return "";
+    const data = await response.json().catch(() => null);
+    return data?.text || "";
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error("Timed out")), ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
+function cleanAskAiText(value) {
+  return decodeHtmlEntities(value || "")
+    .replace(/[\u2010-\u2015]/g, "-")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/[*_`#>]/g, "")
+    .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 900);
+}
+
+function isProviderNotice(value) {
+  return /pollinations|rate limit|api key|captcha|cloudflare|model unavailable|error/i.test(value || "");
+}
+
+function shortPlainField(value) {
+  return truncateText(decodeHtmlEntities(value || "Not listed"), 130);
 }
 
 function askCourseMatches(question, limit) {
@@ -1223,12 +1333,20 @@ function bindCourseActionButtons(root) {
   });
 }
 
-function submitAskMessage(message) {
+async function submitAskMessage(message) {
   const text = String(message || "").trim();
   if (!text) return;
   state.askOpen = true;
   state.askMessages.push({ role: "user", text });
-  state.askMessages.push({ role: "assistant", text: askReply(text) });
+  const pending = { role: "assistant", text: "Checking the site data and free AI model...", pending: true, provider: "Thinking" };
+  state.askMessages.push(pending);
+  state.askMessages = state.askMessages.slice(-12);
+  render();
+  scrollAskToBottom();
+  const reply = await askReply(text);
+  pending.text = reply.text;
+  pending.provider = reply.provider;
+  pending.pending = false;
   state.askMessages = state.askMessages.slice(-12);
   render();
   scrollAskToBottom();
