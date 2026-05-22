@@ -267,6 +267,13 @@ const pathwayLinks = [
   }
 ];
 
+const askStarterPrompts = [
+  "How do ATAR adjustment factors work?",
+  "What if my ATAR is lower than the course?",
+  "Can I get extra points for my subjects?",
+  "Show me coding courses around 75 ATAR"
+];
+
 const advisorQuestions = [
   {
     key: "atar",
@@ -348,6 +355,12 @@ const state = {
   providerTopic: "Technology",
   savedIds: readIdList(storageKeys.saved),
   compareIds: readIdList(storageKeys.compare),
+  openCourseIds: new Set(),
+  askOpen: window.location.hash === "#ask",
+  askMessages: [{
+    role: "assistant",
+    text: "Ask me about ATAR adjustments, pathways, prerequisites, course search, saving, comparing, or choosing between Sydney uni options. I answer from this site data plus UAC-style rules, and I will say when something needs official confirmation."
+  }],
   advisor: { ...advisorDefaults, atar: "75", pathways: "Maybe" },
   advisorRun: false,
   advisorChat: []
@@ -387,6 +400,7 @@ function render() {
         <a href="#courses">Courses</a>
         <a href="#atar">ATAR match</a>
         <a href="./advisor.html">Course helper</a>
+        <button class="nav-button" type="button" data-action="open-ask">Ask?</button>
         <a href="#saved">Saved ${state.savedIds.length ? `(${state.savedIds.length})` : ""}</a>
         <a href="#providers">Universities</a>
         <a href="#faq">FAQ</a>
@@ -526,6 +540,7 @@ function render() {
         <div class="faq-list">${renderFaq()}</div>
       </section>
     </main>
+    ${renderAskDrawer()}
   `;
   bindEvents();
 }
@@ -550,8 +565,9 @@ function filteredCourses() {
 function renderCourse(course, matchLine = "") {
   const saved = state.savedIds.includes(course.id);
   const comparing = state.compareIds.includes(course.id);
+  const open = state.openCourseIds.has(course.id);
   return `
-    <details class="course-item">
+    <details class="course-item" data-course-id="${escapeHtml(course.id)}" ${open ? "open" : ""}>
       <summary>
         <img src="${escapeHtml(course.providerLogo)}" alt="${escapeHtml(course.university)} logo" loading="lazy" />
         <span class="course-summary">
@@ -564,30 +580,36 @@ function renderCourse(course, matchLine = "") {
           <button type="button" data-compare-course="${escapeHtml(course.id)}" aria-pressed="${comparing}">${comparing ? "Comparing" : "Compare"}</button>
         </span>
       </summary>
-      <div class="course-detail">
-        <dl>
-          ${row("Course code", course.courseCode)}
-          ${row("Level", levelDisplay(course))}
-          ${row("Campus", course.campus)}
-          ${row("ATAR / selection rank", displayRank(course.atar))}
-          ${row("Duration", course.duration)}
-          ${row("Study mode", (course.modes || []).join(", "))}
-          ${row("Intake", course.intake)}
-          ${row("Prerequisites", course.prerequisites)}
-          ${row("Assumed knowledge", course.assumed)}
-          ${row("Fees", course.fees)}
-          ${row("Careers", course.careers)}
-          ${row("Information source", course.source)}
-        </dl>
-        <p>${highlight(course.summary)}</p>
-        <div class="actions">
-          <a href="${escapeHtml(course.uacUrl)}" target="_blank" rel="noreferrer">View on UAC ${icon("external")}</a>
-          ${course.officialUrl ? `<a href="${escapeHtml(course.officialUrl)}" target="_blank" rel="noreferrer">Course website ${icon("external")}</a>` : ""}
-          <button type="button" data-save-course="${escapeHtml(course.id)}">${saved ? "Remove from saved" : "Save course"}</button>
-          <button type="button" data-compare-course="${escapeHtml(course.id)}">${comparing ? "Remove from compare" : "Add to compare"}</button>
-        </div>
-      </div>
+      ${open ? renderCourseDetail(course, saved, comparing) : ""}
     </details>
+  `;
+}
+
+function renderCourseDetail(course, saved, comparing) {
+  return `
+    <div class="course-detail">
+      <dl>
+        ${row("Course code", course.courseCode)}
+        ${row("Level", levelDisplay(course))}
+        ${row("Campus", course.campus)}
+        ${row("ATAR / selection rank", displayRank(course.atar))}
+        ${row("Duration", course.duration)}
+        ${row("Study mode", (course.modes || []).join(", "))}
+        ${row("Intake", course.intake)}
+        ${row("Prerequisites", course.prerequisites)}
+        ${row("Assumed knowledge", course.assumed)}
+        ${row("Fees", course.fees)}
+        ${row("Careers", course.careers)}
+        ${row("Information source", course.source)}
+      </dl>
+      <p>${highlight(course.summary)}</p>
+      <div class="actions">
+        <a href="${escapeHtml(course.uacUrl)}" target="_blank" rel="noreferrer">View on UAC ${icon("external")}</a>
+        ${course.officialUrl ? `<a href="${escapeHtml(course.officialUrl)}" target="_blank" rel="noreferrer">Course website ${icon("external")}</a>` : ""}
+        <button type="button" data-save-course="${escapeHtml(course.id)}">${saved ? "Remove from saved" : "Save course"}</button>
+        <button type="button" data-compare-course="${escapeHtml(course.id)}">${comparing ? "Remove from compare" : "Add to compare"}</button>
+      </div>
+    </div>
   `;
 }
 
@@ -838,12 +860,165 @@ function renderFaq() {
   return items.map(([question, answer]) => `<details><summary>${escapeHtml(question)}</summary><p>${escapeHtml(answer)}</p></details>`).join("");
 }
 
+function renderAskDrawer() {
+  return `
+    <div class="ask-drawer${state.askOpen ? " open" : ""}" aria-hidden="${state.askOpen ? "false" : "true"}">
+      <div class="ask-backdrop" data-action="close-ask"></div>
+      <aside class="ask-panel" role="dialog" aria-modal="true" aria-labelledby="askTitle">
+        <div class="ask-head">
+          <div>
+            <h2 id="askTitle">Ask</h2>
+            <p>Fast help for HSC, UAC, ATAR adjustments, pathways and using this site.</p>
+          </div>
+          <button type="button" class="icon-button" data-action="close-ask" aria-label="Close Ask panel">Close</button>
+        </div>
+        <div class="ask-suggestions">
+          ${askStarterPrompts.map((prompt) => `<button type="button" data-ask-prompt="${escapeHtml(prompt)}">${escapeHtml(prompt)}</button>`).join("")}
+        </div>
+        <div class="ask-log" aria-live="polite">
+          ${state.askMessages.map(renderAskMessage).join("")}
+        </div>
+        <div class="ask-resources">
+          <a href="https://www.uac.edu.au/future-applicants/admission-criteria/university-selection-rank-adjustments/" target="_blank" rel="noreferrer">Adjustment factors ${icon("external")}</a>
+          <a href="https://www.uac.edu.au/future-applicants/scholarships-and-schemes/educational-access-schemes" target="_blank" rel="noreferrer">EAS ${icon("external")}</a>
+          <a href="https://www.uac.edu.au/future-applicants/how-to-apply-for-uni/selecting-your-course-preferences/" target="_blank" rel="noreferrer">Preferences ${icon("external")}</a>
+        </div>
+        <form class="ask-form" data-form="ask-chat">
+          <input name="message" autocomplete="off" placeholder="Ask about bonus marks, pathways, subjects or courses" />
+          <button type="submit">Ask</button>
+        </form>
+      </aside>
+    </div>
+  `;
+}
+
+function renderAskMessage(message) {
+  const lines = String(message.text || "").split(/\n+/).filter(Boolean);
+  return `
+    <div class="ask-message ${escapeHtml(message.role)}">
+      <strong>${message.role === "user" ? "You" : "Ask helper"}</strong>
+      ${lines.map((line) => `<p>${highlight(line)}</p>`).join("")}
+    </div>
+  `;
+}
+
+function askReply(message) {
+  const question = cleanSearchText(message);
+  if (!question) return "Ask me a question about UAC, ATAR, pathways, subjects or finding courses.";
+
+  if (/bonus|extra point|adjust|adjustment|selection rank|scheme|points? for|marks? for/.test(question)) {
+    return "There is no universal bonus-mark number. UAC and universities usually call these selection-rank adjustments, and the amount depends on the provider, course and your eligibility. Common categories include subject adjustments, location or school schemes, equity or EAS, elite athlete/performer schemes and other access programs. I can help you narrow it down if you tell me the course/provider plus your subjects or circumstances, but the exact number must be checked on UAC or that university's adjustment-factor page.";
+  }
+
+  if (/eas|educational access|disadvantage|hardship|illness|family|financial|equity/.test(question)) {
+    return "EAS is for long-term educational disadvantage that affected your studies. It can increase your selection rank for some institutions, but it is not automatic for every course and it does not change your ATAR itself. Keep evidence ready, apply through UAC by the relevant deadline and still list realistic backup courses.";
+  }
+
+  if (/srs|school recommendation|early offer|early entry/.test(question)) {
+    return "Schools Recommendation Scheme is an early-offer pathway using school recommendations and other criteria, not just ATAR. It can be useful if your ATAR is uncertain, but each institution decides which courses participate and what conditions apply.";
+  }
+
+  if (/low atar|below|too low|miss|missed|pathway|backup|alternative|didnt get|don't get|do not get/.test(question)) {
+    return "If your ATAR is below a course profile, use a ladder: keep the dream course in your preferences, add related lower-entry courses, check selection-rank adjustments, EAS/SRS, diplomas, TAFE-to-uni pathways and internal transfer options after first year. For a very low ATAR, pathways and related courses usually matter more than trying to force direct entry.";
+  }
+
+  if (/prereq|prerequisite|assumed|knowledge|subject needed|required subject/.test(question)) {
+    return "Prerequisites can block entry if you do not meet them. Assumed knowledge is different: it usually will not block entry, but missing it can make first year harder. On this site, expand a course row to see the imported UAC prerequisite and assumed-knowledge fields, then confirm on UAC or the university page before applying.";
+  }
+
+  if (/save|saved|library|compare|comparison/.test(question)) {
+    return "Use Save on course rows to build your library, then Compare on up to four courses to check ATAR, campus, duration, prerequisites, assumed knowledge, fees and links side by side. Different campuses stay separate, so do not delete a row just because the course name is similar.";
+  }
+
+  const matches = askCourseMatches(question, 4);
+  if (questionMentionsCourse(question) && matches.length) {
+    return `From the imported Sydney UAC records, start by checking ${formatAskCourses(matches)}. Search the course name, then expand each row for ATAR, prerequisites, assumed knowledge, campus, fees and official links.`;
+  }
+
+  if (/choose|which uni|best uni|prestige|employment|employability|graduate|job/.test(question)) {
+    return "Use a few factors together: course accreditation, placements or industry projects, commute, campus fit, flexibility, fees/CSP status, prerequisites, student support and whether the actual day-to-day work sounds tolerable. Prestige helps, but it should not beat a course you can realistically enter, finish and use.";
+  }
+
+  if (/fee|fees|cost|csp|commonwealth|hecs|help loan/.test(question)) {
+    return "Fees depend on the course, place type and student status. A CSP means the government subsidises part of the cost, and eligible students may use HECS-HELP. This site shows imported fee text when UAC lists it, but final fees must be checked on the official provider page.";
+  }
+
+  return "I can help with ATAR adjustments, pathways, subjects, prerequisites, saved courses, comparing courses or finding Sydney options. For exact entry numbers, I will use this site's imported UAC data when it is available and point you back to official pages when the rule is provider-specific.";
+}
+
+function askCourseMatches(question, limit) {
+  const topic = topicFromQuestion(question);
+  const targetAtar = targetAtarFromQuestion(question);
+  const words = tokenise(question).filter((word) => word.length > 2 && !askStopWords.has(word));
+  const seen = new Set();
+  return allCourses
+    .map((course) => {
+      const title = cleanSearchText(course.name);
+      const text = primaryCourseText(course);
+      const rank = numericRank(course.atar);
+      let score = searchScore(course, question) * 0.04;
+      if (topic) score += topicWeightedScore(course, topic) * 1.6;
+      score += words.filter((word) => tokenMatch(title, word)).length * 34;
+      score += words.filter((word) => tokenMatch(text, word)).length * 4;
+      if (targetAtar !== null) {
+        const gap = rank === null ? 99 : Math.abs(targetAtar - rank);
+        score += rank !== null ? Math.max(0, 56 - gap * 3.5) : -80;
+        if (gap > 12) score -= 90;
+        if (rank === null) score -= 45;
+        if (!/pathway|diploma|backup|low atar|alternative/.test(question) && /via diploma|^diploma|^advanced diploma/.test(title)) score -= 60;
+      }
+      if (course.level === "undergraduate") score += 8;
+      if (rank !== null) score += 3;
+      return { course, score };
+    })
+    .filter((entry) => entry.score > 16)
+    .sort((a, b) => b.score - a.score || a.course.name.localeCompare(b.course.name))
+    .filter((entry) => {
+      const key = `${cleanSearchText(entry.course.name)}|${entry.course.providerId}|${cleanSearchText(entry.course.campus)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, limit);
+}
+
+function targetAtarFromQuestion(question) {
+  const match = String(question).match(/\b(?:atar|around|about|near|estimate|got|with)?\s*(\d{2}(?:\.\d{1,2})?)\b/);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return value >= 30 && value <= 99.95 ? value : null;
+}
+
+const askStopWords = new Set([
+  "about", "with", "have", "this", "that", "what", "which", "course", "courses", "university", "uni", "study", "marks", "points", "atar", "rank", "help", "good", "best", "around"
+]);
+
+function topicFromQuestion(question) {
+  return topicOptions.find((topic) => {
+    if (topic.label === "All interests") return false;
+    if (phraseMatch(question, topic.label)) return true;
+    return topic.keywords.some((keyword) => phraseMatch(question, keyword) || tokenise(keyword).some((word) => tokenMatch(question, word)));
+  });
+}
+
+function questionMentionsCourse(question) {
+  return /course|degree|study|career|job|coding|programming|software|computer|medicine|medical|health|nursing|law|justice|business|commerce|finance|engineering|design|creative|teaching|education|psychology|science|food|hospitality|sport/.test(question);
+}
+
+function formatAskCourses(entries) {
+  return entries.map(({ course }) => {
+    const rank = displayRank(course.atar);
+    return `${course.name} (${course.university}, ${course.campus}, ATAR ${rank})`;
+  }).join("; ");
+}
+
 function bindEvents() {
   app.querySelector('[data-form="search"]')?.addEventListener("submit", (event) => {
     event.preventDefault();
     state.draft = event.target.search.value.trim();
     state.query = state.draft;
     state.visible = 24;
+    state.openCourseIds.clear();
     render();
   });
 
@@ -855,6 +1030,7 @@ function bindEvents() {
     app.querySelector(`[data-action="${key}"]`)?.addEventListener("change", (event) => {
       state[key] = event.target.value;
       state.visible = 24;
+      state.openCourseIds.clear();
       render();
     });
   });
@@ -867,6 +1043,7 @@ function bindEvents() {
     state.mode = "All modes";
     state.campus = "All campuses";
     state.visible = 24;
+    state.openCourseIds.clear();
     render();
   });
 
@@ -875,19 +1052,24 @@ function bindEvents() {
     render();
   });
 
-  app.querySelectorAll("[data-save-course]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      toggleSaved(button.dataset.saveCourse);
-    });
-  });
+  bindCourseActionButtons(app);
 
-  app.querySelectorAll("[data-compare-course]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      toggleCompare(button.dataset.compareCourse);
+  app.querySelectorAll(".course-item[data-course-id]").forEach((details) => {
+    details.addEventListener("toggle", () => {
+      const id = details.dataset.courseId;
+      if (!id) return;
+      if (details.open) {
+        state.openCourseIds.add(id);
+        if (!details.querySelector(".course-detail")) {
+          const course = courseById.get(id);
+          if (course) {
+            details.insertAdjacentHTML("beforeend", renderCourseDetail(course, state.savedIds.includes(id), state.compareIds.includes(id)));
+            bindCourseActionButtons(details);
+          }
+        }
+      } else {
+        state.openCourseIds.delete(id);
+      }
     });
   });
 
@@ -957,7 +1139,35 @@ function bindEvents() {
     state.matcherProvider = app.querySelector('[data-action="matcherProvider"]').value;
     state.matcherTopic = app.querySelector('[data-action="matcherTopic"]').value;
     state.matcherRun = true;
+    state.openCourseIds.clear();
     render();
+  });
+
+  app.querySelector('[data-action="open-ask"]')?.addEventListener("click", () => {
+    state.askOpen = true;
+    render();
+    scrollAskToBottom();
+  });
+
+  app.querySelectorAll('[data-action="close-ask"]').forEach((control) => {
+    control.addEventListener("click", () => {
+      state.askOpen = false;
+      if (window.location.hash === "#ask") history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      render();
+    });
+  });
+
+  app.querySelectorAll("[data-ask-prompt]").forEach((button) => {
+    button.addEventListener("click", () => {
+      submitAskMessage(button.dataset.askPrompt || "");
+    });
+  });
+
+  app.querySelector('[data-form="ask-chat"]')?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const message = event.target.message.value.trim();
+    event.target.message.value = "";
+    submitAskMessage(message);
   });
 
   app.querySelector('[data-form="advisor"]')?.addEventListener("submit", (event) => {
@@ -992,6 +1202,42 @@ function bindEvents() {
     event.target.message.value = "";
     render();
     location.hash = "advisor";
+  });
+}
+
+function bindCourseActionButtons(root) {
+  root.querySelectorAll("[data-save-course]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleSaved(button.dataset.saveCourse);
+    });
+  });
+
+  root.querySelectorAll("[data-compare-course]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleCompare(button.dataset.compareCourse);
+    });
+  });
+}
+
+function submitAskMessage(message) {
+  const text = String(message || "").trim();
+  if (!text) return;
+  state.askOpen = true;
+  state.askMessages.push({ role: "user", text });
+  state.askMessages.push({ role: "assistant", text: askReply(text) });
+  state.askMessages = state.askMessages.slice(-12);
+  render();
+  scrollAskToBottom();
+}
+
+function scrollAskToBottom() {
+  requestAnimationFrame(() => {
+    const log = app.querySelector(".ask-log");
+    if (log) log.scrollTop = log.scrollHeight;
   });
 }
 
@@ -1571,3 +1817,11 @@ function escapeHtml(value) {
 }
 
 render();
+if (state.askOpen) scrollAskToBottom();
+
+window.addEventListener("hashchange", () => {
+  if (window.location.hash !== "#ask") return;
+  state.askOpen = true;
+  render();
+  scrollAskToBottom();
+});

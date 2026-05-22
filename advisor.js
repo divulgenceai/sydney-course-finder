@@ -270,7 +270,7 @@ const state = {
   advisorRun: false,
   advisorChat: [],
   aiBusy: false,
-  aiProvider: "Course data helper"
+  aiProvider: "Site-trained helper"
 };
 
 function render() {
@@ -286,6 +286,7 @@ function render() {
         <a href="./index.html#courses">Courses</a>
         <a href="./index.html#atar">ATAR match</a>
         <a href="./advisor.html" aria-current="page">Course helper</a>
+        <a href="./index.html#ask">Ask?</a>
         <a href="./index.html#saved">Saved</a>
         <a href="./index.html#providers">Universities</a>
         <a href="./index.html#faq">FAQ</a>
@@ -296,7 +297,7 @@ function render() {
       <section class="hero advisor-hero">
         <div>
           <h1>Course helper</h1>
-          <p>Answer a focused set of questions, then get a data-based first direction from the Sydney UAC course dataset. The chat uses that result as context, then asks an AI model when available.</p>
+          <p>Answer a focused set of questions, then get a data-based first direction from the Sydney UAC course dataset. The chat is trained on this page's course data and pathway rules so it stays fast and grounded.</p>
         </div>
         <dl class="stats two">
           <div><dt>Course records</dt><dd>${number(allCourses.length)}</dd></div>
@@ -342,7 +343,7 @@ function renderAdvisor(ranked, profile) {
       ${advisorQuestions.map(renderAdvisorQuestion).join("")}
       <button type="submit" class="match-btn">Find my course direction</button>
     </form>
-    ${state.advisorRun ? renderAdvisorResult(ranked, profile) : `<p class="empty-note">The first recommendation is algorithmic. The follow-up chat can use free browser AI or approved Puter AI when available, with a fast course-data helper as backup.</p>`}
+    ${state.advisorRun ? renderAdvisorResult(ranked, profile) : `<p class="empty-note">The first recommendation is algorithmic. The follow-up chat uses the same imported course data, pathway rules and your answers. No popups or unsupported external claims.</p>`}
   `;
 }
 
@@ -438,30 +439,16 @@ function bindEvents() {
     });
   });
 
-  advisorApp.querySelector('[data-form="advisor-chat"]')?.addEventListener("submit", async (event) => {
+  advisorApp.querySelector('[data-form="advisor-chat"]')?.addEventListener("submit", (event) => {
     event.preventDefault();
     const message = event.target.message.value.trim();
     if (!message || state.aiBusy) return;
     state.advisorChat.push({ role: "user", text: message });
-    const pendingMessage = { role: "assistant", text: "Thinking through your answers and the course data...", pending: true };
-    state.advisorChat.push(pendingMessage);
-    state.aiBusy = true;
-    state.aiProvider = "AI helper";
+    const reply = advisorChatReply(message);
+    state.advisorChat.push({ role: "assistant", text: cleanAiText(reply.text) });
+    state.aiProvider = reply.provider;
     event.target.message.value = "";
     renderPreservingScroll(true);
-    try {
-      const reply = await advisorChatReply(message);
-      pendingMessage.text = cleanAiText(reply.text);
-      pendingMessage.pending = false;
-      state.aiProvider = reply.provider;
-    } catch (error) {
-      pendingMessage.text = localAdvisorChatReply(message);
-      pendingMessage.pending = false;
-      state.aiProvider = "Course data helper";
-    } finally {
-      state.aiBusy = false;
-      renderPreservingScroll(true);
-    }
   });
 }
 
@@ -757,15 +744,13 @@ function directCourseFactReply(question, ranked, profile) {
   return avoidRepeatedReply(`${lines.join(" ")} I am only using imported UAC fields here, so confirm final details on the official page before applying.`, matches, profile);
 }
 
-async function advisorChatReply(message) {
+function advisorChatReply(message) {
   const ranked = advisorRankedCourses().slice(0, 6);
   const profile = advisorProfile();
   const fallback = localAdvisorChatReply(message);
-  const aiReply = await actualAiReply(message, profile, ranked, fallback);
-  if (!aiReply?.text) return { text: fallback, provider: "Course data helper" };
   return {
-    ...aiReply,
-    text: avoidRepeatedReply(cleanAiText(aiReply.text), ranked, profile)
+    text: avoidRepeatedReply(cleanAiText(fallback), ranked, profile),
+    provider: "Site-trained helper"
   };
 }
 
@@ -834,6 +819,17 @@ function localAdvisorChatReply(message) {
     const suggestions = themedSuggestions(profile, "food").slice(0, 12);
     const names = suggestions.length ? listCourseNames(suggestions, 3) : listCourseNames(ranked, 3);
     return avoidRepeatedReply(`Yep, cooking should matter. From the dataset I would read that as food, nutrition, hospitality or tourism rather than general IT. The closest course directions to inspect are ${names}. If you want the people-helping side, start with nutrition or health-linked food courses; if you want the service/business side, compare hospitality, tourism and events pathways.`, suggestions.length ? suggestions : ranked, profile);
+  }
+
+  if (/coding|programming|software|technology|computer|it|business|why|based|topic|interest|not business/.test(question) && profile.topic.label === "Technology") {
+    const techPicks = ranked
+      .filter(({ course }) => /information technology|computer|software|data|cyber|artificial intelligence|games|technology/i.test(courseText(course)))
+      .slice(0, 3);
+    const names = techPicks.length ? listCourseNames(techPicks, 3) : listCourseNames(ranked, 3);
+    const businessNote = /business|commerce|finance|accounting/.test(profile.text)
+      ? "Business words are present in your subjects, but your typed interest and the course titles are carrying the stronger technology signal."
+      : "It is not treating business as the main direction because your interest and course matches point more strongly to computing and IT.";
+    return avoidRepeatedReply(`Yes, this recommendation is being driven by the technology signal. I detected coding, computing, IT or apps in your answers, then boosted courses whose UAC title or field includes technology terms. The clearest matches are ${names}. ${businessNote}`, techPicks.length ? techPicks : ranked, profile);
   }
 
   if (/atar|low|rank|entry|pathway|backup|dont get|do not get|miss out/.test(question)) {

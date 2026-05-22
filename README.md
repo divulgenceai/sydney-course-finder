@@ -5,9 +5,9 @@ Clean static website for searching Sydney-campus UAC undergraduate course record
 ## What It Uses
 
 - `uac-courses.js`: imported UAC undergraduate records filtered to Sydney campuses or Sydney-location study options.
-- `app.js`: course search, filters, ATAR matching, saved courses, compare library, provider list and FAQ.
+- `app.js`: course search, filters, ATAR matching, saved courses, compare library, provider list, FAQ and the Ask sidebar.
 - `advisor.js`: question-based course direction helper grounded in the imported UAC course data.
-- No paid API key is required. The helper tries free browser AI when available and only uses Puter if the visitor is already signed in/approved; otherwise it uses the local course-data adviser.
+- No paid API key is required. The Ask sidebar and course helper use local course-data scoring plus UAC/pathway guidance so they stay fast and avoid unsupported external AI claims.
 
 ## Local Checks
 
