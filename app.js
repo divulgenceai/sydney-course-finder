@@ -976,10 +976,10 @@ function shouldUseLocalOnly(message) {
 async function askAiReply(message, localAnswer) {
   try {
     const prompt = buildAskAiPrompt(message, localAnswer);
-    const text = await withTimeout(fetchPollinationsText(prompt), 10000);
+    const text = await withTimeout(fetchGeminiText(prompt), 10000);
     const cleaned = cleanAskAiText(text);
     if (!cleaned || cleaned.length < 45 || isProviderNotice(cleaned)) return null;
-    return { text: cleaned, provider: "Free AI + site data" };
+    return { text: cleaned, provider: "Gemini + site data" };
   } catch {
     return null;
   }
@@ -1000,7 +1000,7 @@ function buildAskAiPrompt(message, localAnswer) {
   return prompt.slice(0, 2200);
 }
 
-async function fetchPollinationsText(prompt) {
+async function fetchGeminiText(prompt) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 9800);
@@ -1017,7 +1017,7 @@ async function fetchPollinationsText(prompt) {
         if (data?.text) return data.text;
       }
     } catch {
-      // Try once more; the free provider occasionally fails the first request.
+      // Try once more; the hosted model can occasionally fail the first request.
     } finally {
       window.clearTimeout(timer);
     }
@@ -1056,7 +1056,7 @@ function cleanAskAiText(value) {
 }
 
 function isProviderNotice(value) {
-  return /pollinations|rate limit|api key|captcha|cloudflare|model unavailable|error/i.test(value || "");
+  return /rate limit|quota|api key|captcha|cloudflare|model unavailable|permission denied|error/i.test(value || "");
 }
 
 function shortPlainField(value) {
@@ -1349,7 +1349,7 @@ async function submitAskMessage(message) {
   if (!text) return;
   state.askOpen = true;
   state.askMessages.push({ role: "user", text });
-  const pending = { role: "assistant", text: "Checking the site data and free AI model...", pending: true, provider: "Thinking" };
+  const pending = { role: "assistant", text: "Checking the site data and Gemini...", pending: true, provider: "Thinking" };
   state.askMessages.push(pending);
   state.askMessages = state.askMessages.slice(-12);
   render();

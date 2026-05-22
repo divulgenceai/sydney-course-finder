@@ -770,7 +770,7 @@ async function advisorAiReply(message, profile, ranked, fallback) {
     const text = await withTimeout(fetchAdvisorAiText(prompt), 10000);
     const cleaned = cleanAiText(text);
     if (!cleaned || cleaned.length < 45 || isProviderNotice(cleaned)) return null;
-    return { text: avoidRepeatedReply(cleaned, ranked, profile), provider: "Free AI + UAC data" };
+    return { text: avoidRepeatedReply(cleaned, ranked, profile), provider: "Gemini + UAC data" };
   } catch {
     return null;
   }
@@ -814,7 +814,7 @@ async function fetchAdvisorAiText(prompt) {
         if (data?.text) return data.text;
       }
     } catch {
-      // Try one more time; the free model endpoint can occasionally fail cold.
+      // Try one more time; the hosted model endpoint can occasionally fail cold.
     } finally {
       window.clearTimeout(timer);
     }
@@ -994,156 +994,6 @@ function atarGapText(course, profile) {
   return `${Math.abs(gap).toFixed(1)} above your ATAR estimate`;
 }
 
-async function actualAiReply(message, profile, ranked, fallback) {
-  const promptMessages = buildAiMessages(message, profile, ranked, fallback);
-  const reply = await firstAiReply([
-    aiProviderAttempt("Browser AI", chromeAiReply(promptMessages), 4500),
-    aiProviderAttempt("Puter AI", puterAiReply(promptMessages), 8500),
-    aiProviderAttempt("Pollinations AI", pollinationsAiReply(promptMessages), 3500)
-  ], 9000);
-  return reply || { text: fallback, provider: "Course data helper" };
-}
-
-function aiProviderAttempt(provider, promise, timeoutMs) {
-  return withTimeout(promise, timeoutMs)
-    .then((text) => {
-      const cleaned = cleanAiText(text);
-      return cleaned && !isProviderNotice(cleaned) ? { text: cleaned, provider } : null;
-    })
-    .catch(() => null);
-}
-
-function firstAiReply(attempts, timeoutMs) {
-  return new Promise((resolve) => {
-    let settled = 0;
-    let done = false;
-    const finish = (value) => {
-      if (done) return;
-      done = true;
-      window.clearTimeout(timer);
-      resolve(value);
-    };
-    const timer = window.setTimeout(() => finish(null), timeoutMs);
-    attempts.forEach((attempt) => {
-      attempt.then((result) => {
-        settled += 1;
-        if (result) {
-          finish(result);
-          return;
-        }
-        if (settled === attempts.length) finish(null);
-      });
-    });
-  });
-}
-
-function buildAiMessages(message, profile, ranked, fallback) {
-  const previous = state.advisorChat
-    .filter((item) => !item.pending)
-    .slice(-6)
-    .map((item) => `${item.role === "user" ? "Student" : "Helper"}: ${item.text}`)
-    .join("\n");
-  const courseContext = ranked.map(({ course, score, reasons }, index) => {
-    return `${index + 1}. ${course.name} | ${course.university} | ${course.campus} | ATAR ${displayRank(course.atar)} | modes ${(course.modes || []).join(", ")} | fit ${Math.round(score)}/100 | ${reasons.join(" ")}`;
-  }).join("\n");
-  const profileContext = [
-    `ATAR estimate: ${profile.atar}`,
-    `Main detected area: ${profile.topic.label}`,
-    `Subjects: ${state.advisor.subjects || "not provided"}`,
-    `Interests: ${state.advisor.passions || "not provided"}`,
-    `Strength: ${state.advisor.strengths || "not provided"}`,
-    `Work style: ${state.advisor.workStyle || "not provided"}`,
-    `Outcome: ${state.advisor.careerPriority || "not provided"}`,
-    `Campus preference: ${state.advisor.campus || "not provided"}`,
-    `Avoid: ${state.advisor.avoid || "none"}`
-  ].join("\n");
-  const groundedFacts = advisorKnowledgeContext(message, profile, ranked);
-
-  return [
-    {
-      role: "system",
-      content: "You are a calm Sydney university course adviser for an HSC student. Use only the supplied UAC course facts, user answers and local algorithm result as your source of truth. Do not invent ATARs, prerequisites, fees, campus availability, careers, rankings or guarantees. If a fact is missing, say it is not listed in the imported UAC record and tell the student to check UAC or the official course page. Be specific, direct and not repetitive. If the user asks the same thing again, add a new angle. Keep answers to 4-7 short sentences. Professional but chill tone. Plain text only. No markdown, no asterisks, no headings, no bullet symbols."
-    },
-    {
-      role: "user",
-      content: `Student profile:\n${profileContext}\n\nTop matched courses from the local UAC dataset:\n${courseContext || "No confident courses."}\n\nGrounded UAC facts available for this question:\n${groundedFacts || "No extra facts beyond the ranked courses."}\n\nRecent chat:\n${previous || "No previous chat."}\n\nLocal fallback answer if AI is unavailable:\n${fallback}\n\nStudent question:\n${message}\n\nAnswer using the course data first, then your judgement. If the student's typed interests conflict with subjects, treat typed interests as the stronger signal. Do not add unsupported factual claims. Return plain text only.`
-    }
-  ];
-}
-
-async function chromeAiReply(messages) {
-  try {
-    const modelApi = window.LanguageModel || window.ai?.languageModel;
-    if (!modelApi?.availability || !modelApi?.create) return "";
-    const availability = await modelApi.availability({ languages: ["en"] }).catch(() => "unavailable");
-    if (availability !== "available" && availability !== "downloadable") return "";
-    const session = await modelApi.create({
-      systemPrompt: messages[0].content,
-      initialPrompts: messages.map((item) => ({ role: item.role, content: item.content }))
-    });
-    const response = await session.prompt(messages[messages.length - 1].content);
-    session.destroy?.();
-    return cleanAiText(response);
-  } catch (error) {
-    return "";
-  }
-}
-
-async function puterAiReply(messages) {
-  try {
-    await loadPuter();
-    if (!window.puter?.ai?.chat) return "";
-    if (!window.puter?.auth?.isSignedIn) return "";
-    const signedIn = await withTimeout(window.puter.auth.isSignedIn(), 900).catch(() => false);
-    if (!signedIn) return "";
-    const response = await window.puter.ai.chat(messages, true, {
-      model: "openai/gpt-5.4-nano",
-      max_tokens: 220,
-      temperature: 0.25,
-      text_verbosity: "low"
-    });
-    return cleanAiText(extractAiText(response));
-  } catch (error) {
-    return "";
-  }
-}
-
-async function pollinationsAiReply(messages) {
-  try {
-    const prompt = [
-      messages[0]?.content || "",
-      messages.slice(1).map((item) => `${item.role.toUpperCase()}: ${item.content}`).join("\n\n")
-    ].join("\n\n").slice(0, 5200);
-    const url = `https://text.pollinations.ai/${encodeURIComponent(prompt)}?model=openai&private=true`;
-    const response = await fetch(url, { method: "GET", mode: "cors", cache: "no-store" });
-    if (!response.ok) return "";
-    return cleanAiText(await response.text());
-  } catch (error) {
-    return "";
-  }
-}
-
-function loadPuter() {
-  if (window.puter?.ai?.chat) return Promise.resolve();
-  if (window.__puterLoading) return window.__puterLoading;
-  window.__puterLoading = new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error("Puter timed out")), 8000);
-    const script = document.createElement("script");
-    script.src = "https://js.puter.com/v2/";
-    script.async = true;
-    script.onload = () => {
-      window.clearTimeout(timer);
-      resolve();
-    };
-    script.onerror = () => {
-      window.clearTimeout(timer);
-      reject(new Error("Puter failed to load"));
-    };
-    document.head.appendChild(script);
-  });
-  return window.__puterLoading;
-}
-
 function withTimeout(promise, ms) {
   return new Promise((resolve, reject) => {
     const timer = window.setTimeout(() => reject(new Error("AI timed out")), ms);
@@ -1157,20 +1007,6 @@ function withTimeout(promise, ms) {
         reject(error);
       });
   });
-}
-
-function extractAiText(response) {
-  if (typeof response === "string") return response;
-  if (typeof response?.text === "string") return response.text;
-  const content = response?.message?.content ?? response?.content;
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => typeof part === "string" ? part : part?.text || part?.content || "")
-      .filter(Boolean)
-      .join(" ");
-  }
-  return String(response || "");
 }
 
 function cleanAiText(value) {
@@ -1187,7 +1023,7 @@ function cleanAiText(value) {
 }
 
 function isProviderNotice(value) {
-  return /important notice|deprecated|migrate to|anonymous requests|provider notice|api key/i.test(String(value || ""));
+  return /important notice|deprecated|migrate to|anonymous requests|provider notice|api key|rate limit|quota|model unavailable|permission denied/i.test(String(value || ""));
 }
 
 function stripMarkdown(value) {

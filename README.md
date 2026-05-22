@@ -6,9 +6,9 @@ Clean static website for searching Sydney-campus UAC undergraduate course record
 
 - `uac-courses.js`: imported UAC undergraduate records filtered to Sydney campuses or Sydney-location study options.
 - `app.js`: course search, filters, ATAR matching, saved courses, compare library, provider list, FAQ and the Ask sidebar.
-- `api/ask-ai.js`: Vercel-compatible free AI proxy for the Ask sidebar. It keeps model calls server-side and falls back to local rules if unavailable.
+- `api/ask-ai.js`: Vercel-compatible Gemini proxy for the Ask sidebar and Course helper. It keeps the API key server-side and falls back to local rules if unavailable.
 - `advisor.js`: question-based course direction helper grounded in the imported UAC course data.
-- No paid API key is required. The Ask sidebar and Course helper use a free Pollinations text model when reachable, with local UAC/pathway rules, imported course records and official course links as the fallback and guardrail.
+- The Ask sidebar and Course helper can use a Google AI Studio Gemini API key on the free tier. Local UAC/pathway rules, imported course records and official course links remain the fallback and guardrail.
 
 ## Local Preview
 
@@ -17,6 +17,15 @@ npm start
 ```
 
 Open `http://127.0.0.1:4180`. This local server also enables the `/api/ask-ai` route used by the Ask sidebar.
+
+For Gemini locally, copy `.env.example` to `.env` and set:
+
+```bash
+GEMINI_API_KEY=your_google_ai_studio_key_here
+GEMINI_MODEL=gemini-3.5-flash
+```
+
+If `GEMINI_API_KEY` is missing, the app still works with the built-in site-data helper.
 
 ## Local Checks
 
@@ -41,6 +50,11 @@ This is a static site. In Vercel, import the GitHub repo and use:
 - Install command: leave empty or default
 
 `vercel.json` enables clean `/advisor` routing and conservative cache headers for the course dataset.
+
+Add these environment variables in Vercel Project Settings:
+
+- `GEMINI_API_KEY`: your Google AI Studio key.
+- `GEMINI_MODEL`: optional; defaults to `gemini-3.5-flash`, then falls back to older Flash model names if that model is not available to the key.
 
 ## Data Note
 
