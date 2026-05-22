@@ -401,7 +401,10 @@ function renderAdvisorResult(ranked, profile) {
         <div class="chat-log">
           ${state.advisorChat.length ? state.advisorChat.map((message) => `
             <div class="chat-message ${message.role}${message.pending ? " pending" : ""}">
-              <strong>${message.role === "user" ? "You" : "Helper"}</strong>
+              <strong>
+                ${message.role === "user" ? "You" : "Helper"}
+                ${message.provider ? `<span>${escapeHtml(message.provider)}</span>` : ""}
+              </strong>
               <p>${highlight(cleanAiText(message.text))}</p>
             </div>
           `).join("") : `<p class="empty-note">Ask about career fit, ATAR risk, pathways, workload, income potential or which option is safest.</p>`}
@@ -439,15 +442,23 @@ function bindEvents() {
     });
   });
 
-  advisorApp.querySelector('[data-form="advisor-chat"]')?.addEventListener("submit", (event) => {
+  advisorApp.querySelector('[data-form="advisor-chat"]')?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const message = event.target.message.value.trim();
     if (!message || state.aiBusy) return;
     state.advisorChat.push({ role: "user", text: message });
-    const reply = advisorChatReply(message);
-    state.advisorChat.push({ role: "assistant", text: cleanAiText(reply.text) });
-    state.aiProvider = reply.provider;
+    const pendingMessage = { role: "assistant", text: "Checking your answers against the UAC course data...", pending: true, provider: "Thinking" };
+    state.advisorChat.push(pendingMessage);
+    state.aiBusy = true;
+    state.aiProvider = "Thinking";
     event.target.message.value = "";
+    renderPreservingScroll(true);
+    const reply = await advisorChatReply(message);
+    pendingMessage.text = cleanAiText(reply.text);
+    pendingMessage.provider = reply.provider;
+    pendingMessage.pending = false;
+    state.aiBusy = false;
+    state.aiProvider = reply.provider;
     renderPreservingScroll(true);
   });
 }
@@ -744,14 +755,76 @@ function directCourseFactReply(question, ranked, profile) {
   return avoidRepeatedReply(`${lines.join(" ")} I am only using imported UAC fields here, so confirm final details on the official page before applying.`, matches, profile);
 }
 
-function advisorChatReply(message) {
+async function advisorChatReply(message) {
   const ranked = advisorRankedCourses().slice(0, 6);
   const profile = advisorProfile();
   const fallback = localAdvisorChatReply(message);
-  return {
-    text: avoidRepeatedReply(cleanAiText(fallback), ranked, profile),
-    provider: "Site-trained helper"
-  };
+  const aiReply = await advisorAiReply(message, profile, ranked, fallback);
+  if (aiReply?.text) return aiReply;
+  return { text: avoidRepeatedReply(cleanAiText(fallback), ranked, profile), provider: "Site-trained helper" };
+}
+
+async function advisorAiReply(message, profile, ranked, fallback) {
+  try {
+    const prompt = buildAdvisorAiPrompt(message, profile, ranked, fallback);
+    const text = await withTimeout(fetchAdvisorAiText(prompt), 10000);
+    const cleaned = cleanAiText(text);
+    if (!cleaned || cleaned.length < 45 || isProviderNotice(cleaned)) return null;
+    return { text: avoidRepeatedReply(cleaned, ranked, profile), provider: "Free AI + UAC data" };
+  } catch {
+    return null;
+  }
+}
+
+function buildAdvisorAiPrompt(message, profile, ranked, fallback) {
+  const profileContext = `ATAR ${profile.atar}; area ${profile.topic.label}; subjects ${state.advisor.subjects || "not provided"}; interests ${state.advisor.passions || "not provided"}; outcome ${state.advisor.careerPriority || "not provided"}; campus ${state.advisor.campus || "not provided"}; avoid ${state.advisor.avoid || "none"}`;
+  const topCourses = ranked.slice(0, 3).map(({ course, score, reasons }, index) => {
+    return `${index + 1}. ${course.name} | ${course.university} | ${course.campus} | ATAR ${displayRank(course.atar)} | fit ${Math.round(score)}/100 | ${reasons.slice(0, 2).join(" ")}`;
+  }).join("\n");
+  const facts = advisorKnowledgeCourses(cleanSearchText(message), profile, ranked)
+    .slice(0, 4)
+    .map(({ course, reason }, index) => `${index + 1}. ${course.name} | ${course.university} | ${course.campus} | ATAR ${displayRank(course.atar)} | ${reason}`)
+    .join("\n") || "No extra course facts matched this question.";
+  const prompt = [
+    "Course helper for a Sydney UAC course finder. Use the local answer as truth and improve wording only. Use only supplied UAC/site data. Do not invent ATARs, prerequisites, rankings, fees, internships or guarantees. If missing, say check UAC/official course page. Direct, 3-5 sentences, plain text only.",
+    `Student profile: ${profileContext}`,
+    `Algorithm matches:\n${topCourses}`,
+    `Question facts:\n${facts}`,
+    `Local answer: ${fallback}`,
+    `Student question: ${message}`,
+    "Answer:"
+  ].join("\n\n");
+  return prompt.slice(0, 2500);
+}
+
+async function fetchAdvisorAiText(prompt) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 9800);
+    try {
+      const response = await fetch("/api/ask-ai", {
+        method: "POST",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt })
+      });
+      if (response.ok) {
+        const data = await response.json().catch(() => null);
+        if (data?.text) return data.text;
+      }
+    } catch {
+      // Try one more time; the free model endpoint can occasionally fail cold.
+    } finally {
+      window.clearTimeout(timer);
+    }
+    await delay(350);
+  }
+  return "";
+}
+
+function delay(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function advisorKnowledgeContext(message, profile, ranked) {
@@ -821,6 +894,10 @@ function localAdvisorChatReply(message) {
     return avoidRepeatedReply(`Yep, cooking should matter. From the dataset I would read that as food, nutrition, hospitality or tourism rather than general IT. The closest course directions to inspect are ${names}. If you want the people-helping side, start with nutrition or health-linked food courses; if you want the service/business side, compare hospitality, tourism and events pathways.`, suggestions.length ? suggestions : ranked, profile);
   }
 
+  if (/why|why not|instead|computer science|comp sci|cs\b|sonion|so why/.test(question) && /computer science|comp sci|cs\b/.test(question)) {
+    return computerScienceComparisonReply(ranked, profile);
+  }
+
   if (/coding|programming|software|technology|computer|it|business|why|based|topic|interest|not business/.test(question) && profile.topic.label === "Technology") {
     const techPicks = ranked
       .filter(({ course }) => /information technology|computer|software|data|cyber|artificial intelligence|games|technology/i.test(courseText(course)))
@@ -863,6 +940,58 @@ function localAdvisorChatReply(message) {
 
   const reply = `I would keep ${primary.name} as your first serious option from the data. To make the decision sharper, ask yourself: do I like the actual subjects, can I meet entry requirements, is the commute realistic, and does the career day-to-day sound acceptable rather than just impressive?`;
   return avoidRepeatedReply(reply, ranked, profile);
+}
+
+function computerScienceComparisonReply(ranked, profile) {
+  const primary = ranked[0]?.course;
+  const primaryScore = ranked[0]?.score || 0;
+  const options = computerScienceOptions(profile).slice(0, 4);
+  if (!options.length) {
+    return "Computer Science is relevant for coding, but I could not find a strong Sydney-campus Computer Science match in the imported UAC data for this profile. Search Computer Science directly and compare the official UAC entries, because some providers list related IT, Information Systems, software or games courses instead.";
+  }
+
+  const best = options[0];
+  const bestGap = atarGapText(best.course, profile);
+  const bestScore = Math.round(best.score);
+  const primaryLine = primary
+    ? `${primary.name} was ranked higher because it scored better across your topic fit, ATAR estimate, campus/mode preferences and avoid-list rules.`
+    : "The current list ranked related technology courses first from your answers.";
+  const safeOptions = options
+    .filter(({ course }) => numericRank(course.atar) !== null && numericRank(course.atar) <= profile.atar)
+    .slice(0, 2);
+  const safeLine = safeOptions.length
+    ? `The most realistic Computer Science options to inspect are ${listCourseLabels(safeOptions, 2)}.`
+    : "Most Computer Science options with a numeric profile sit above your ATAR estimate, so treat them as reach choices and keep pathways/backups.";
+  const scoreLine = best.score >= primaryScore - 3
+    ? "Computer Science is still a valid direction; it just needs to be compared directly against the current first pick."
+    : `The strongest Computer Science match scored ${bestScore}/100 here, below the current first pick's ${Math.round(primaryScore)}/100.`;
+
+  return `${scoreLine} Best Computer Science match from the dataset: ${best.course.name} at ${best.course.university}, ${best.course.campus}, ATAR ${displayRank(best.course.atar)} (${bestGap}). ${primaryLine} ${safeLine} If you specifically want pure software theory, algorithms and programming, search/save Computer Science courses and compare them against IT or Information Systems before deciding.`;
+}
+
+function computerScienceOptions(profile) {
+  return allCourses
+    .filter((course) => /computer science/i.test(course.name))
+    .filter((course) => course.level === "undergraduate")
+    .filter((course) => profile.campus === "Online" || !/online/i.test(course.campus))
+    .filter((course) => !/diploma|associate degree|certificate/i.test(course.name) || profile.pathways !== "No" && profile.atar < 65)
+    .map((course) => advisorScoreCourse(course, profile))
+    .sort((a, b) => b.score - a.score || a.course.name.localeCompare(b.course.name));
+}
+
+function listCourseLabels(entries, limit) {
+  return entries
+    .slice(0, limit)
+    .map(({ course }) => `${course.name} at ${course.university} (${course.campus}, ATAR ${displayRank(course.atar)})`)
+    .join("; ");
+}
+
+function atarGapText(course, profile) {
+  const rank = numericRank(course.atar);
+  if (rank === null) return "no numeric UAC profile, so check the official entry rules";
+  const gap = profile.atar - rank;
+  if (gap >= 0) return `${gap.toFixed(1)} below your ATAR estimate`;
+  return `${Math.abs(gap).toFixed(1)} above your ATAR estimate`;
 }
 
 async function actualAiReply(message, profile, ranked, fallback) {
@@ -1046,6 +1175,9 @@ function extractAiText(response) {
 
 function cleanAiText(value) {
   return stripMarkdown(value)
+    .replace(/[\u2010-\u2015]/g, "-")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
     .replace(/\s+/g, " ")
     .replace(/^Helper:\s*/i, "")
     .replace(/\*{1,3}/g, "")

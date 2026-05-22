@@ -1001,22 +1001,29 @@ function buildAskAiPrompt(message, localAnswer) {
 }
 
 async function fetchPollinationsText(prompt) {
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 9800);
-  try {
-    const response = await fetch("/api/ask-ai", {
-      method: "POST",
-      cache: "no-store",
-      signal: controller.signal,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt })
-    });
-    if (!response.ok) return "";
-    const data = await response.json().catch(() => null);
-    return data?.text || "";
-  } finally {
-    window.clearTimeout(timer);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 9800);
+    try {
+      const response = await fetch("/api/ask-ai", {
+        method: "POST",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt })
+      });
+      if (response.ok) {
+        const data = await response.json().catch(() => null);
+        if (data?.text) return data.text;
+      }
+    } catch {
+      // Try once more; the free provider occasionally fails the first request.
+    } finally {
+      window.clearTimeout(timer);
+    }
+    await delay(350);
   }
+  return "";
 }
 
 function withTimeout(promise, ms) {
@@ -1054,6 +1061,10 @@ function isProviderNotice(value) {
 
 function shortPlainField(value) {
   return truncateText(decodeHtmlEntities(value || "Not listed"), 130);
+}
+
+function delay(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function askCourseMatches(question, limit) {

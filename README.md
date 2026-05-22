@@ -8,7 +8,7 @@ Clean static website for searching Sydney-campus UAC undergraduate course record
 - `app.js`: course search, filters, ATAR matching, saved courses, compare library, provider list, FAQ and the Ask sidebar.
 - `api/ask-ai.js`: Vercel-compatible free AI proxy for the Ask sidebar. It keeps model calls server-side and falls back to local rules if unavailable.
 - `advisor.js`: question-based course direction helper grounded in the imported UAC course data.
-- No paid API key is required. The Ask sidebar uses a free Pollinations text model when reachable, with local UAC/pathway rules as the fallback and guardrail. The course helper uses local course-data scoring so recommendations stay fast and grounded.
+- No paid API key is required. The Ask sidebar and Course helper use a free Pollinations text model when reachable, with local UAC/pathway rules, imported course records and official course links as the fallback and guardrail.
 
 ## Local Preview
 
