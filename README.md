@@ -22,7 +22,7 @@ For Gemini locally, copy `.env.example` to `.env` and set:
 
 ```bash
 GEMINI_API_KEY=your_google_ai_studio_key_here
-GEMINI_MODEL=gemini-3.5-flash
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
 If `GEMINI_API_KEY` is missing, the app still works with the built-in site-data helper.
@@ -54,7 +54,7 @@ This is a static site. In Vercel, import the GitHub repo and use:
 Add these environment variables in Vercel Project Settings:
 
 - `GEMINI_API_KEY`: your Google AI Studio key.
-- `GEMINI_MODEL`: optional; defaults to `gemini-3.5-flash`, then falls back to older Flash model names if that model is not available to the key.
+- `GEMINI_MODEL`: optional; defaults to `gemini-2.5-flash`, then falls back to Flash-Lite or older Flash model names if that model is not available to the key.
 
 ## Data Note
 

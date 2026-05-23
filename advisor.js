@@ -874,6 +874,7 @@ async function fetchAdvisorAiReply(prompt) {
       });
       if (response.ok) {
         const data = await response.json().catch(() => null);
+        if (data?.fallback) return null;
         if (data?.text) return data;
       }
     } catch {
@@ -961,6 +962,10 @@ function localAdvisorChatReply(message) {
     return computerScienceComparisonReply(ranked, profile);
   }
 
+  if (isGameVsItQuestion(question)) {
+    return gameVsItComparisonReply(ranked, profile);
+  }
+
   if (/coding|programming|software|technology|computer|it|business|why|based|topic|interest|not business/.test(question) && profile.topic.label === "Technology") {
     const techPicks = ranked
       .filter(({ course }) => /information technology|computer|software|data|cyber|artificial intelligence|games|technology/i.test(courseText(course)))
@@ -1003,6 +1008,35 @@ function localAdvisorChatReply(message) {
 
   const reply = `I would keep ${primary.name} as your first serious option from the data. To make the decision sharper, ask yourself: do I like the actual subjects, can I meet entry requirements, is the commute realistic, and does the career day-to-day sound acceptable rather than just impressive?`;
   return avoidRepeatedReply(reply, ranked, profile);
+}
+
+function isGameVsItQuestion(question) {
+  return /\b(game|games|game development|game dev|gaming)\b/.test(question)
+    && /\b(it|information technology|info tech|technology|information systems)\b/.test(question)
+    && /\b(why|why not|not|instead|vs|versus|compare|better|choose)\b/.test(question);
+}
+
+function gameVsItComparisonReply(ranked, profile) {
+  const gameOptions = ranked.filter(({ course }) => /game|games|game development|interactive|animation/i.test(course.name));
+  const itOptions = ranked.filter(({ course }) => /information technology|information systems|computer science|software|cyber|data/i.test(course.name));
+  const game = gameOptions[0] || themedSuggestions(profile, "technology").find(({ course }) => /game|games/i.test(course.name));
+  const it = itOptions.find(({ course }) => !game || course.id !== game.course.id) || ranked.find(({ course }) => /information technology|information systems/i.test(course.name));
+
+  if (!game && !it) {
+    return "Game development and IT are both technology directions, but I could not find a clean pair in the current ranked list. Search and save one game course plus one IT or Information Systems course, then compare ATAR, campus, subjects, portfolio/project work and career options side by side.";
+  }
+
+  const gameLine = game
+    ? `${game.course.name} is the more specialised option: it is better if you want games, interactive media, gameplay systems, creative tech or portfolio-style projects. Its listed ATAR profile is ${displayRank(game.course.atar)} at ${game.course.university}, ${game.course.campus}.`
+    : "The current ranked list does not show a strong game-development option.";
+  const itLine = it
+    ? `${it.course.name} is the broader option: it usually keeps more doors open across software, business systems, cyber, data, support and general tech roles. Its listed ATAR profile is ${displayRank(it.course.atar)} at ${it.course.university}, ${it.course.campus}.`
+    : "The current ranked list does not show a strong IT option.";
+  const recommendation = game && it && (ranked[0]?.course.id === game.course.id)
+    ? "The helper put game development first because your answers/course matches leaned toward games or creative technology, but IT may be the safer choice if you want broader employment flexibility."
+    : "If you are unsure, IT is usually the safer broad degree; game development is the sharper pick only if you genuinely want game/interactive work enough to build a portfolio.";
+
+  return avoidRepeatedReply(`${gameLine} ${itLine} ${recommendation} My advice: save both, expand prerequisites and assumed knowledge, then choose game development for passion/specialisation or IT for broader career backup.`, [game, it].filter(Boolean), profile);
 }
 
 function computerScienceComparisonReply(ranked, profile) {

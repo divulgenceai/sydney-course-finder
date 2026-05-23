@@ -906,18 +906,31 @@ function renderAskMessage(message) {
 }
 
 async function askReply(message) {
-  const local = localAskReply(message);
-  if (shouldUseLocalOnly(message)) return { text: local, provider: "UAC rule check" };
-  const aiReply = await askAiReply(message, local);
+  const history = askConversationContext();
+  const local = localAskReply(message, history);
+  if (shouldUseLocalOnly(message, history)) return { text: local, provider: "UAC rule check" };
+  const aiReply = await askAiReply(message, local, history);
   return aiReply || { text: local, provider: "Site data" };
 }
 
-function localAskReply(message) {
+function localAskReply(message, history = "") {
   const question = cleanSearchText(message);
+  const context = cleanSearchText(history);
   if (!question) return "Ask me a question about UAC, ATAR, pathways, subjects or finding courses.";
+
+  if (isMarksFollowupQuestion(question)) {
+    if (isCourtOrHardshipQuestion(context)) {
+      return "No, not automatically. A court matter, being a witness, or a dismissed case does not give free ATAR points by itself, and your ATAR does not change. If it seriously disrupted your schooling over time, you may be able to apply for EAS or another access scheme with evidence, but UAC or the university decides and the adjustment depends on the course/provider.";
+    }
+    return "Not automatically. Extra marks are usually selection-rank adjustments, not changes to your ATAR, and they depend on the university, course and eligibility category. Tell me the course/provider and the reason you think you may qualify, and I can point you to the right UAC or uni pathway to check.";
+  }
 
   if (isCourtOrHardshipQuestion(question)) {
     return "No, being a witness in a trial or having a case dismissed does not automatically give you a free ATAR or guaranteed bonus points. Your ATAR itself does not change. If the court matter seriously disrupted your schooling over time, you may be able to apply for EAS or another access scheme, but UAC or the university would need evidence and they decide eligibility. The right move is to check EAS, speak to your school careers adviser, and keep backup preferences/pathways as well.";
+  }
+
+  if (isHonoursExplainerQuestion(question)) {
+    return "An honours degree is a bachelor degree with a higher-level honours component. In some courses, like Engineering (Honours), honours is built into the degree; in others, honours can be an extra research-focused year after a bachelor degree. Compared with a standard bachelor degree, honours usually means more advanced study, a major project or research component, and sometimes stronger preparation for professional accreditation, postgraduate research or competitive jobs. The exact structure differs by university, so check whether the course name means built-in honours or a separate honours year.";
   }
 
   if (/bonus|extra point|adjust|adjustment|selection rank|scheme|points? for|marks? for/.test(question)) {
@@ -968,14 +981,29 @@ function isCourtOrHardshipQuestion(question) {
     && /atar|bonus|mark|point|adjust|selection rank|eas|scheme|access|free/.test(question);
 }
 
-function shouldUseLocalOnly(message) {
-  const question = cleanSearchText(message);
-  return isCourtOrHardshipQuestion(question) || /exact|guarantee|guaranteed|definitely|am i eligible|do i qualify/.test(question);
+function isMarksFollowupQuestion(question) {
+  return /\b(do i|get|receive|eligible|qualify|marks?|points?|bonus|adjustment)\b/.test(question)
+    && /\bmarks?|points?|bonus|adjustment\b/.test(question)
+    && /\b(do i|did i|can i|so|or not|eligible|qualify|get|receive)\b/.test(question);
 }
 
-async function askAiReply(message, localAnswer) {
+function isHonoursExplainerQuestion(question) {
+  return /\bhonou?rs?\b/.test(question)
+    && /\b(what|mean|meaning|differ|difference|different|vs|versus|compare|how)\b/.test(question);
+}
+
+function shouldUseLocalOnly(message, history = "") {
+  const question = cleanSearchText(message);
+  return isCourtOrHardshipQuestion(question)
+    || isMarksFollowupQuestion(question)
+    || isHonoursExplainerQuestion(question)
+    || /exact|guarantee|guaranteed|definitely|am i eligible|do i qualify/.test(question)
+    || (isMarksFollowupQuestion(question) && isCourtOrHardshipQuestion(cleanSearchText(history)));
+}
+
+async function askAiReply(message, localAnswer, history = "") {
   try {
-    const prompt = buildAskAiPrompt(message, localAnswer);
+    const prompt = buildAskAiPrompt(message, localAnswer, history);
     const reply = await withTimeout(fetchGeminiReply(prompt), 11000);
     const cleaned = cleanAskAiText(reply?.text);
     if (!cleaned || cleaned.length < 45 || isProviderNotice(cleaned)) return null;
@@ -985,12 +1013,13 @@ async function askAiReply(message, localAnswer) {
   }
 }
 
-function buildAskAiPrompt(message, localAnswer) {
+function buildAskAiPrompt(message, localAnswer, history = "") {
   const question = cleanSearchText(message);
   const prompt = [
     "You are the Ask helper inside a Sydney university course finder. Use the supplied DATA PACK as truth. The local answer is the safest baseline; improve it with the retrieved facts only.",
     "Answer protocol: start with a direct answer, cite 1-4 retrieved courses only when relevant, include ATAR/prerequisite/assumed-knowledge details only if listed in the data pack, and point to UAC or the official course page for final confirmation. Do not invent exact adjustment points, eligibility, fees, prerequisites, campus availability, legal advice, rankings or guarantees. If the data pack does not contain a fact, say it is not in the imported record. Calm, clear, 3-6 short sentences, plain text only.",
     `Student question: ${message}`,
+    `Recent chat:\n${history || "No previous chat."}`,
     `Local answer: ${localAnswer}`,
     `DATA PACK:\n${buildAskDataContext(question)}`,
     "Answer now using the question, local answer and data pack above."
@@ -1086,6 +1115,7 @@ async function fetchGeminiReply(prompt) {
       });
       if (response.ok) {
         const data = await response.json().catch(() => null);
+        if (data?.fallback) return null;
         if (data?.text) return data;
       }
     } catch {
@@ -1096,6 +1126,14 @@ async function fetchGeminiReply(prompt) {
     await delay(350);
   }
   return null;
+}
+
+function askConversationContext() {
+  return state.askMessages
+    .filter((item) => !item.pending)
+    .slice(-6)
+    .map((item) => `${item.role === "user" ? "Student" : "Ask helper"}: ${item.text}`)
+    .join("\n");
 }
 
 function withTimeout(promise, ms) {
