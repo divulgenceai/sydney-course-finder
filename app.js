@@ -940,15 +940,15 @@ function localAskReply(message) {
     return "Prerequisites can block entry if you do not meet them. Assumed knowledge is different: it usually will not block entry, but missing it can make first year harder. On this site, expand a course row to see the imported UAC prerequisite and assumed-knowledge fields, then confirm on UAC or the university page before applying.";
   }
 
-  if (/save|saved|library|compare|comparison/.test(question)) {
-    return "Use Save on course rows to build your library, then Compare on up to four courses to check ATAR, campus, duration, prerequisites, assumed knowledge, fees and links side by side. Different campuses stay separate, so do not delete a row just because the course name is similar.";
-  }
-
   if (/choose|which uni|best uni|prestige|employment|employability|graduate|between|uts|unsw|usyd|macquarie|western sydney/.test(question)) {
     if (/uts|unsw/.test(question) && /computer|software|coding|technology|it|data|cyber|artificial intelligence/.test(question)) {
       return "For computing or IT, UNSW usually wins on broad prestige and employer reputation, while UTS is very strong for industry focus, city access and practical project-style learning. Use that as a starting point, then compare the actual course structure, ATAR profile, commute, internships, flexibility and whether the subjects look like work you can keep doing for years. Do not choose only on reputation if the other course has a better fit, clearer pathway or easier commute.";
     }
     return "Use a few factors together: course accreditation, placements or industry projects, commute, campus fit, flexibility, fees/CSP status, prerequisites, student support and whether the actual day-to-day work sounds tolerable. Prestige helps, but it should not beat a course you can realistically enter, finish and use.";
+  }
+
+  if (/save|saved|library|compare button|compare tool|comparison table|comparison feature/.test(question)) {
+    return "Use Save on course rows to build your library, then Compare on up to four courses to check ATAR, campus, duration, prerequisites, assumed knowledge, fees and links side by side. Different campuses stay separate, so do not delete a row just because the course name is similar.";
   }
 
   const matches = askCourseMatches(question, 4);
@@ -976,10 +976,10 @@ function shouldUseLocalOnly(message) {
 async function askAiReply(message, localAnswer) {
   try {
     const prompt = buildAskAiPrompt(message, localAnswer);
-    const text = await withTimeout(fetchGeminiText(prompt), 10000);
-    const cleaned = cleanAskAiText(text);
+    const reply = await withTimeout(fetchGeminiReply(prompt), 11000);
+    const cleaned = cleanAskAiText(reply?.text);
     if (!cleaned || cleaned.length < 45 || isProviderNotice(cleaned)) return null;
-    return { text: cleaned, provider: "Gemini + site data" };
+    return { text: cleaned, provider: reply?.provider || "Gemini + site data" };
   } catch {
     return null;
   }
@@ -987,20 +987,92 @@ async function askAiReply(message, localAnswer) {
 
 function buildAskAiPrompt(message, localAnswer) {
   const question = cleanSearchText(message);
-  const courses = askCourseMatches(question, 5)
-    .map(({ course }, index) => `${index + 1}. ${course.name} | ${course.university} | ${course.campus} | ATAR ${displayRank(course.atar)} | prereq ${shortPlainField(course.prerequisites)} | assumed ${shortPlainField(course.assumed)}`)
-    .join("\n") || "No specific course matches from the local dataset.";
   const prompt = [
-    "Use the local answer as truth. Improve wording only. Do not invent exact bonus points, eligibility, fees, prerequisites, campus availability, legal advice or guarantees. Calm, direct, 3-5 sentences, plain text only.",
-    `Local answer: ${localAnswer}`,
-    `Course records:\n${courses}`,
+    "You are the Ask helper inside a Sydney university course finder. Use the supplied DATA PACK as truth. The local answer is the safest baseline; improve it with the retrieved facts only.",
+    "Answer protocol: start with a direct answer, cite 1-4 retrieved courses only when relevant, include ATAR/prerequisite/assumed-knowledge details only if listed in the data pack, and point to UAC or the official course page for final confirmation. Do not invent exact adjustment points, eligibility, fees, prerequisites, campus availability, legal advice, rankings or guarantees. If the data pack does not contain a fact, say it is not in the imported record. Calm, clear, 3-6 short sentences, plain text only.",
     `Student question: ${message}`,
-    "Answer:"
+    `Local answer: ${localAnswer}`,
+    `DATA PACK:\n${buildAskDataContext(question)}`,
+    "Answer now using the question, local answer and data pack above."
   ].join("\n\n");
-  return prompt.slice(0, 2200);
+  return prompt.slice(0, 11000);
 }
 
-async function fetchGeminiText(prompt) {
+function buildAskDataContext(question) {
+  const topic = topicFromQuestion(question);
+  const targetAtar = targetAtarFromQuestion(question);
+  const matches = askCourseMatches(question, 6);
+  const matchedIds = new Set(matches.map(({ course }) => course.id));
+  const saferMatches = targetAtar === null ? [] : askCourseMatches(`${question} pathway backup lower entry ${targetAtar}`, 14)
+    .filter(({ course }) => !matchedIds.has(course.id))
+    .filter(({ course }) => {
+      const rank = numericRank(course.atar);
+      return rank !== null && rank <= targetAtar;
+    })
+    .slice(0, 2);
+
+  return [
+    `Dataset: ${number(allCourses.length)} deduped Sydney UAC course records across ${number(allProviders.length)} providers. Imported ${escapeAi((meta.importedAt || "").slice(0, 10) || "unknown date")}. Only Sydney-campus/location study options are included; similar names at different campuses, modes or codes stay separate.`,
+    `Detected topic: ${topic?.label || "unclear"}. Detected ATAR estimate in question: ${targetAtar === null ? "not provided" : targetAtar}.`,
+    `Glossary: ${Object.entries(glossary).map(([key, value]) => `${key} = ${value}`).join(" | ")}`,
+    `UAC rank codes: ${Object.entries(rankCodeMeanings).map(([key, value]) => `${key} = ${value}`).join(" | ")} Numeric profiles are historical/profile information, not guaranteed cutoffs.`,
+    `Official pathways: ${pathwayLinks.map((link) => `${link.title}: ${link.url}`).join(" | ")}`,
+    providerContextForQuestion(question, topic),
+    `Relevant retrieved course records:\n${matches.length ? matches.map(formatAiCourse).join("\n") : "No direct course match retrieved from the local dataset."}`,
+    saferMatches.length ? `Safer/lower-entry courses near the student's ATAR:\n${saferMatches.map(formatAiCourse).join("\n")}` : "",
+    "Site features: students can Search, expand a course row for details, Save courses to a library, Compare up to four courses, and use ATAR Match for personalised filtering."
+  ].filter(Boolean).join("\n\n");
+}
+
+function formatAiCourse(entry, index) {
+  const course = entry.course;
+  return [
+    `${index + 1}. ${course.name}`,
+    `provider ${course.university}`,
+    `campus ${course.campus}`,
+    `code ${course.courseCode || "not listed"}`,
+    `level ${levelDisplay(course) || "not listed"}`,
+    `mode ${(course.modes || []).join(", ") || "not listed"}`,
+    `ATAR/selection rank ${displayRank(course.atar)} (${rankMeaningForAi(course.atar)})`,
+    `duration ${shortPlainField(course.duration)}`,
+    `prerequisites ${shortPlainField(course.prerequisites)}`,
+    `assumed knowledge ${shortPlainField(course.assumed)}`,
+    `careers ${shortPlainField(course.careers)}`,
+    `fees ${shortPlainField(course.fees)}`,
+    `official ${course.officialUrl || "not listed"}`,
+    `UAC ${course.uacUrl || "not listed"}`
+  ].join(" | ");
+}
+
+function providerContextForQuestion(question, topic) {
+  const wantsProviderHelp = /which uni|best uni|provider|prestige|employment|employability|graduate|between|compare|uts|unsw|usyd|macquarie|western sydney|acu/.test(question);
+  if (!wantsProviderHelp) return "";
+  const quality = topic ? providerQuality[topic.label] || {} : {};
+  const mentioned = allProviders
+    .filter((provider) => phraseMatch(question, provider.name) || phraseMatch(question, provider.id))
+    .slice(0, 5);
+  const topForTopic = Object.entries(quality)
+    .map(([providerId, row]) => ({ provider: allProviders.find((item) => item.id === providerId), row }))
+    .filter((item) => item.provider)
+    .sort((a, b) => b.row.score - a.row.score)
+    .slice(0, 5);
+  const rows = mentioned.length ? mentioned.map((provider) => ({ provider, row: quality[provider.id] })) : topForTopic;
+  if (!rows.length) return "";
+  return `Provider context for ${topic?.label || "the question"}: ${rows.map(({ provider, row }) => `${provider.name} (${provider.website}) profile ${Math.round(row?.score || providerOverallScore(provider))}/100${row?.note ? ` - ${row.note}` : ""}`).join(" | ")}. This is an app guide, not an official ranking; confirm with UAC, QILT and provider pages.`;
+}
+
+function rankMeaningForAi(value) {
+  const parsed = numericRank(value);
+  if (parsed !== null) return "numeric UAC profile; use as guide, not a guaranteed cutoff";
+  const code = String(value || "").trim();
+  return rankCodeMeanings[code] || "not clearly listed by UAC";
+}
+
+function escapeAi(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+async function fetchGeminiReply(prompt) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 9800);
@@ -1014,7 +1086,7 @@ async function fetchGeminiText(prompt) {
       });
       if (response.ok) {
         const data = await response.json().catch(() => null);
-        if (data?.text) return data.text;
+        if (data?.text) return data;
       }
     } catch {
       // Try once more; the hosted model can occasionally fail the first request.
@@ -1023,7 +1095,7 @@ async function fetchGeminiText(prompt) {
     }
     await delay(350);
   }
-  return "";
+  return null;
 }
 
 function withTimeout(promise, ms) {
@@ -1052,7 +1124,7 @@ function cleanAskAiText(value) {
     .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 900);
+    .slice(0, 1400);
 }
 
 function isProviderNotice(value) {

@@ -767,37 +767,100 @@ async function advisorChatReply(message) {
 async function advisorAiReply(message, profile, ranked, fallback) {
   try {
     const prompt = buildAdvisorAiPrompt(message, profile, ranked, fallback);
-    const text = await withTimeout(fetchAdvisorAiText(prompt), 10000);
-    const cleaned = cleanAiText(text);
+    const reply = await withTimeout(fetchAdvisorAiReply(prompt), 11000);
+    const cleaned = cleanAiText(reply?.text);
     if (!cleaned || cleaned.length < 45 || isProviderNotice(cleaned)) return null;
-    return { text: avoidRepeatedReply(cleaned, ranked, profile), provider: "Gemini + UAC data" };
+    return { text: avoidRepeatedReply(cleaned, ranked, profile), provider: reply?.provider || "Gemini + UAC data" };
   } catch {
     return null;
   }
 }
 
 function buildAdvisorAiPrompt(message, profile, ranked, fallback) {
-  const profileContext = `ATAR ${profile.atar}; area ${profile.topic.label}; subjects ${state.advisor.subjects || "not provided"}; interests ${state.advisor.passions || "not provided"}; outcome ${state.advisor.careerPriority || "not provided"}; campus ${state.advisor.campus || "not provided"}; avoid ${state.advisor.avoid || "none"}`;
-  const topCourses = ranked.slice(0, 3).map(({ course, score, reasons }, index) => {
-    return `${index + 1}. ${course.name} | ${course.university} | ${course.campus} | ATAR ${displayRank(course.atar)} | fit ${Math.round(score)}/100 | ${reasons.slice(0, 2).join(" ")}`;
-  }).join("\n");
-  const facts = advisorKnowledgeCourses(cleanSearchText(message), profile, ranked)
-    .slice(0, 4)
-    .map(({ course, reason }, index) => `${index + 1}. ${course.name} | ${course.university} | ${course.campus} | ATAR ${displayRank(course.atar)} | ${reason}`)
-    .join("\n") || "No extra course facts matched this question.";
   const prompt = [
-    "Course helper for a Sydney UAC course finder. Use the local answer as truth and improve wording only. Use only supplied UAC/site data. Do not invent ATARs, prerequisites, rankings, fees, internships or guarantees. If missing, say check UAC/official course page. Direct, 3-5 sentences, plain text only.",
-    `Student profile: ${profileContext}`,
-    `Algorithm matches:\n${topCourses}`,
-    `Question facts:\n${facts}`,
-    `Local answer: ${fallback}`,
+    "You are the Course helper inside a Sydney UAC course finder. Use the DATA PACK as truth and use the local fallback as the safest answer. You may improve wording, compare options and explain the algorithm, but do not add unsupported factual claims.",
+    "Answer protocol: answer the latest student question directly; use typed interests and the latest question as stronger evidence than generic HSC subjects; cite only course facts in the data pack; if a fact is missing, say it is not clearly listed in the imported UAC record and tell them to check UAC or the official course page. Do not invent ATARs, prerequisites, rankings, internships, fees, bonus marks, employment guarantees or legal/medical advice. Keep it professional but chill, 4-7 short sentences, plain text only.",
     `Student question: ${message}`,
-    "Answer:"
+    `Local answer: ${fallback}`,
+    `DATA PACK:\n${buildAdvisorDataContext(message, profile, ranked)}`,
+    "Answer now using the question, local answer and data pack above."
   ].join("\n\n");
-  return prompt.slice(0, 2500);
+  return prompt.slice(0, 11000);
 }
 
-async function fetchAdvisorAiText(prompt) {
+function buildAdvisorDataContext(message, profile, ranked) {
+  const question = cleanSearchText(message);
+  const factMatches = advisorKnowledgeCourses(question, profile, ranked).slice(0, 6);
+  const rankedIds = new Set(ranked.map(({ course }) => course.id));
+  const extraFacts = factMatches.filter(({ course }) => !rankedIds.has(course.id)).slice(0, 3);
+  const primaryFacts = factMatches.filter(({ course }) => rankedIds.has(course.id)).slice(0, 3);
+  const topicScoreText = profile.topicScores
+    .slice(0, 5)
+    .map(({ topic, score }) => `${topic.label}: ${Math.round(score * 10) / 10}`)
+    .join(" | ");
+  const rankCodes = Object.entries(rankCodeMeanings).map(([key, value]) => `${key} = ${value}`).join(" | ");
+  const pathways = pathwayLinks.map((link) => `${link.title}: ${link.url}`).join(" | ");
+
+  return [
+    `Dataset: ${allCourses.length.toLocaleString("en-AU")} deduped Sydney UAC course records across ${allProviders.length.toLocaleString("en-AU")} providers. Imported ${(meta.importedAt || "").slice(0, 10) || "unknown date"}. Different campuses, modes or codes remain separate courses.`,
+    `Student profile: ATAR ${profile.atar}; detected area ${profile.topic.label}; topic evidence ${topicScoreText}; subjects ${state.advisor.subjects || "not provided"}; interests ${state.advisor.passions || "not provided"}; strength ${state.advisor.strengths || "not provided"}; work style ${state.advisor.workStyle || "not provided"}; outcome ${profile.careerPriority}; campus ${profile.campus}; mode ${profile.mode}; avoid ${state.advisor.avoid || "none"}; open to pathways ${profile.pathways}.`,
+    `Algorithm rules summary: course fit scores combine topic fit, subject fit, typed-interest fit, ATAR gap, campus/mode preference, provider profile, outcome preference and avoid-list penalties. For conflicting signals, typed interests and latest question get priority. Numeric ATAR profiles are guides, not guaranteed cutoffs.`,
+    `UAC rank codes: ${rankCodes}`,
+    `Official pathways: ${pathways}`,
+    `Top algorithm matches:\n${ranked.slice(0, 4).map(formatAdvisorAiCourse).join("\n") || "No confident algorithm matches."}`,
+    `Question-specific facts from current matches:\n${primaryFacts.length ? primaryFacts.map(formatAdvisorAiCourse).join("\n") : "No extra facts from current matches."}`,
+    extraFacts.length ? `Extra related courses not already in top matches:\n${extraFacts.map(formatAdvisorAiCourse).join("\n")}` : "",
+    `Recent chat:\n${advisorRecentChatContext() || "No prior chat."}`
+  ].filter(Boolean).join("\n\n");
+}
+
+function formatAdvisorAiCourse(entry, index) {
+  const course = entry.course;
+  const scoreLabel = entry.reasons && Number.isFinite(entry.score)
+    ? `fit ${Math.round(entry.score)}/100`
+    : Number.isFinite(entry.score) ? `retrieval score ${Math.round(entry.score)}` : "not scored";
+  return [
+    `${index + 1}. ${course.name}`,
+    `provider ${course.university}`,
+    `campus ${course.campus}`,
+    `code ${course.courseCode || "not listed"}`,
+    `level ${levelDisplay(course) || "not listed"}`,
+    `mode ${(course.modes || []).join(", ") || "not listed"}`,
+    scoreLabel,
+    `why ${(entry.reasons || [entry.reason]).filter(Boolean).slice(0, 3).join(" ") || "keyword/course match"}`,
+    `ATAR/selection rank ${displayRank(course.atar)} (${rankMeaningForAdvisorAi(course.atar)})`,
+    `duration ${shortAiField(course.duration)}`,
+    `prerequisites ${shortAiField(course.prerequisites)}`,
+    `assumed knowledge ${shortAiField(course.assumed)}`,
+    `careers ${shortAiField(course.careers)}`,
+    `fees ${shortAiField(course.fees)}`,
+    `official ${course.officialUrl || "not listed"}`,
+    `UAC ${course.uacUrl || "not listed"}`
+  ].join(" | ");
+}
+
+function advisorRecentChatContext() {
+  return state.advisorChat
+    .filter((item) => !item.pending)
+    .slice(-6)
+    .map((item) => `${item.role === "user" ? "Student" : "Helper"}: ${cleanAiText(item.text)}`)
+    .join("\n");
+}
+
+function rankMeaningForAdvisorAi(value) {
+  const parsed = numericRank(value);
+  if (parsed !== null) return "numeric UAC profile; use as guide, not guaranteed cutoff";
+  const code = String(value || "").trim();
+  return rankCodeMeanings[code] || "not clearly listed by UAC";
+}
+
+function shortAiField(value, limit = 125) {
+  const text = decodeHtmlEntities(value || "").replace(/\s+/g, " ").trim();
+  if (!text || text === "Not listed" || text === "Check official course page.") return "not clearly listed in the imported UAC record";
+  return text.length > limit ? `${text.slice(0, limit).trim()}...` : text;
+}
+
+async function fetchAdvisorAiReply(prompt) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 9800);
@@ -811,7 +874,7 @@ async function fetchAdvisorAiText(prompt) {
       });
       if (response.ok) {
         const data = await response.json().catch(() => null);
-        if (data?.text) return data.text;
+        if (data?.text) return data;
       }
     } catch {
       // Try one more time; the hosted model endpoint can occasionally fail cold.
@@ -820,7 +883,7 @@ async function fetchAdvisorAiText(prompt) {
     }
     await delay(350);
   }
-  return "";
+  return null;
 }
 
 function delay(ms) {
@@ -1019,7 +1082,7 @@ function cleanAiText(value) {
     .replace(/\*{1,3}/g, "")
     .replace(/_{2,}/g, "")
     .trim()
-    .slice(0, 900);
+    .slice(0, 1400);
 }
 
 function isProviderNotice(value) {

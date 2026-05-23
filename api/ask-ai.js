@@ -1,4 +1,4 @@
-const MAX_PROMPT_LENGTH = 5000;
+const MAX_PROMPT_LENGTH = 12000;
 const DEFAULT_MODELS = ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
 const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 const SYSTEM_INSTRUCTION = [
@@ -21,20 +21,20 @@ module.exports = async function askAiHandler(req, res) {
 
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || process.env.GOOGLE_API_KEY;
     if (!apiKey) {
-      return sendJson(res, 503, { error: "Gemini API key missing" });
+      return sendFallback(res, "Gemini API key missing");
     }
 
     let result = null;
     try {
       result = await askGemini(prompt, apiKey);
     } catch {
-      return sendJson(res, 502, { error: "Gemini unavailable" });
+      return sendFallback(res, "Gemini unavailable");
     }
-    if (!result?.text) return sendJson(res, 502, { error: "Gemini unavailable" });
+    if (!result?.text) return sendFallback(res, "Gemini unavailable");
 
     const text = cleanText(result.text);
     if (!text || isProviderNotice(text)) {
-      return sendJson(res, 502, { error: "Gemini returned notice" });
+      return sendFallback(res, "Gemini returned notice");
     }
 
     return sendJson(res, 200, { text, provider: `Gemini (${result.model}) + site data` });
@@ -86,9 +86,9 @@ async function askGeminiModel(prompt, apiKey, model) {
           }
         ],
         generationConfig: {
-          temperature: 0.2,
+          temperature: 0.15,
           topP: 0.8,
-          maxOutputTokens: 420
+          maxOutputTokens: 650
         }
       })
     });
@@ -133,6 +133,15 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function sendFallback(res, reason) {
+  return sendJson(res, 200, {
+    text: "",
+    provider: "Site data fallback",
+    fallback: true,
+    reason
+  });
+}
+
 function cleanText(value) {
   return String(value || "")
     .replace(/[\u2010-\u2015]/g, "-")
@@ -143,7 +152,7 @@ function cleanText(value) {
     .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 900);
+    .slice(0, 1400);
 }
 
 function isProviderNotice(value) {

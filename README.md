@@ -8,7 +8,7 @@ Clean static website for searching Sydney-campus UAC undergraduate course record
 - `app.js`: course search, filters, ATAR matching, saved courses, compare library, provider list, FAQ and the Ask sidebar.
 - `api/ask-ai.js`: Vercel-compatible Gemini proxy for the Ask sidebar and Course helper. It keeps the API key server-side and falls back to local rules if unavailable.
 - `advisor.js`: question-based course direction helper grounded in the imported UAC course data.
-- The Ask sidebar and Course helper can use a Google AI Studio Gemini API key on the free tier. Local UAC/pathway rules, imported course records and official course links remain the fallback and guardrail.
+- The Ask sidebar and Course helper can use a Google AI Studio Gemini API key on the free tier. Each AI call receives a compact data pack with retrieved course records, ATAR/rank-code meanings, pathway links, provider context, profile scoring evidence and recent chat context. Local UAC/pathway rules, imported course records and official course links remain the fallback and guardrail.
 
 ## Local Preview
 
