@@ -8,7 +8,7 @@ Clean static website for searching Sydney-campus UAC undergraduate course record
 - `app.js`: course search, filters, ATAR matching, saved courses, compare library, provider list, FAQ and the Ask sidebar.
 - `api/ask-ai.js`: Vercel-compatible Gemini proxy for the Ask sidebar and Course helper. It keeps the API key server-side and falls back to local rules if unavailable.
 - `advisor.js`: question-based course direction helper grounded in the imported UAC course data.
-- The Ask sidebar and Course helper can use a Google AI Studio Gemini API key on the free tier. Each AI call receives a compact data pack with retrieved course records, ATAR/rank-code meanings, pathway links, provider context, profile scoring evidence and recent chat context. Local UAC/pathway rules, imported course records and official course links remain the fallback and guardrail.
+- The Ask sidebar and Course helper can use a Google AI Studio Gemini API key. Each AI call receives a compact data pack with retrieved course records, ATAR/rank-code meanings, pathway links, provider context, profile scoring evidence and recent chat context. For school-specific or provider-specific questions, the API can also enable Gemini Google Search grounding so answers can check current public pages instead of only falling back to the static dataset. Local UAC/pathway rules, imported course records and official course links remain the fallback and guardrail.
 
 ## Local Preview
 
@@ -23,6 +23,7 @@ For Gemini locally, copy `.env.example` to `.env` and set:
 ```bash
 GEMINI_API_KEY=your_google_ai_studio_key_here
 GEMINI_MODEL=gemini-3.5-flash
+GEMINI_SEARCH_GROUNDING=true
 ```
 
 If `GEMINI_API_KEY` is missing, the app still works with the built-in site-data helper.
@@ -55,6 +56,7 @@ Add these environment variables in Vercel Project Settings:
 
 - `GEMINI_API_KEY`: your Google AI Studio key.
 - `GEMINI_MODEL`: optional; defaults to `gemini-3.5-flash`, then falls back to Gemini 2.5 Flash or Flash-Lite if that model is not available to the key.
+- `GEMINI_SEARCH_GROUNDING`: optional; set to `false` to disable Google Search grounding. Grounded search can be useful for current official rules, but Google may bill grounded search usage depending on your API plan/model.
 
 ## Data Note
 

@@ -901,6 +901,7 @@ function renderAskMessage(message) {
         ${message.provider ? `<span>${escapeHtml(message.provider)}</span>` : ""}
       </strong>
       ${lines.map((line) => `<p>${highlight(line)}</p>`).join("")}
+      ${renderMessageSources(message.sources)}
     </div>
   `;
 }
@@ -931,6 +932,10 @@ function localAskReply(message, history = "") {
 
   if (isHonoursExplainerQuestion(question)) {
     return "An honours degree is a bachelor degree with a higher-level honours component. In some courses, like Engineering (Honours), honours is built into the degree; in others, honours can be an extra research-focused year after a bachelor degree. Compared with a standard bachelor degree, honours usually means more advanced study, a major project or research component, and sometimes stronger preparation for professional accreditation, postgraduate research or competitive jobs. The exact structure differs by university, so check whether the course name means built-in honours or a separate honours year.";
+  }
+
+  if (isSchoolAdjustmentQuestion(question)) {
+    return schoolAdjustmentReply(question);
   }
 
   if (/bonus|extra point|adjust|adjustment|selection rank|scheme|points? for|marks? for/.test(question)) {
@@ -992,22 +997,43 @@ function isHonoursExplainerQuestion(question) {
     && /\b(what|mean|meaning|differ|difference|different|vs|versus|compare|how)\b/.test(question);
 }
 
+function isSchoolAdjustmentQuestion(question) {
+  const mentionsSchool = /\b[a-z]{2,6}hs\b/.test(question)
+    || /\b(high school|secondary school|school|selective school|public school|private school)\b/.test(question)
+    || /\b(go|going|went|attend|attending|from)\b.+\b(school|high|college)\b/.test(question);
+  const asksAdjustment = /\b(extra|bonus|adjust|adjustment|selection rank|atar|point|points|mark|marks|eas|scheme|advantage)\b/.test(question);
+  return mentionsSchool && asksAdjustment;
+}
+
+function schoolAdjustmentReply(question) {
+  const school = schoolLabelFromQuestion(question);
+  return `${school ? `${school}: ` : ""}not automatically. Your ATAR itself does not go up just because you attend a particular school. A school can matter only if the exact university/course recognises it through a selection-rank adjustment, access scheme, location/school scheme, EAS-style disadvantage category, or another official pathway. If the school name is an acronym like BBHS, confirm the full school name first because different schools can share initials. The safe check is: pick the target course/provider, then check that provider's adjustment-factor page and UAC access scheme information for that exact school and course.`;
+}
+
+function schoolLabelFromQuestion(question) {
+  const acronym = question.match(/\b([a-z]{2,6}hs)\b/);
+  if (acronym) return acronym[1].toUpperCase();
+  const phrase = question.match(/\b(?:going to|go to|attend|attending|from)\s+([a-z0-9 ]{3,45}?(?:high school|secondary school|college|school|high))\b/);
+  return phrase ? titleCase(phrase[1]) : "";
+}
+
+function titleCase(value) {
+  return String(value || "").replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+}
+
 function shouldUseLocalOnly(message, history = "") {
   const question = cleanSearchText(message);
   return isCourtOrHardshipQuestion(question)
-    || isMarksFollowupQuestion(question)
-    || isHonoursExplainerQuestion(question)
-    || /exact|guarantee|guaranteed|definitely|am i eligible|do i qualify/.test(question)
     || (isMarksFollowupQuestion(question) && isCourtOrHardshipQuestion(cleanSearchText(history)));
 }
 
 async function askAiReply(message, localAnswer, history = "") {
   try {
     const prompt = buildAskAiPrompt(message, localAnswer, history);
-    const reply = await withTimeout(fetchGeminiReply(prompt), 11000);
+    const reply = await withTimeout(fetchGeminiReply(prompt, { useSearch: shouldUseWebGrounding(message, history) }), 11000);
     const cleaned = cleanAskAiText(reply?.text);
     if (!cleaned || cleaned.length < 45 || isProviderNotice(cleaned)) return null;
-    return { text: cleaned, provider: reply?.provider || "Gemini + site data" };
+    return { text: cleaned, provider: reply?.provider || "Gemini + site data", sources: reply?.sources || [] };
   } catch {
     return null;
   }
@@ -1016,8 +1042,8 @@ async function askAiReply(message, localAnswer, history = "") {
 function buildAskAiPrompt(message, localAnswer, history = "") {
   const question = cleanSearchText(message);
   const prompt = [
-    "You are the Ask helper inside a Sydney university course finder. Use the supplied DATA PACK as truth. The local answer is the safest baseline; improve it with the retrieved facts only.",
-    "Answer protocol: start with a direct answer, cite 1-4 retrieved courses only when relevant, include ATAR/prerequisite/assumed-knowledge details only if listed in the data pack, and point to UAC or the official course page for final confirmation. Do not invent exact adjustment points, eligibility, fees, prerequisites, campus availability, legal advice, rankings or guarantees. If the data pack does not contain a fact, say it is not in the imported record. Calm, clear, 3-6 short sentences, plain text only.",
+    "You are the Ask helper inside a Sydney university course finder. Use the supplied DATA PACK as truth for course facts. If Google Search grounding is available, use it to check current official pages for school-specific, provider-specific, adjustment-factor and access-scheme questions.",
+    "Answer protocol: answer the latest question directly first, especially yes/no eligibility questions. Cite 1-4 retrieved courses only when course comparison is relevant. Include ATAR/prerequisite/assumed-knowledge details only if listed in the data pack. Do not invent exact adjustment points, eligibility, fees, prerequisites, campus availability, legal advice, rankings or guarantees. If the fact cannot be verified from the data pack or grounded search, say that clearly and give the next official place to check. Calm, clear, 3-6 short sentences, plain text only.",
     `Student question: ${message}`,
     `Recent chat:\n${history || "No previous chat."}`,
     `Local answer: ${localAnswer}`,
@@ -1101,7 +1127,13 @@ function escapeAi(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
-async function fetchGeminiReply(prompt) {
+function shouldUseWebGrounding(message, history = "") {
+  const question = cleanSearchText(`${history} ${message}`);
+  return isSchoolAdjustmentQuestion(question)
+    || /adjustment factor|bonus point|bonus mark|selection rank|extra atar|school recommendation|srs|eas|educational access|access scheme|early entry|deadline|current|2026|provider specific|am i eligible|do i qualify|official|uac/.test(question);
+}
+
+async function fetchGeminiReply(prompt, options = {}) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 9800);
@@ -1111,7 +1143,7 @@ async function fetchGeminiReply(prompt) {
         cache: "no-store",
         signal: controller.signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt })
+        body: JSON.stringify({ prompt, useSearch: Boolean(options.useSearch) })
       });
       if (response.ok) {
         const data = await response.json().catch(() => null);
@@ -1126,6 +1158,17 @@ async function fetchGeminiReply(prompt) {
     await delay(350);
   }
   return null;
+}
+
+function renderMessageSources(sources) {
+  if (!Array.isArray(sources) || !sources.length) return "";
+  return `
+    <div class="message-sources" aria-label="Sources">
+      ${sources.slice(0, 3).map((source) => `
+        <a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.title || "Source")}</a>
+      `).join("")}
+    </div>
+  `;
 }
 
 function askConversationContext() {
@@ -1467,6 +1510,7 @@ async function submitAskMessage(message) {
   const reply = await askReply(text);
   pending.text = reply.text;
   pending.provider = reply.provider;
+  pending.sources = reply.sources || [];
   pending.pending = false;
   state.askMessages = state.askMessages.slice(-12);
   render();

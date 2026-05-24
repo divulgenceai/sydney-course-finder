@@ -406,6 +406,7 @@ function renderAdvisorResult(ranked, profile) {
                 ${message.provider ? `<span>${escapeHtml(message.provider)}</span>` : ""}
               </strong>
               <p>${highlight(cleanAiText(message.text))}</p>
+              ${renderMessageSources(message.sources)}
             </div>
           `).join("") : `<p class="empty-note">Ask about career fit, ATAR risk, pathways, workload, income potential or which option is safest.</p>`}
         </div>
@@ -456,6 +457,7 @@ function bindEvents() {
     const reply = await advisorChatReply(message);
     pendingMessage.text = cleanAiText(reply.text);
     pendingMessage.provider = reply.provider;
+    pendingMessage.sources = reply.sources || [];
     pendingMessage.pending = false;
     state.aiBusy = false;
     state.aiProvider = reply.provider;
@@ -761,16 +763,20 @@ async function advisorChatReply(message) {
   const fallback = localAdvisorChatReply(message);
   const aiReply = await advisorAiReply(message, profile, ranked, fallback);
   if (aiReply?.text) return aiReply;
-  return { text: avoidRepeatedReply(cleanAiText(fallback), ranked, profile), provider: "Site-trained helper" };
+  return { text: avoidRepeatedReply(cleanAiText(fallback), ranked, profile, message), provider: "Site-trained helper" };
 }
 
 async function advisorAiReply(message, profile, ranked, fallback) {
   try {
     const prompt = buildAdvisorAiPrompt(message, profile, ranked, fallback);
-    const reply = await withTimeout(fetchAdvisorAiReply(prompt), 11000);
+    const reply = await withTimeout(fetchAdvisorAiReply(prompt, { useSearch: shouldUseAdvisorWebGrounding(message) }), 11000);
     const cleaned = cleanAiText(reply?.text);
     if (!cleaned || cleaned.length < 45 || isProviderNotice(cleaned)) return null;
-    return { text: avoidRepeatedReply(cleaned, ranked, profile), provider: reply?.provider || "Gemini + UAC data" };
+    return {
+      text: avoidRepeatedReply(cleaned, ranked, profile, message),
+      provider: reply?.provider || "Gemini + UAC data",
+      sources: reply?.sources || []
+    };
   } catch {
     return null;
   }
@@ -778,8 +784,8 @@ async function advisorAiReply(message, profile, ranked, fallback) {
 
 function buildAdvisorAiPrompt(message, profile, ranked, fallback) {
   const prompt = [
-    "You are the Course helper inside a Sydney UAC course finder. Use the DATA PACK as truth and use the local fallback as the safest answer. You may improve wording, compare options and explain the algorithm, but do not add unsupported factual claims.",
-    "Answer protocol: answer the latest student question directly; use typed interests and the latest question as stronger evidence than generic HSC subjects; cite only course facts in the data pack; if a fact is missing, say it is not clearly listed in the imported UAC record and tell them to check UAC or the official course page. Do not invent ATARs, prerequisites, rankings, internships, fees, bonus marks, employment guarantees or legal/medical advice. Keep it professional but chill, 4-7 short sentences, plain text only.",
+    "You are the Course helper inside a Sydney UAC course finder. Use the DATA PACK as truth and use the local fallback as the safest answer. If Google Search grounding is available, use it only to check current public facts such as career context, provider pages, adjustment schemes or official rules. You may improve wording, compare options and explain the algorithm, but do not add unsupported factual claims.",
+    "Answer protocol: answer the latest student question directly; if they ask 'why', explain the scoring reasons, not just what to compare next. Use typed interests and the latest question as stronger evidence than generic HSC subjects; cite only course facts in the data pack; if a fact is missing, say it is not clearly listed in the imported UAC record and tell them to check UAC or the official course page. Do not invent ATARs, prerequisites, rankings, internships, fees, bonus marks, employment guarantees or legal/medical advice. Keep it professional but chill, 4-7 short sentences, plain text only.",
     `Student question: ${message}`,
     `Local answer: ${fallback}`,
     `DATA PACK:\n${buildAdvisorDataContext(message, profile, ranked)}`,
@@ -860,7 +866,12 @@ function shortAiField(value, limit = 125) {
   return text.length > limit ? `${text.slice(0, limit).trim()}...` : text;
 }
 
-async function fetchAdvisorAiReply(prompt) {
+function shouldUseAdvisorWebGrounding(message) {
+  const question = cleanSearchText(message);
+  return /adjustment|bonus|selection rank|eas|srs|official|current|deadline|career|job|employment|salary|internship|placement|accreditation|provider|university page|uac/.test(question);
+}
+
+async function fetchAdvisorAiReply(prompt, options = {}) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 9800);
@@ -870,7 +881,7 @@ async function fetchAdvisorAiReply(prompt) {
         cache: "no-store",
         signal: controller.signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt })
+        body: JSON.stringify({ prompt, useSearch: Boolean(options.useSearch) })
       });
       if (response.ok) {
         const data = await response.json().catch(() => null);
@@ -945,6 +956,10 @@ function localAdvisorChatReply(message) {
   const directFacts = directCourseFactReply(question, ranked, profile);
   if (directFacts) return directFacts;
 
+  if (isShortWhyQuestion(question)) {
+    return explainRecommendationWhy(ranked, profile);
+  }
+
   const wantsLowWorkHighPay = /(lazy|easy|chill|low stress|less work|not much work|too much work|workload|work life balance)/.test(question) && /(pay|paid|money|salary|income|good pay|high pay|rich)/.test(question);
   if (wantsLowWorkHighPay) {
     const suggestions = themedSuggestions(profile, "lowWorkHighPay").slice(0, 12);
@@ -1014,6 +1029,32 @@ function isGameVsItQuestion(question) {
   return /\b(game|games|game development|game dev|gaming)\b/.test(question)
     && /\b(it|information technology|info tech|technology|information systems)\b/.test(question)
     && /\b(why|why not|not|instead|vs|versus|compare|better|choose)\b/.test(question);
+}
+
+function isShortWhyQuestion(question) {
+  return /^(yeah but why|but why|why|why though|why that|why this|how come|explain why)$/.test(question)
+    || (/^why\b/.test(question) && question.length < 45);
+}
+
+function explainRecommendationWhy(ranked, profile) {
+  const primary = ranked[0]?.course;
+  const alternatives = ranked.slice(1, 3);
+  if (!primary) return "I cannot explain the ranking yet because there is no first match. Add your subjects, interests and ATAR, then run the helper again.";
+
+  const primaryEntry = ranked[0];
+  const reasonText = (primaryEntry.reasons || []).slice(0, 3).join(" ");
+  const typedInterest = state.advisor.passions ? `Your typed interests were "${state.advisor.passions}", which the helper treats as stronger than a generic subject list.` : "Your typed interests were not very specific, so the helper leaned more on subjects, ATAR fit and course titles.";
+  const atarLine = numericRank(primary.atar) === null
+    ? "The imported UAC record does not list a numeric ATAR profile, so entry risk needs an official check."
+    : `Its imported ATAR profile is ${displayRank(primary.atar)} against your estimate of ${profile.atar}.`;
+  const altLine = alternatives.length
+    ? `The next options were ${listCourseNames(alternatives, 2)}, so those are the comparison set rather than random courses.`
+    : "There were no strong runner-up options after the first match.";
+  const gameVsItLine = /game|games|game development/i.test(primary.name) && alternatives.some(({ course }) => /information technology|information systems|computer science|software|cyber|data/i.test(course.name))
+    ? "For game development versus IT specifically: game development is the more specialised passion pick, while IT is the broader employment-flexibility pick."
+    : "";
+
+  return avoidRepeatedReply(`Because ${primary.name} scored highest across your topic fit, typed interests, ATAR fit, campus/mode preferences and provider profile. ${typedInterest} ${reasonText} ${atarLine} ${altLine} ${gameVsItLine}`.trim(), ranked, profile, "why");
 }
 
 function gameVsItComparisonReply(ranked, profile) {
@@ -1135,12 +1176,24 @@ function stripMarkdown(value) {
     .replace(/^\s*[-*]\s+/gm, "");
 }
 
-function avoidRepeatedReply(reply, ranked, profile) {
+function avoidRepeatedReply(reply, ranked, profile, latestQuestion = "") {
   const previousAssistant = cleanAiText([...state.advisorChat].reverse().find((message) => message.role === "assistant" && !message.pending)?.text || "");
   reply = cleanAiText(reply);
+  if (isShortWhyQuestion(cleanSearchText(latestQuestion))) return reply;
   if (!previousAssistant || similarityKey(previousAssistant) !== similarityKey(reply)) return reply;
   const names = listCourseNames(ranked, 3);
   return `New angle: compare ${names} by the actual weekly work, not just the title. For your ${profile.topic.label.toLowerCase()} direction, ask each course page: how much coding or project work is there, what maths is assumed, are there internships, and how long is the commute? That will separate a course that sounds good from one you can realistically stick with.`;
+}
+
+function renderMessageSources(sources) {
+  if (!Array.isArray(sources) || !sources.length) return "";
+  return `
+    <div class="message-sources" aria-label="Sources">
+      ${sources.slice(0, 3).map((source) => `
+        <a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.title || "Source")}</a>
+      `).join("")}
+    </div>
+  `;
 }
 
 function similarityKey(value) {
