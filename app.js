@@ -737,7 +737,7 @@ function renderAdvisor() {
       ${advisorQuestions.map(renderAdvisorQuestion).join("")}
       <button type="submit" class="match-btn">Find my course direction</button>
     </form>
-    ${state.advisorRun ? renderAdvisorResult(ranked) : `<p class="empty-note">This uses your answers, ATAR estimate and the local UAC course dataset. No paid AI API is used.</p>`}
+    ${state.advisorRun ? renderAdvisorResult(ranked) : `<p class="empty-note">This uses your answers, ATAR estimate and the local UAC course dataset.</p>`}
   `;
 }
 
@@ -776,7 +776,7 @@ function renderAdvisorResult(ranked) {
       <div class="advisor-summary">
         <h3>${primary ? `Best first direction: ${highlight(primary.name)}` : "Best first direction"}</h3>
         <p>${escapeHtml(advisorSummaryText(primary, profile))}</p>
-        <small>How this was decided: mostly data scoring from course title, study area, ATAR gap, subjects, passions, preferred mode/campus and provider profile score; the AI-style part only explains the pattern in plain language.</small>
+        <small>How this was decided: data scoring from course title, study area, ATAR gap, subjects, passions, preferred mode/campus and provider profile score.</small>
       </div>
       <div class="advisor-picks">
         ${ranked.map(({ course, score, reasons }) => `
@@ -901,7 +901,6 @@ function renderAskMessage(message) {
         ${message.provider ? `<span>${escapeHtml(message.provider)}</span>` : ""}
       </strong>
       ${lines.map((line) => `<p>${highlight(line)}</p>`).join("")}
-      ${renderMessageSources(message.sources)}
     </div>
   `;
 }
@@ -909,9 +908,7 @@ function renderAskMessage(message) {
 async function askReply(message) {
   const history = askConversationContext();
   const local = localAskReply(message, history);
-  if (shouldUseLocalOnly(message, history)) return { text: local, provider: "UAC rule check" };
-  const aiReply = await askAiReply(message, local, history);
-  return aiReply || { text: local, provider: "Site data" };
+  return { text: local, provider: askReplyProvider(message, history) };
 }
 
 function localAskReply(message, history = "") {
@@ -1021,154 +1018,16 @@ function titleCase(value) {
   return String(value || "").replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
 
-function shouldUseLocalOnly(message, history = "") {
+function askReplyProvider(message, history = "") {
   const question = cleanSearchText(message);
-  return isCourtOrHardshipQuestion(question)
-    || (isMarksFollowupQuestion(question) && isCourtOrHardshipQuestion(cleanSearchText(history)));
-}
-
-async function askAiReply(message, localAnswer, history = "") {
-  try {
-    const prompt = buildAskAiPrompt(message, localAnswer, history);
-    const reply = await withTimeout(fetchGeminiReply(prompt, { useSearch: shouldUseWebGrounding(message, history) }), 11000);
-    const cleaned = cleanAskAiText(reply?.text);
-    if (!cleaned || cleaned.length < 45 || isProviderNotice(cleaned)) return null;
-    return { text: cleaned, provider: reply?.provider || "Gemini + site data", sources: reply?.sources || [] };
-  } catch {
-    return null;
+  if (isCourtOrHardshipQuestion(question)
+    || isSchoolAdjustmentQuestion(question)
+    || isHonoursExplainerQuestion(question)
+    || isMarksFollowupQuestion(question)
+    || (isMarksFollowupQuestion(question) && isCourtOrHardshipQuestion(cleanSearchText(history)))) {
+    return "UAC rule check";
   }
-}
-
-function buildAskAiPrompt(message, localAnswer, history = "") {
-  const question = cleanSearchText(message);
-  const prompt = [
-    "You are the Ask helper inside a Sydney university course finder. Use the supplied DATA PACK as truth for course facts. If Google Search grounding is available, use it to check current official pages for school-specific, provider-specific, adjustment-factor and access-scheme questions.",
-    "Answer protocol: answer the latest question directly first, especially yes/no eligibility questions. Cite 1-4 retrieved courses only when course comparison is relevant. Include ATAR/prerequisite/assumed-knowledge details only if listed in the data pack. Do not invent exact adjustment points, eligibility, fees, prerequisites, campus availability, legal advice, rankings or guarantees. If the fact cannot be verified from the data pack or grounded search, say that clearly and give the next official place to check. Calm, clear, 3-6 short sentences, plain text only.",
-    `Student question: ${message}`,
-    `Recent chat:\n${history || "No previous chat."}`,
-    `Local answer: ${localAnswer}`,
-    `DATA PACK:\n${buildAskDataContext(question)}`,
-    "Answer now using the question, local answer and data pack above."
-  ].join("\n\n");
-  return prompt.slice(0, 11000);
-}
-
-function buildAskDataContext(question) {
-  const topic = topicFromQuestion(question);
-  const targetAtar = targetAtarFromQuestion(question);
-  const matches = askCourseMatches(question, 6);
-  const matchedIds = new Set(matches.map(({ course }) => course.id));
-  const saferMatches = targetAtar === null ? [] : askCourseMatches(`${question} pathway backup lower entry ${targetAtar}`, 14)
-    .filter(({ course }) => !matchedIds.has(course.id))
-    .filter(({ course }) => {
-      const rank = numericRank(course.atar);
-      return rank !== null && rank <= targetAtar;
-    })
-    .slice(0, 2);
-
-  return [
-    `Dataset: ${number(allCourses.length)} deduped Sydney UAC course records across ${number(allProviders.length)} providers. Imported ${escapeAi((meta.importedAt || "").slice(0, 10) || "unknown date")}. Only Sydney-campus/location study options are included; similar names at different campuses, modes or codes stay separate.`,
-    `Detected topic: ${topic?.label || "unclear"}. Detected ATAR estimate in question: ${targetAtar === null ? "not provided" : targetAtar}.`,
-    `Glossary: ${Object.entries(glossary).map(([key, value]) => `${key} = ${value}`).join(" | ")}`,
-    `UAC rank codes: ${Object.entries(rankCodeMeanings).map(([key, value]) => `${key} = ${value}`).join(" | ")} Numeric profiles are historical/profile information, not guaranteed cutoffs.`,
-    `Official pathways: ${pathwayLinks.map((link) => `${link.title}: ${link.url}`).join(" | ")}`,
-    providerContextForQuestion(question, topic),
-    `Relevant retrieved course records:\n${matches.length ? matches.map(formatAiCourse).join("\n") : "No direct course match retrieved from the local dataset."}`,
-    saferMatches.length ? `Safer/lower-entry courses near the student's ATAR:\n${saferMatches.map(formatAiCourse).join("\n")}` : "",
-    "Site features: students can Search, expand a course row for details, Save courses to a library, Compare up to four courses, and use ATAR Match for personalised filtering."
-  ].filter(Boolean).join("\n\n");
-}
-
-function formatAiCourse(entry, index) {
-  const course = entry.course;
-  return [
-    `${index + 1}. ${course.name}`,
-    `provider ${course.university}`,
-    `campus ${course.campus}`,
-    `code ${course.courseCode || "not listed"}`,
-    `level ${levelDisplay(course) || "not listed"}`,
-    `mode ${(course.modes || []).join(", ") || "not listed"}`,
-    `ATAR/selection rank ${displayRank(course.atar)} (${rankMeaningForAi(course.atar)})`,
-    `duration ${shortPlainField(course.duration)}`,
-    `prerequisites ${shortPlainField(course.prerequisites)}`,
-    `assumed knowledge ${shortPlainField(course.assumed)}`,
-    `careers ${shortPlainField(course.careers)}`,
-    `fees ${shortPlainField(course.fees)}`,
-    `official ${course.officialUrl || "not listed"}`,
-    `UAC ${course.uacUrl || "not listed"}`
-  ].join(" | ");
-}
-
-function providerContextForQuestion(question, topic) {
-  const wantsProviderHelp = /which uni|best uni|provider|prestige|employment|employability|graduate|between|compare|uts|unsw|usyd|macquarie|western sydney|acu/.test(question);
-  if (!wantsProviderHelp) return "";
-  const quality = topic ? providerQuality[topic.label] || {} : {};
-  const mentioned = allProviders
-    .filter((provider) => phraseMatch(question, provider.name) || phraseMatch(question, provider.id))
-    .slice(0, 5);
-  const topForTopic = Object.entries(quality)
-    .map(([providerId, row]) => ({ provider: allProviders.find((item) => item.id === providerId), row }))
-    .filter((item) => item.provider)
-    .sort((a, b) => b.row.score - a.row.score)
-    .slice(0, 5);
-  const rows = mentioned.length ? mentioned.map((provider) => ({ provider, row: quality[provider.id] })) : topForTopic;
-  if (!rows.length) return "";
-  return `Provider context for ${topic?.label || "the question"}: ${rows.map(({ provider, row }) => `${provider.name} (${provider.website}) profile ${Math.round(row?.score || providerOverallScore(provider))}/100${row?.note ? ` - ${row.note}` : ""}`).join(" | ")}. This is an app guide, not an official ranking; confirm with UAC, QILT and provider pages.`;
-}
-
-function rankMeaningForAi(value) {
-  const parsed = numericRank(value);
-  if (parsed !== null) return "numeric UAC profile; use as guide, not a guaranteed cutoff";
-  const code = String(value || "").trim();
-  return rankCodeMeanings[code] || "not clearly listed by UAC";
-}
-
-function escapeAi(value) {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
-
-function shouldUseWebGrounding(message, history = "") {
-  const question = cleanSearchText(`${history} ${message}`);
-  return isSchoolAdjustmentQuestion(question)
-    || /adjustment factor|bonus point|bonus mark|selection rank|extra atar|school recommendation|srs|eas|educational access|access scheme|early entry|deadline|current|2026|provider specific|am i eligible|do i qualify|official|uac/.test(question);
-}
-
-async function fetchGeminiReply(prompt, options = {}) {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 9800);
-    try {
-      const response = await fetch("/api/ask-ai", {
-        method: "POST",
-        cache: "no-store",
-        signal: controller.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, useSearch: Boolean(options.useSearch) })
-      });
-      if (response.ok) {
-        const data = await response.json().catch(() => null);
-        if (data?.fallback) return null;
-        if (data?.text) return data;
-      }
-    } catch {
-      // Try once more; the hosted model can occasionally fail the first request.
-    } finally {
-      window.clearTimeout(timer);
-    }
-    await delay(350);
-  }
-  return null;
-}
-
-function renderMessageSources(sources) {
-  if (!Array.isArray(sources) || !sources.length) return "";
-  return `
-    <div class="message-sources" aria-label="Sources">
-      ${sources.slice(0, 3).map((source) => `
-        <a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.title || "Source")}</a>
-      `).join("")}
-    </div>
-  `;
+  return "Site data";
 }
 
 function askConversationContext() {
@@ -1177,47 +1036,6 @@ function askConversationContext() {
     .slice(-6)
     .map((item) => `${item.role === "user" ? "Student" : "Ask helper"}: ${item.text}`)
     .join("\n");
-}
-
-function withTimeout(promise, ms) {
-  return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error("Timed out")), ms);
-    promise.then(
-      (value) => {
-        window.clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        window.clearTimeout(timer);
-        reject(error);
-      }
-    );
-  });
-}
-
-function cleanAskAiText(value) {
-  return decodeHtmlEntities(value || "")
-    .replace(/[\u2010-\u2015]/g, "-")
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/[\u201c\u201d]/g, '"')
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/[*_`#>]/g, "")
-    .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 1400);
-}
-
-function isProviderNotice(value) {
-  return /rate limit|quota|api key|captcha|cloudflare|model unavailable|permission denied|error/i.test(value || "");
-}
-
-function shortPlainField(value) {
-  return truncateText(decodeHtmlEntities(value || "Not listed"), 130);
-}
-
-function delay(ms) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function askCourseMatches(question, limit) {
@@ -1502,7 +1320,7 @@ async function submitAskMessage(message) {
   if (!text) return;
   state.askOpen = true;
   state.askMessages.push({ role: "user", text });
-  const pending = { role: "assistant", text: "Checking the site data and Gemini...", pending: true, provider: "Thinking" };
+  const pending = { role: "assistant", text: "Checking the site data...", pending: true, provider: "Thinking" };
   state.askMessages.push(pending);
   state.askMessages = state.askMessages.slice(-12);
   render();
@@ -1510,7 +1328,6 @@ async function submitAskMessage(message) {
   const reply = await askReply(text);
   pending.text = reply.text;
   pending.provider = reply.provider;
-  pending.sources = reply.sources || [];
   pending.pending = false;
   state.askMessages = state.askMessages.slice(-12);
   render();

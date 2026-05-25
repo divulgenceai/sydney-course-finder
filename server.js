@@ -3,9 +3,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = __dirname;
-loadEnvFile(path.join(root, ".env"));
-const askAiHandler = require("./api/ask-ai.js");
-
 const port = Number(process.env.PORT || 4180);
 const host = process.env.HOST || "127.0.0.1";
 
@@ -24,10 +21,6 @@ const mimeTypes = {
 
 http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || `${host}:${port}`}`);
-  if (url.pathname === "/api/ask-ai") {
-    askAiHandler(req, res);
-    return;
-  }
 
   const filePath = resolveFile(url.pathname);
   if (!filePath) {
@@ -54,14 +47,4 @@ function resolveFile(pathname) {
   if (relative.startsWith("..") || path.isAbsolute(relative)) return "";
   if (!fs.existsSync(candidate) || !fs.statSync(candidate).isFile()) return "";
   return candidate;
-}
-
-function loadEnvFile(filePath) {
-  if (!fs.existsSync(filePath)) return;
-  const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
-  for (const line of lines) {
-    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
-    if (!match || process.env[match[1]]) continue;
-    process.env[match[1]] = match[2].replace(/^["']|["']$/g, "");
-  }
 }
