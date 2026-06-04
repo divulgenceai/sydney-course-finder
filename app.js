@@ -39,7 +39,7 @@ const subjectOptions = [
   "Legal Studies",
   "Design and Technology",
   "Visual Arts",
-  "PDHPE",
+  "Health and Movement Science (HMS)",
   "Community and Family Studies",
   "Society and Culture",
   "Modern History"
@@ -56,7 +56,7 @@ const topicOptions = [
   { label: "Law and Justice", keywords: ["law", "legal", "justice", "criminology", "policy"] },
   { label: "Creative Arts and Design", keywords: ["design", "creative", "animation", "music", "screen", "media", "arts", "visual", "game"] },
   { label: "Education", keywords: ["education", "teaching", "teacher", "early childhood", "primary", "secondary"] },
-  { label: "Sport and Exercise", keywords: ["sport", "sports", "exercise", "fitness", "coaching", "pdhpe", "health promotion", "physical education", "athlete"] },
+  { label: "Sport and Exercise", keywords: ["sport", "sports", "exercise", "fitness", "coaching", "hms", "health and movement science", "pdhpe", "health promotion", "physical education", "athlete"] },
   { label: "Social Work and Community", keywords: ["social work", "community", "counselling", "counseling", "human services", "youth", "welfare", "support work", "mental health"] },
   { label: "Science", keywords: ["science", "biology", "chemistry", "physics", "environment", "mathematics", "research"] }
 ];
@@ -397,13 +397,15 @@ function render() {
         <span>Sydney Course Finder</span>
       </a>
       <nav class="topnav" aria-label="Main">
-        <a href="#courses">Courses</a>
-        <a href="#atar">ATAR match</a>
+        <a href="#courses" ${navCurrent("#courses")}>Courses</a>
+        <a href="#atar" ${navCurrent("#atar")}>ATAR match</a>
+        <a href="./atar-calculator.html">ATAR calculator</a>
+        <a href="./subject-helper.html">Subject helper</a>
         <a href="./advisor.html">Course helper</a>
         <button class="nav-button" type="button" data-action="open-ask">Ask?</button>
-        <a href="#saved">Saved ${state.savedIds.length ? `(${state.savedIds.length})` : ""}</a>
-        <a href="#providers">Universities</a>
-        <a href="#faq">FAQ</a>
+        <a href="#saved" ${navCurrent("#saved")}>Saved ${state.savedIds.length ? `(${state.savedIds.length})` : ""}</a>
+        <a href="#providers" ${navCurrent("#providers")}>Universities</a>
+        <a href="#faq" ${navCurrent("#faq")}>FAQ</a>
       </nav>
     </header>
 
@@ -458,6 +460,7 @@ function render() {
             <p>Optional subjects and interests help rank the results. ATAR matching only uses courses with a numeric UAC profile.</p>
           </div>
           <div class="panel-actions">
+            <a class="help-link" href="./atar-calculator.html">ATAR calculator</a>
             <a class="help-link" href="./advisor.html?atar=${encodeURIComponent(state.atar)}">Need help?</a>
             <span>${term("selection rank")}</span>
           </div>
@@ -504,7 +507,7 @@ function render() {
           ${compareCourses.length ? `<button class="clear-btn" type="button" data-action="clear-compare">Clear compare</button>` : ""}
         </div>
         <div class="course-list compact">
-          ${savedCourses.length ? savedCourses.map((course) => renderCourse(course)).join("") : `<p class="empty-note">No saved courses yet. Use Save on any course row to build your library.</p>`}
+          ${savedCourses.length ? savedCourses.map((course) => renderCourse(course)).join("") : renderSavedEmpty()}
         </div>
       </section>
 
@@ -543,6 +546,12 @@ function render() {
     ${renderAskDrawer()}
   `;
   bindEvents();
+  scheduleHashScroll();
+}
+
+function navCurrent(targetHash) {
+  const hash = window.location.hash || "#courses";
+  return hash === targetHash ? 'aria-current="page"' : "";
 }
 
 function filteredCourses() {
@@ -730,6 +739,16 @@ function renderCompareLibrary(compareCourses) {
   `;
 }
 
+function renderSavedEmpty() {
+  return `
+    <div class="saved-empty">
+      <strong>No saved courses yet</strong>
+      <p>Search for a course, then use Save or Compare on the course row. Saved courses stay in this browser.</p>
+      <a href="#courses">Search courses</a>
+    </div>
+  `;
+}
+
 function renderAdvisor() {
   const ranked = state.advisorRun ? advisorRankedCourses().slice(0, 6) : [];
   return `
@@ -792,8 +811,11 @@ function renderAdvisorResult(ranked) {
         <h3>Chat with the helper</h3>
         <div class="chat-log">
           ${state.advisorChat.length ? state.advisorChat.map((message) => `
-            <div class="chat-message ${message.role}">
-              <strong>${message.role === "user" ? "You" : "Helper"}</strong>
+            <div class="chat-message ${message.role}${message.pending ? " pending" : ""}">
+              <strong>
+                ${message.role === "user" ? "You" : "Helper"}
+                ${message.provider ? `<span>${escapeHtml(message.provider)}</span>` : ""}
+              </strong>
               <p>${highlight(message.text)}</p>
             </div>
           `).join("") : `<p class="empty-note">Ask things like “which one is safest?”, “what if my ATAR is too low?”, or “compare medicine and technology”.</p>`}
@@ -908,13 +930,63 @@ function renderAskMessage(message) {
 async function askReply(message) {
   const history = askConversationContext();
   const local = localAskReply(message, history);
-  return { text: local, provider: askReplyProvider(message, history) };
+  const fallbackProvider = askReplyProvider(message, history);
+  try {
+    const ai = await requestAiReply({
+      type: "ask",
+      message,
+      history: state.askMessages.filter((item) => !item.pending).slice(-8),
+      localReply: local,
+      context: {
+        courses: askCourseMatches(message, 6).map(({ course, score }) => compactAiCourse(course, score))
+      }
+    });
+    return { text: ai.text, provider: ai.provider || "Gemini" };
+  } catch (error) {
+    console.warn("Ask AI fallback:", error);
+    return { text: local, provider: fallbackProvider };
+  }
+}
+
+async function requestAiReply(payload) {
+  const response = await fetch("/api/ai", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw new Error(`AI endpoint returned ${response.status}`);
+  const data = await response.json();
+  if (!data.ok || !data.text) throw new Error(data.error || "AI endpoint unavailable");
+  return data;
+}
+
+function compactAiCourse(course, score, reasons = []) {
+  return {
+    name: course.name,
+    provider: course.university,
+    campus: course.campus,
+    code: course.courseCode,
+    atar: displayRank(course.atar),
+    prerequisites: truncateText(decodeHtmlEntities(course.prerequisites || ""), 260),
+    assumedKnowledge: truncateText(decodeHtmlEntities(course.assumed || ""), 200),
+    careers: truncateText(decodeHtmlEntities(course.careers || ""), 220),
+    duration: course.duration,
+    modes: course.modes || [],
+    uacUrl: course.uacUrl,
+    officialUrl: course.officialUrl,
+    score: typeof score === "number" ? Math.round(score) : undefined,
+    reasons: Array.isArray(reasons) ? reasons.slice(0, 3) : []
+  };
 }
 
 function localAskReply(message, history = "") {
   const question = cleanSearchText(message);
   const context = cleanSearchText(history);
   if (!question) return "Ask me a question about UAC, ATAR, pathways, subjects or finding courses.";
+
+  if (isSchoolAdjustmentQuestion(question)) {
+    return schoolAdjustmentReply(question);
+  }
 
   if (isMarksFollowupQuestion(question)) {
     if (isCourtOrHardshipQuestion(context)) {
@@ -929,10 +1001,6 @@ function localAskReply(message, history = "") {
 
   if (isHonoursExplainerQuestion(question)) {
     return "An honours degree is a bachelor degree with a higher-level honours component. In some courses, like Engineering (Honours), honours is built into the degree; in others, honours can be an extra research-focused year after a bachelor degree. Compared with a standard bachelor degree, honours usually means more advanced study, a major project or research component, and sometimes stronger preparation for professional accreditation, postgraduate research or competitive jobs. The exact structure differs by university, so check whether the course name means built-in honours or a separate honours year.";
-  }
-
-  if (isSchoolAdjustmentQuestion(question)) {
-    return schoolAdjustmentReply(question);
   }
 
   if (/bonus|extra point|adjust|adjustment|selection rank|scheme|points? for|marks? for/.test(question)) {
@@ -1285,13 +1353,20 @@ function bindEvents() {
     });
   });
 
-  app.querySelector('[data-form="advisor-chat"]')?.addEventListener("submit", (event) => {
+  app.querySelector('[data-form="advisor-chat"]')?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const message = event.target.message.value.trim();
     if (!message) return;
     state.advisorChat.push({ role: "user", text: message });
-    state.advisorChat.push({ role: "assistant", text: advisorChatReply(message) });
+    const pending = { role: "assistant", text: "Checking Gemini against the course data...", pending: true, provider: "Gemini" };
+    state.advisorChat.push(pending);
     event.target.message.value = "";
+    render();
+    location.hash = "advisor";
+    const reply = await advisorAiChatReply(message);
+    pending.text = reply.text;
+    pending.provider = reply.provider;
+    pending.pending = false;
     render();
     location.hash = "advisor";
   });
@@ -1339,6 +1414,30 @@ function scrollAskToBottom() {
     const log = app.querySelector(".ask-log");
     if (log) log.scrollTop = log.scrollHeight;
   });
+}
+
+function scheduleHashScroll() {
+  const hash = window.location.hash;
+  if (!hash || hash === "#ask") return;
+  const id = decodeURIComponent(hash.slice(1));
+  if (!id) return;
+  requestAnimationFrame(() => requestAnimationFrame(() => settleHashScroll(id)));
+}
+
+function settleHashScroll(id, attempts = 0) {
+  const target = document.getElementById(id);
+  if (!target) return;
+  const header = app.querySelector(".topbar");
+  const headerBottom = header ? header.getBoundingClientRect().bottom : 0;
+  const targetTop = target.getBoundingClientRect().top;
+  const desiredTop = headerBottom + 16;
+  const delta = targetTop - desiredTop;
+  if (Math.abs(delta) > 3) {
+    window.scrollBy({ top: delta, behavior: "auto" });
+  }
+  if (attempts < 5) {
+    window.setTimeout(() => settleHashScroll(id, attempts + 1), 120);
+  }
 }
 
 function select(key, label, options, value) {
@@ -1486,6 +1585,28 @@ function advisorChatReply(message) {
     return `Check prerequisites first because they can block entry. Assumed knowledge is different: it usually will not block entry, but missing maths/science background can make first year harder.`;
   }
   return `I would keep ${primary.name} as your first serious option from the data. The next decision should be: do you like the actual subjects, can you meet entry requirements, and is the campus/pathway realistic?`;
+}
+
+async function advisorAiChatReply(message) {
+  const ranked = advisorRankedCourses().slice(0, 6);
+  const local = advisorChatReply(message);
+  try {
+    const ai = await requestAiReply({
+      type: "advisor",
+      message,
+      history: state.advisorChat.filter((item) => !item.pending).slice(-8),
+      localReply: local,
+      context: {
+        profile: advisorProfile(),
+        answers: state.advisor,
+        rankedCourses: ranked.map(({ course, score, reasons }) => compactAiCourse(course, score, reasons))
+      }
+    });
+    return { text: ai.text, provider: ai.provider || "Gemini" };
+  } catch (error) {
+    console.warn("Advisor AI fallback:", error);
+    return { text: local, provider: "Site data" };
+  }
 }
 
 function searchScore(course, query) {
@@ -1920,8 +2041,16 @@ render();
 if (state.askOpen) scrollAskToBottom();
 
 window.addEventListener("hashchange", () => {
-  if (window.location.hash !== "#ask") return;
-  state.askOpen = true;
+  if (window.location.hash === "#ask") {
+    state.askOpen = true;
+    render();
+    scrollAskToBottom();
+    return;
+  }
+  if (state.askOpen) {
+    state.askOpen = false;
+    render();
+    return;
+  }
   render();
-  scrollAskToBottom();
 });

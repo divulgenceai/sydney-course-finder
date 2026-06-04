@@ -284,6 +284,8 @@ function render() {
       <nav class="topnav" aria-label="Main">
         <a href="./index.html#courses">Courses</a>
         <a href="./index.html#atar">ATAR match</a>
+        <a href="./atar-calculator.html">ATAR calculator</a>
+        <a href="./subject-helper.html">Subject helper</a>
         <a href="./advisor.html" aria-current="page">Course helper</a>
         <a href="./index.html#ask">Ask?</a>
         <a href="./index.html#saved">Saved</a>
@@ -334,6 +336,14 @@ function render() {
     </main>
   `;
   bindEvents();
+  requestAnimationFrame(scrollActiveNavIntoView);
+}
+
+function scrollActiveNavIntoView() {
+  advisorApp.querySelector('.topnav [aria-current="page"]')?.scrollIntoView({
+    block: "nearest",
+    inline: "start"
+  });
 }
 
 function renderAdvisor(ranked, profile) {
@@ -441,18 +451,31 @@ function bindEvents() {
     });
   });
 
-  advisorApp.querySelector('[data-form="advisor-chat"]')?.addEventListener("submit", (event) => {
+  advisorApp.querySelector('[data-form="advisor-chat"]')?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const message = event.target.message.value.trim();
     if (!message) return;
     state.advisorChat.push({ role: "user", text: message });
     event.target.message.value = "";
-    const reply = advisorChatReply(message);
+    const pending = {
+      role: "assistant",
+      text: "Checking Gemini against your answers and the course data...",
+      provider: "Gemini",
+      pending: true
+    };
+    state.advisorChat.push(pending);
+    state.helperProvider = "Gemini";
+    renderPreservingScroll(true);
+    const reply = await advisorAiChatReply(message);
+    pending.text = cleanHelperText(reply.text);
+    pending.provider = reply.provider;
+    pending.pending = false;
     state.advisorChat.push({
       role: "assistant",
       text: cleanHelperText(reply.text),
       provider: reply.provider
     });
+    state.advisorChat = state.advisorChat.filter((item) => item !== pending);
     state.helperProvider = reply.provider;
     renderPreservingScroll(true);
   });
@@ -757,6 +780,60 @@ function advisorChatReply(message) {
   return {
     text: avoidRepeatedReply(cleanHelperText(fallback), ranked, profile, message),
     provider: "Site data"
+  };
+}
+
+async function advisorAiChatReply(message) {
+  const ranked = advisorRankedCourses().slice(0, 6);
+  const profile = advisorProfile();
+  const local = advisorChatReply(message);
+  try {
+    const ai = await requestAiReply({
+      type: "advisor",
+      message,
+      history: state.advisorChat.filter((item) => !item.pending).slice(-8),
+      localReply: local.text,
+      context: {
+        profile,
+        answers: state.advisor,
+        rankedCourses: ranked.map(({ course, score, reasons }) => compactAiCourse(course, score, reasons))
+      }
+    });
+    return { text: ai.text, provider: ai.provider || "Gemini" };
+  } catch (error) {
+    console.warn("Advisor AI fallback:", error);
+    return local;
+  }
+}
+
+async function requestAiReply(payload) {
+  const response = await fetch("/api/ai", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw new Error(`AI endpoint returned ${response.status}`);
+  const data = await response.json();
+  if (!data.ok || !data.text) throw new Error(data.error || "AI endpoint unavailable");
+  return data;
+}
+
+function compactAiCourse(course, score, reasons = []) {
+  return {
+    name: course.name,
+    provider: course.university,
+    campus: course.campus,
+    code: course.courseCode,
+    atar: displayRank(course.atar),
+    prerequisites: shortField(course.prerequisites),
+    assumedKnowledge: shortField(course.assumed),
+    careers: shortField(course.careers),
+    duration: shortField(course.duration),
+    modes: course.modes || [],
+    uacUrl: course.uacUrl,
+    officialUrl: course.officialUrl,
+    score: typeof score === "number" ? Math.round(score) : undefined,
+    reasons: Array.isArray(reasons) ? reasons.slice(0, 3) : []
   };
 }
 

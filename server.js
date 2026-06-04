@@ -5,6 +5,7 @@ const path = require("node:path");
 const root = __dirname;
 const port = Number(process.env.PORT || 4180);
 const host = process.env.HOST || "127.0.0.1";
+const aiHandler = require("./api/ai");
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -21,6 +22,11 @@ const mimeTypes = {
 
 http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || `${host}:${port}`}`);
+
+  if (url.pathname === "/api/ai") {
+    aiHandler(req, res);
+    return;
+  }
 
   const filePath = resolveFile(url.pathname);
   if (!filePath) {
@@ -41,7 +47,15 @@ http.createServer((req, res) => {
 
 function resolveFile(pathname) {
   const clean = decodeURIComponent(pathname).replace(/\\/g, "/");
-  const route = clean === "/" ? "/index.html" : clean === "/advisor" ? "/advisor.html" : clean;
+  const route = clean === "/"
+    ? "/index.html"
+    : clean === "/advisor"
+      ? "/advisor.html"
+      : clean === "/atar-calculator" || clean === "/calculator"
+        ? "/atar-calculator.html"
+        : clean === "/subject-helper" || clean === "/subjects"
+          ? "/subject-helper.html"
+        : clean;
   const candidate = path.resolve(root, `.${route}`);
   const relative = path.relative(root, candidate);
   if (relative.startsWith("..") || path.isAbsolute(relative)) return "";

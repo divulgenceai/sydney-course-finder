@@ -6,6 +6,22 @@
     {
       "source": "/advisor",
       "destination": "/advisor.html"
+    },
+    {
+      "source": "/atar-calculator",
+      "destination": "/atar-calculator.html"
+    },
+    {
+      "source": "/subject-helper",
+      "destination": "/subject-helper.html"
+    },
+    {
+      "source": "/subjects",
+      "destination": "/subject-helper.html"
+    },
+    {
+      "source": "/calculator",
+      "destination": "/atar-calculator.html"
     }
   ],
   "headers": [
