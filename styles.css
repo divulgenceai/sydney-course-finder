@@ -71,6 +71,19 @@ select {
   font: inherit;
 }
 
+button,
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+a,
+button,
+summary {
+  touch-action: manipulation;
+}
+
 select {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg width='18' height='18' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -569,6 +582,7 @@ input[type="number"]:focus {
 .search-form input {
   width: 100%;
   min-width: 0;
+  min-height: 44px;
   border: 0;
   outline: 0;
   background: transparent;
@@ -3623,36 +3637,58 @@ input[type="range"] {
 
 @media (max-width: 640px) {
   html {
-    scroll-padding-top: 136px;
+    scroll-padding-top: 128px;
   }
 
   .topbar {
     position: sticky;
     align-items: flex-start;
     flex-direction: column;
-    gap: 8px;
-    padding: 12px;
+    gap: 9px;
+    min-height: 0;
+    padding: 10px 12px 9px;
   }
 
   .topbar-actions {
     position: absolute;
-    top: 12px;
+    top: 10px;
     right: 12px;
     margin-left: 0;
   }
 
   .topnav {
     width: 100%;
-    padding-right: 44px;
+    gap: 7px;
+    padding: 0 44px 2px 0;
+    -webkit-overflow-scrolling: touch;
+    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 36px), transparent 100%);
+    scroll-padding-inline: 4px;
+    scroll-snap-type: x proximity;
+  }
+
+  .topnav a,
+  .topnav button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 11px;
+    scroll-snap-align: start;
   }
 
   .brand {
+    min-height: 40px;
     min-width: 0;
     padding-right: 48px;
+    font-size: 16px;
+  }
+
+  .site-logo {
+    width: 32px;
+    height: 32px;
   }
 
   .app-progress {
-    top: 118px;
+    top: 106px;
     padding: 0 10px;
   }
 
@@ -3661,11 +3697,33 @@ input[type="range"] {
   }
 
   main {
-    width: min(100% - 20px, 1120px);
+    width: min(100% - 18px, 1120px);
   }
 
   .hero {
-    padding-top: 28px;
+    gap: 14px;
+    padding: 22px 0 14px;
+  }
+
+  h1 {
+    font-size: 30px;
+    line-height: 1.08;
+  }
+
+  .hero p,
+  .panel-head p,
+  .empty-note,
+  .data-note {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .stats div {
+    padding: 11px;
+  }
+
+  .stats dd {
+    font-size: 17px;
   }
 
   .stats,
@@ -3719,11 +3777,88 @@ input[type="range"] {
   }
 
   .panel {
+    margin: 14px 0 22px;
     padding: 14px;
+    scroll-margin-top: 128px;
   }
 
   .panel-head {
     flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .panel-head span {
+    width: fit-content;
+  }
+
+  .panel-actions {
+    justify-content: flex-start;
+  }
+
+  .help-link {
+    min-height: 42px;
+  }
+
+  .search-form {
+    gap: 8px;
+  }
+
+  .search-form label {
+    min-height: 48px;
+    padding: 0 12px;
+  }
+
+  .search-form button,
+  .match-btn,
+  .load-more,
+  .clear-btn {
+    width: 100%;
+    min-height: 46px;
+  }
+
+  .filters,
+  .atar-controls {
+    gap: 9px;
+    margin-bottom: 14px;
+  }
+
+  .filters label,
+  .atar-controls label,
+  .top-provider-head label,
+  .advisor-form label,
+  .subject-search-form label,
+  .guide-controls label {
+    min-width: 0;
+  }
+
+  select,
+  input[type="number"],
+  .advisor-form input,
+  .advisor-form select,
+  .chat-form input,
+  .calc-subject-row input,
+  .calc-subject-row select,
+  .guide-controls input,
+  .guide-controls select,
+  .subject-search-form input,
+  .subject-search-form select {
+    min-height: 46px;
+  }
+
+  .income-filter-bar {
+    gap: 7px;
+    padding: 9px;
+  }
+
+  .income-filter-bar span,
+  .income-filter-bar small {
+    flex-basis: 100%;
+  }
+
+  .income-filter-bar button {
+    min-height: 40px;
+    padding: 0 12px;
   }
 
   .course-item > summary::after {
@@ -3731,12 +3866,191 @@ input[type="range"] {
     justify-self: start;
   }
 
+  .course-item > summary {
+    grid-template-columns: 62px minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .course-item img {
+    width: 58px;
+    height: 36px;
+  }
+
+  .course-summary {
+    min-width: 0;
+  }
+
+  .course-summary strong,
+  .course-summary small,
+  .course-summary em,
+  .income-preview {
+    overflow-wrap: anywhere;
+  }
+
   .quick-actions {
+    grid-column: 1 / -1;
     justify-content: flex-start;
+    width: 100%;
+  }
+
+  .quick-actions button {
+    flex: 1 1 128px;
+    min-height: 42px;
+  }
+
+  .course-detail {
+    padding: 0 12px 12px;
+  }
+
+  .compare-scroll {
+    margin-inline: -2px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .compare-scroll table {
+    min-width: 640px;
+  }
+
+  .calc-toolbar {
+    gap: 8px;
+  }
+
+  .calc-toolbar button {
+    min-height: 44px;
+  }
+
+  .calc-subject-row {
+    gap: 9px;
+    padding: 12px;
+  }
+
+  .row-breakdown {
+    min-height: 0;
+  }
+
+  .row-breakdown span {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .row-remove {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .subject-suggestions {
+    width: calc(100vw - 42px);
+    max-height: 260px;
+  }
+
+  .atar-simple-summary {
+    gap: 10px;
+  }
+
+  .atar-main-card,
+  .atar-impact-card,
+  .atar-context-card,
+  .subject-impact-card {
+    padding: 13px;
+  }
+
+  .subject-search-form {
+    gap: 9px;
+  }
+
+  .subject-search-form button,
+  .quick-subject-searches button,
+  .subject-empty-examples button {
+    min-height: 44px;
+  }
+
+  .quick-subject-searches,
+  .subject-empty-examples {
+    gap: 7px;
+  }
+
+  .quick-subject-searches button,
+  .subject-empty-examples button {
+    flex: 1 1 142px;
+  }
+
+  .subject-course-card summary {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .course-entry-status {
+    white-space: normal;
+  }
+
+  .chat-form {
+    gap: 8px;
+  }
+
+  .chat-form button {
+    width: 100%;
+    min-height: 46px;
   }
 
   .ask-panel {
     width: 100%;
     padding: 14px;
+  }
+}
+
+@media (max-width: 420px) {
+  body {
+    font-size: 14.5px;
+  }
+
+  .topbar {
+    padding-inline: 10px;
+  }
+
+  .brand span {
+    max-width: 236px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .theme-toggle {
+    width: 40px;
+    height: 40px;
+  }
+
+  main {
+    width: min(100% - 16px, 1120px);
+  }
+
+  h1 {
+    font-size: 28px;
+  }
+
+  .hero {
+    padding-top: 18px;
+  }
+
+  .panel {
+    padding: 12px;
+  }
+
+  .course-item > summary {
+    grid-template-columns: 54px minmax(0, 1fr);
+  }
+
+  .course-item img {
+    width: 50px;
+  }
+
+  .advisor-summary,
+  .chat-box,
+  .advisor-picks article,
+  .subject-card,
+  .entry-snapshot article,
+  .entry-rule,
+  .calculator-result {
+    padding: 12px;
   }
 }
