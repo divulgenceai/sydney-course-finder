@@ -5,12 +5,12 @@ Clean website for searching Sydney-campus UAC undergraduate course records, comp
 ## What It Uses
 
 - `uac-courses.js`: imported UAC undergraduate records filtered to Sydney campuses or Sydney-location study options.
-- `app.js`: course search, filters, ATAR matching, saved courses, compare library, provider list, FAQ and the Ask sidebar.
+- `app.js`: course search, filters, ATAR matching, saved courses, compare library, provider list and FAQ.
 - `advisor.js`: question-based course direction helper grounded in the imported UAC course data.
-- `api/ai.js`: server-side Gemini endpoint used by the Ask sidebar and Course helper chats. The browser never receives the API key.
+- `api/ai.js`: server-side Gemini endpoint used by Course helper chats. The browser never receives the API key.
 - `subject-helper.html`, `subject-helper.js`: degree/job-to-HSC-subject helper using course matches, prerequisites and assumed knowledge signals.
 - `atar-calculator.html`, `atar-calculator.js`, `atar-data.js`: NSW HSC ATAR estimator using public UAC 2025 scaling-report summaries.
-- The Ask sidebar and Course helper use Gemini when `GEMINI_API_KEY` is configured. If the key is missing or quota fails, they fall back to local site-data rules.
+- Course helper chat uses the server-side Gemini endpoint only. If the key is missing or Google rejects the key/project/quota, the UI shows the setup issue instead of falling back to scripted local replies.
 
 ## Local Preview
 
@@ -27,7 +27,16 @@ $env:GEMINI_API_KEY="your_google_ai_studio_key"
 npm start
 ```
 
-Optional: set `GEMINI_MODEL` to change the model. The default is `gemini-3.5-flash`, chosen because Google lists it on the Gemini API free developer tier and it is fast enough for chat UI.
+Or put the key in a local `.env` file:
+
+```env
+GEMINI_API_KEY=your_google_ai_studio_key
+GEMINI_MODEL=gemini-3.5-flash
+```
+
+Optional: set `GEMINI_MODEL` to change the model. The default in this app is `gemini-3.5-flash`, matching Google's current quickstart. No API key is bundled in the repo; add one locally or in Vercel environment variables to enable real AI replies.
+
+The AI status endpoint runs a small connection check, so the UI only shows “Gemini on” after the key actually works. Search grounding is enabled by default; set `GEMINI_DISABLE_SEARCH=1` if you want plain Gemini calls only.
 
 ## Local Checks
 

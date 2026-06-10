@@ -15,6 +15,11 @@ const meta = window.uacImportMeta || {};
 const courseTextCache = new WeakMap();
 const primaryCourseTextCache = new WeakMap();
 const topicScoreCache = new WeakMap();
+const searchFieldCache = new WeakMap();
+const incomeOutcomeCache = new WeakMap();
+const filteredCourseCache = { key: "", results: [] };
+let incomeWarmupIndex = 0;
+let incomeWarmupScheduled = false;
 
 const levelLabels = {
   undergraduate: "Undergraduate",
@@ -143,6 +148,19 @@ const providerQuality = {
   }
 };
 
+const providerAliases = [
+  { id: "WS", label: "Western Sydney University", aliases: ["wsu", "western sydney university", "western sydney uni", "western sydney"] },
+  { id: "UTS", label: "University of Technology Sydney", aliases: ["uts", "university of technology sydney", "technology sydney"] },
+  { id: "UNSW", label: "UNSW", aliases: ["unsw", "university of new south wales", "new south wales uni"] },
+  { id: "USYD", label: "University of Sydney", aliases: ["usyd", "sydney uni", "sydney university", "university of sydney"] },
+  { id: "MQ", label: "Macquarie University", aliases: ["mq", "macquarie", "macquarie university"] },
+  { id: "ACU", label: "Australian Catholic University", aliases: ["acu", "australian catholic university"] },
+  { id: "SCU", label: "Southern Cross University", aliases: ["scu", "southern cross", "southern cross university"] },
+  { id: "CQU", label: "CQUniversity", aliases: ["cqu", "cquniversity", "central queensland university"] },
+  { id: "ICMS", label: "International College of Management, Sydney", aliases: ["icms", "international college of management"] },
+  { id: "AIT", label: "Academy of Interactive Technology", aliases: ["ait", "academy of interactive technology"] }
+];
+
 const rankCodeMeanings = {
   NC: "New course; no published selection-rank profile yet.",
   NO: "No offers were made on ATAR alone.",
@@ -267,6 +285,52 @@ const pathwayLinks = [
   }
 ];
 
+const incomeOptions = ["Any income", "$60k+", "$80k+", "$100k+", "$120k+"];
+const incomeMinimums = {
+  "Any income": 0,
+  "$60k+": 60000,
+  "$80k+": 80000,
+  "$100k+": 100000,
+  "$120k+": 120000
+};
+
+const jobIncomeProfiles = [
+  { title: "Software developer", keywords: ["software", "programmer", "developer", "coding", "computer science", "information technology", "web developer", "application"], min: 80000, max: 130000, range: "$80k-$130k" },
+  { title: "Cyber security analyst", keywords: ["cyber", "cybersecurity", "security analyst", "information security"], min: 90000, max: 145000, range: "$90k-$145k" },
+  { title: "Data analyst / data scientist", keywords: ["data", "analytics", "statistics", "artificial intelligence", "machine learning", "business analytics"], min: 80000, max: 135000, range: "$80k-$135k" },
+  { title: "Engineer", keywords: ["engineering", "engineer", "civil", "mechanical", "electrical", "mechatronic", "aerospace", "software engineering"], min: 85000, max: 140000, range: "$85k-$140k" },
+  { title: "Construction manager", keywords: ["construction management", "construction manager", "building", "property development", "project management"], min: 90000, max: 155000, range: "$90k-$155k" },
+  { title: "Registered nurse", keywords: ["nurse", "nursing", "registered nurse"], min: 75000, max: 110000, range: "$75k-$110k" },
+  { title: "Medical practitioner", keywords: ["medicine", "doctor", "medical practitioner", "surgery", "clinical medicine"], min: 100000, max: 190000, range: "$100k-$190k+" },
+  { title: "Pharmacist", keywords: ["pharmacy", "pharmacist"], min: 85000, max: 125000, range: "$85k-$125k" },
+  { title: "Allied health professional", keywords: ["physiotherapy", "physiotherapist", "occupational therapy", "speech pathology", "chiropractic", "exercise physiology", "nutrition", "dietetics"], min: 75000, max: 115000, range: "$75k-$115k" },
+  { title: "Psychologist / counsellor", keywords: ["psychology", "psychologist", "counsellor", "counselling", "mental health"], min: 75000, max: 120000, range: "$75k-$120k" },
+  { title: "Teacher", keywords: ["teacher", "teaching", "education", "early childhood", "primary education", "secondary education"], min: 75000, max: 115000, range: "$75k-$115k" },
+  { title: "Solicitor / legal professional", keywords: ["law", "laws", "solicitor", "legal", "barrister"], min: 80000, max: 155000, range: "$80k-$155k" },
+  { title: "Accountant / finance analyst", keywords: ["accounting", "accountant", "finance", "financial", "economics", "actuarial", "banking"], min: 75000, max: 130000, range: "$75k-$130k" },
+  { title: "Business / marketing manager", keywords: ["business", "commerce", "marketing", "management", "manager", "human resources", "entrepreneurship"], min: 75000, max: 140000, range: "$75k-$140k" },
+  { title: "Architect / planner", keywords: ["architecture", "architect", "urban", "planning", "built environment", "landscape architecture"], min: 75000, max: 125000, range: "$75k-$125k" },
+  { title: "UX / graphic designer", keywords: ["ux", "user experience", "graphic designer", "visual communication", "design", "digital media"], min: 70000, max: 115000, range: "$70k-$115k" },
+  { title: "Animator / game designer", keywords: ["animation", "animator", "game", "games", "game designer", "interactive media", "vfx"], min: 60000, max: 105000, range: "$60k-$105k" },
+  { title: "Social worker / community worker", keywords: ["social work", "social worker", "community", "human services", "welfare", "youth worker"], min: 70000, max: 105000, range: "$70k-$105k" },
+  { title: "Policy / justice officer", keywords: ["criminology", "criminal justice", "justice", "policy", "public policy", "international studies"], min: 70000, max: 115000, range: "$70k-$115k" },
+  { title: "Scientist / lab professional", keywords: ["science", "scientist", "laboratory", "biology", "chemistry", "physics", "biomedical", "environmental science"], min: 70000, max: 115000, range: "$70k-$115k" },
+  { title: "Hospitality / tourism manager", keywords: ["hospitality", "tourism", "hotel", "event", "events", "restaurant", "culinary"], min: 60000, max: 100000, range: "$60k-$100k" },
+  { title: "Sport / exercise professional", keywords: ["sport", "sports", "exercise", "fitness", "coaching", "health and movement science", "physical education"], min: 60000, max: 100000, range: "$60k-$100k" },
+  { title: "Creative arts professional", keywords: ["music", "performing arts", "screen", "film", "creative arts", "fine art", "artist"], min: 55000, max: 100000, range: "$55k-$100k" }
+];
+const preparedJobIncomeProfiles = jobIncomeProfiles.map((profile) => ({
+  ...profile,
+  cleanTitle: cleanSearchText(profile.title),
+  keywordMatchers: profile.keywords
+    .map(cleanSearchText)
+    .filter(Boolean)
+    .map((keyword) => ({
+      keyword,
+      regex: keyword.includes(" ") ? null : new RegExp(`\\b${escapeRegExp(keyword)}\\b`)
+    }))
+}));
+
 const askStarterPrompts = [
   "How do ATAR adjustment factors work?",
   "What if my ATAR is lower than the course?",
@@ -346,6 +410,7 @@ const state = {
   provider: "All providers",
   mode: "All modes",
   campus: "All campuses",
+  income: "Any income",
   visible: 24,
   atar: 75,
   matcherProvider: "All providers",
@@ -356,10 +421,13 @@ const state = {
   savedIds: readIdList(storageKeys.saved),
   compareIds: readIdList(storageKeys.compare),
   openCourseIds: new Set(),
-  askOpen: window.location.hash === "#ask",
+  processing: "",
+  askOpen: false,
+  aiStatus: { checked: false, configured: false, connected: false, provider: "Gemini", model: "gemini-3.5-flash" },
   askMessages: [{
     role: "assistant",
-    text: "Ask me about ATAR adjustments, pathways, prerequisites, course search, saving, comparing, or choosing between Sydney uni options. I answer from this site data plus UAC-style rules, and I will say when something needs official confirmation."
+    intro: true,
+    text: "Checking whether Gemini is connected for real AI replies."
   }],
   advisor: { ...advisorDefaults, atar: "75", pathways: "Maybe" },
   advisorRun: false,
@@ -393,7 +461,7 @@ function render() {
   app.innerHTML = `
     <header class="topbar">
       <a class="brand" href="#">
-        <img class="site-logo" src="./assets/logo.svg" alt="Sydney Course Finder logo" />
+        <img class="site-logo" src="${window.courseFinderTheme?.logoSrc?.() || "./assets/logo-light.svg"}" alt="Sydney Course Finder logo" />
         <span>Sydney Course Finder</span>
       </a>
       <nav class="topnav" aria-label="Main">
@@ -402,12 +470,13 @@ function render() {
         <a href="./atar-calculator.html">ATAR calculator</a>
         <a href="./subject-helper.html">Subject helper</a>
         <a href="./advisor.html">Course helper</a>
-        <button class="nav-button" type="button" data-action="open-ask">Ask?</button>
         <a href="#saved" ${navCurrent("#saved")}>Saved ${state.savedIds.length ? `(${state.savedIds.length})` : ""}</a>
         <a href="#providers" ${navCurrent("#providers")}>Universities</a>
         <a href="#faq" ${navCurrent("#faq")}>FAQ</a>
       </nav>
+      <div class="topbar-actions">${window.courseFinderTheme?.buttonMarkup?.() || ""}</div>
     </header>
+    ${renderAppProgress()}
 
     <main>
       <section class="hero">
@@ -444,10 +513,21 @@ function render() {
           ${select("provider", "Provider", providers, state.provider)}
           ${select("campus", "Campus", campuses, state.campus)}
           ${select("mode", "Mode", modes, state.mode)}
+          ${select("income", "Income goal", incomeOptions, state.income)}
           <button class="clear-btn" type="button" data-action="clear">Clear</button>
         </div>
+        <div class="income-filter-bar" aria-label="Income goal quick filter">
+          <span>Search by income</span>
+          ${incomeOptions.map((option) => `
+            <button type="button" data-income-filter="${escapeHtml(option)}" aria-pressed="${state.income === option}">
+              ${escapeHtml(option)}
+            </button>
+          `).join("")}
+          <small>Shows courses linked to roles that can reach the selected broad income band.</small>
+        </div>
         <div class="course-list">
-          ${state.query ? results.slice(0, state.visible).map((course) => renderCourse(course)).join("") : `<p class="empty-note">Search a course, career, field or university to see results.</p>`}
+          ${renderProcessStrip("search", "Searching courses")}
+          ${state.query ? results.slice(0, state.visible).map((course, index) => renderCourse(course, "", index)).join("") : `<p class="empty-note">Search a course, career, field or university to see results.</p>`}
           ${state.query && !results.length ? `<p class="empty-note">No courses found. Try a broader keyword like technology, health, business, law or design.</p>` : ""}
           ${results.length > state.visible ? `<button class="load-more" type="button" data-action="more">Show more</button>` : ""}
         </div>
@@ -489,6 +569,7 @@ function render() {
           <button type="button" class="match-btn" data-action="run-atar">Find matches</button>
         </div>
         <div class="course-list compact">
+          ${renderProcessStrip("atar", "Matching courses")}
           ${state.matcherRun ? renderAtarResults() : `<p class="empty-note">Enter an ATAR estimate, choose optional preferences, then run the matcher.</p>`}
         </div>
       </section>
@@ -507,7 +588,7 @@ function render() {
           ${compareCourses.length ? `<button class="clear-btn" type="button" data-action="clear-compare">Clear compare</button>` : ""}
         </div>
         <div class="course-list compact">
-          ${savedCourses.length ? savedCourses.map((course) => renderCourse(course)).join("") : renderSavedEmpty()}
+          ${savedCourses.length ? savedCourses.map((course, index) => renderCourse(course, "", index)).join("") : renderSavedEmpty()}
         </div>
       </section>
 
@@ -543,7 +624,6 @@ function render() {
         <div class="faq-list">${renderFaq()}</div>
       </section>
     </main>
-    ${renderAskDrawer()}
   `;
   bindEvents();
   scheduleHashScroll();
@@ -554,35 +634,75 @@ function navCurrent(targetHash) {
   return hash === targetHash ? 'aria-current="page"' : "";
 }
 
+function renderAppProgress() {
+  if (!state.processing) return "";
+  return `<div class="app-progress is-active" aria-hidden="true"><div class="app-progress-track"></div></div>`;
+}
+
+function renderProcessStrip(key, label) {
+  if (state.processing !== key) return "";
+  return `
+    <div class="process-strip" role="status" aria-live="polite">
+      <span>${escapeHtml(label)}</span>
+      <span class="process-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    </div>
+  `;
+}
+
+function runProcessing(key, action, after = null, delay = 260) {
+  state.processing = key;
+  render();
+  window.setTimeout(() => {
+    action();
+    state.processing = "";
+    render();
+    if (after) after();
+  }, delay);
+}
+
 function filteredCourses() {
   const query = normalise(state.query);
   if (!query) return [];
-  return allCourses
+  const cacheKey = [
+    query,
+    state.level,
+    state.provider,
+    state.campus,
+    state.mode,
+    state.income
+  ].join("|");
+  if (filteredCourseCache.key === cacheKey) return filteredCourseCache.results;
+  const results = allCourses
     .filter((course) => {
       const queryMatch = !query || courseSearchMatch(course, query);
       const levelMatch = state.level === "All levels" || courseLevels(course).some((level) => levelLabels[level] === state.level);
       const providerMatch = state.provider === "All providers" || course.university === state.provider;
       const campusMatch = state.campus === "All campuses" || course.campus === state.campus;
       const modeMatch = state.mode === "All modes" || (course.modes || []).includes(state.mode);
-      return queryMatch && levelMatch && providerMatch && campusMatch && modeMatch;
+      const incomeMatch = courseMeetsIncome(course, state.income);
+      return queryMatch && levelMatch && providerMatch && campusMatch && modeMatch && incomeMatch;
     })
     .map((course) => ({ course, score: searchScore(course, query) }))
     .sort((a, b) => b.score - a.score || a.course.name.localeCompare(b.course.name))
     .map((entry) => entry.course);
+  filteredCourseCache.key = cacheKey;
+  filteredCourseCache.results = results;
+  return results;
 }
 
-function renderCourse(course, matchLine = "") {
+function renderCourse(course, matchLine = "", index = 0) {
   const saved = state.savedIds.includes(course.id);
   const comparing = state.compareIds.includes(course.id);
   const open = state.openCourseIds.has(course.id);
   return `
-    <details class="course-item" data-course-id="${escapeHtml(course.id)}" ${open ? "open" : ""}>
+    <details class="course-item" style="--item-delay:${Math.min(index, 8) * 26}ms" data-course-id="${escapeHtml(course.id)}" ${open ? "open" : ""}>
       <summary>
         <img src="${escapeHtml(course.providerLogo)}" alt="${escapeHtml(course.university)} logo" loading="lazy" />
         <span class="course-summary">
           <strong>${highlight(course.name)}</strong>
           <small>${escapeHtml(course.university)} - ${escapeHtml(course.campus)} - Code ${escapeHtml(course.courseCode)}</small>
           <em>${escapeHtml(levelDisplay(course))} - ${term("ATAR")}: ${escapeHtml(displayRank(course.atar))}${matchLine ? ` - ${escapeHtml(matchLine)}` : ""}</em>
+          <em class="income-preview">${escapeHtml(incomeSummaryLine(course))}</em>
         </span>
         <span class="quick-actions">
           <button type="button" data-save-course="${escapeHtml(course.id)}" aria-pressed="${saved}">${saved ? "Saved" : "Save"}</button>
@@ -611,6 +731,7 @@ function renderCourseDetail(course, saved, comparing) {
         ${row("Careers", course.careers)}
         ${row("Information source", course.source)}
       </dl>
+      ${renderIncomeOutlook(course)}
       <p>${highlight(course.summary)}</p>
       <div class="actions">
         <a href="${escapeHtml(course.uacUrl)}" target="_blank" rel="noreferrer">View on UAC ${icon("external")}</a>
@@ -638,9 +759,9 @@ function renderAtarResults() {
     .sort((a, b) => b.score - a.score)
     .slice(0, 20);
 
-  const courseRows = matches.map(({ course, gap }) => {
+  const courseRows = matches.map(({ course, gap }, index) => {
     const label = gap >= 0 ? `${gap.toFixed(1)} below your ATAR` : `${Math.abs(gap).toFixed(1)} above your ATAR`;
-    return renderCourse(course, label);
+    return renderCourse(course, label, index);
   }).join("");
 
   return `${renderPathwayAdvice(matches)}${courseRows}`;
@@ -680,6 +801,120 @@ function renderPathwayAdvice(matches) {
   `;
 }
 
+function renderIncomeOutlook(course) {
+  const outcomes = courseIncomeOutcomes(course).slice(0, 4);
+  return `
+    <section class="income-outlook" aria-label="Jobs and income">
+      <div>
+        <h3>Jobs and income</h3>
+        <p>Indicative Australian full-time annual ranges. Actual pay depends on location, experience, employer, registration and extra study.</p>
+      </div>
+      <div class="income-chip-list">
+        ${outcomes.map((job) => `
+          <article>
+            <strong>${escapeHtml(job.title)}</strong>
+            <span>${escapeHtml(job.range)}</span>
+          </article>
+        `).join("")}
+      </div>
+      <small>Income bands are broad estimates aligned to Jobs and Skills Australia occupation-profile earnings data, then mapped to this course's listed career directions.</small>
+    </section>
+  `;
+}
+
+function incomeSummaryLine(course) {
+  const outcomes = courseIncomeOutcomes(course);
+  if (!outcomes.length) return "Jobs: check official career outcomes";
+  const top = outcomes[0];
+  const extra = outcomes.length > 1 ? ` + ${outcomes.length - 1} more` : "";
+  return `${top.title}: ${top.range}${extra}`;
+}
+
+function courseMeetsIncome(course, option) {
+  const minimum = incomeMinimums[option] || 0;
+  if (!minimum) return true;
+  return courseIncomeOutcomes(course).some((job) => job.max >= minimum);
+}
+
+function courseIncomeOutcomes(course) {
+  if (incomeOutcomeCache.has(course)) return incomeOutcomeCache.get(course);
+  const text = cleanSearchText([
+    course.name,
+    course.area,
+    course.summary,
+    course.careers,
+    course.prerequisites,
+    course.assumed
+  ].join(" "));
+  const title = cleanSearchText(course.name);
+  const careers = cleanSearchText(course.careers);
+  const scored = preparedJobIncomeProfiles
+    .map((profile) => {
+      const titleHit = cleanTextHas(title, profile.cleanTitle) ? 20 : 0;
+      const careerHits = profile.keywordMatchers.filter((matcher) => cleanTextHas(careers, matcher)).length;
+      const textHits = profile.keywordMatchers.filter((matcher) => cleanTextHas(text, matcher)).length;
+      const score = titleHit + careerHits * 18 + textHits * 6;
+      return { ...profile, score };
+    })
+    .filter((profile) => profile.score > 0)
+    .sort((a, b) => b.score - a.score || b.max - a.max);
+
+  const unique = [];
+  const seen = new Set();
+  for (const profile of scored) {
+    if (seen.has(profile.title)) continue;
+    seen.add(profile.title);
+    unique.push(profile);
+    if (unique.length >= 5) break;
+  }
+
+  const outcomes = unique.length ? unique : [{
+    title: "Graduate role in this field",
+    min: 60000,
+    max: 90000,
+    range: "$60k-$90k"
+  }];
+  incomeOutcomeCache.set(course, outcomes);
+  return outcomes;
+}
+
+function cleanTextHas(text, matcher) {
+  if (!matcher) return false;
+  if (typeof matcher === "string") return text.includes(matcher);
+  return matcher.regex ? matcher.regex.test(text) : text.includes(matcher.keyword);
+}
+
+function incomeMinimumFromQuery(query) {
+  const clean = cleanSearchText(query);
+  const numeric = clean.match(/\b(60|70|80|90|100|110|120|130|140|150)\s*k\b/);
+  if (numeric) return Number(numeric[1]) * 1000;
+  const plainNumber = clean.match(/\b(60000|70000|80000|90000|100000|110000|120000|130000|140000|150000)\b/);
+  if (plainNumber) return Number(plainNumber[1]);
+  if (/six figure|100k|high income|high pay|good pay|salary|income|money|rich/.test(clean)) return 100000;
+  return 0;
+}
+
+function scheduleIncomeWarmup() {
+  if (incomeWarmupScheduled || incomeWarmupIndex >= allCourses.length) return;
+  incomeWarmupScheduled = true;
+  const runChunk = (deadline = { timeRemaining: () => 8, didTimeout: true }) => {
+    incomeWarmupScheduled = false;
+    const startedAt = performance.now();
+    while (incomeWarmupIndex < allCourses.length) {
+      courseIncomeOutcomes(allCourses[incomeWarmupIndex]);
+      incomeWarmupIndex += 1;
+      const hasIdleTime = deadline.didTimeout || deadline.timeRemaining() > 3;
+      if (!hasIdleTime || performance.now() - startedAt > 12) break;
+    }
+    if (incomeWarmupIndex < allCourses.length) scheduleIncomeWarmup();
+  };
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(runChunk, { timeout: 1200 });
+  } else {
+    window.setTimeout(() => runChunk(), 80);
+  }
+}
+
 function renderCompareLibrary(compareCourses) {
   if (!compareCourses.length) {
     return `<div class="compare-empty"><strong>Compare courses</strong><p>Use Compare on up to four saved courses to see ATAR, campus, duration, prerequisites and links side by side.</p></div>`;
@@ -688,6 +923,7 @@ function renderCompareLibrary(compareCourses) {
     ["Provider", (course) => course.university],
     ["Campus", (course) => course.campus],
     ["ATAR / selection rank", (course) => displayRank(course.atar)],
+    ["Jobs / income", (course) => incomeSummaryLine(course)],
     ["Duration", (course) => course.duration],
     ["Study mode", (course) => (course.modes || []).join(", ")],
     ["Prerequisites", (course) => course.prerequisites],
@@ -756,6 +992,7 @@ function renderAdvisor() {
       ${advisorQuestions.map(renderAdvisorQuestion).join("")}
       <button type="submit" class="match-btn">Find my course direction</button>
     </form>
+    ${renderProcessStrip("advisor", "Scoring your answers")}
     ${state.advisorRun ? renderAdvisorResult(ranked) : `<p class="empty-note">This uses your answers, ATAR estimate and the local UAC course dataset.</p>`}
   `;
 }
@@ -798,8 +1035,8 @@ function renderAdvisorResult(ranked) {
         <small>How this was decided: data scoring from course title, study area, ATAR gap, subjects, passions, preferred mode/campus and provider profile score.</small>
       </div>
       <div class="advisor-picks">
-        ${ranked.map(({ course, score, reasons }) => `
-          <article>
+        ${ranked.map(({ course, score, reasons }, index) => `
+          <article style="--item-delay:${Math.min(index, 8) * 24}ms">
             <strong>${highlight(course.name)}</strong>
             <small>${escapeHtml(course.university)} - ${escapeHtml(course.campus)} - ${term("ATAR")}: ${escapeHtml(displayRank(course.atar))}</small>
             <p>${escapeHtml(reasons.slice(0, 3).join(" "))}</p>
@@ -845,7 +1082,7 @@ function renderTopProviders() {
     .slice(0, 3);
 
   return rows.map((row, index) => `
-    <a class="top-provider-card" href="${escapeHtml(row.provider.website)}" target="_blank" rel="noreferrer">
+    <a class="top-provider-card" style="--item-delay:${Math.min(index, 8) * 22}ms" href="${escapeHtml(row.provider.website)}" target="_blank" rel="noreferrer">
       <span>${index + 1}</span>
       <img src="${escapeHtml(row.provider.logo)}" alt="${escapeHtml(row.provider.name)} logo" loading="lazy" />
       <strong>${escapeHtml(row.provider.name)}</strong>
@@ -855,9 +1092,9 @@ function renderTopProviders() {
   `).join("");
 }
 
-function renderProvider(provider) {
+function renderProvider(provider, index = 0) {
   return `
-    <a class="provider-card" href="${escapeHtml(provider.website)}" target="_blank" rel="noreferrer">
+    <a class="provider-card" style="--item-delay:${Math.min(index, 8) * 22}ms" href="${escapeHtml(provider.website)}" target="_blank" rel="noreferrer">
       <img src="${escapeHtml(provider.logo)}" alt="${escapeHtml(provider.name)} logo" loading="lazy" />
       <strong>${escapeHtml(provider.name)}</strong>
       <small>${providerProfile(provider)}</small>
@@ -875,6 +1112,7 @@ function renderFaq() {
     ["What should I compare between universities?", "Compare commute, campus, fees, accreditation, placements, graduate employment, course flexibility, internships, support services and transfer options."],
     ["Why do some courses not show an ATAR?", "UAC may mark a course as new, unavailable, non-ATAR entry, or not reportable. The site shows those status notes when UAC publishes them."],
     ["How are provider profile scores calculated?", "The profile score is a local guide, not an official ranking. It combines broad field reputation, prestige, employer/industry strength and Sydney course availability so the Top 3 section is not just counting courses."],
+    ["How should I use the income ranges?", "Use them as broad career-planning bands, not guaranteed salaries. The app maps course career fields to likely occupations and indicative Australian full-time earnings ranges; actual income depends on experience, employer, location, registration and extra study."],
     ["What if I do not have the ATAR?", "Look at selection-rank adjustments, Educational Access Scheme, Schools Recommendation Scheme, diploma pathways, TAFE-to-uni pathways, related lower-entry courses and internal transfer after first year."],
     ["Should I still apply if my ATAR is lower?", "Yes, if the course is realistic and you have backups. Put dream courses above safer options, because UAC preferences are considered in order and universities may use adjustment factors."],
     ["How current is this data?", `The local import was generated from UAC on ${(meta.importedAt || "").slice(0, 10) || "the latest import date"}. Always confirm final details on UAC or the university website before applying.`]
@@ -889,8 +1127,11 @@ function renderAskDrawer() {
       <aside class="ask-panel" role="dialog" aria-modal="true" aria-labelledby="askTitle">
         <div class="ask-head">
           <div>
-            <h2 id="askTitle">Ask</h2>
-            <p>Fast help for HSC, UAC, ATAR adjustments, pathways and using this site.</p>
+            <div class="ask-title-row">
+              <h2 id="askTitle">Ask</h2>
+              ${renderAiStatusBadge()}
+            </div>
+            <p>${escapeHtml(askIntroCopy())}</p>
           </div>
           <button type="button" class="icon-button" data-action="close-ask" aria-label="Close Ask panel">Close</button>
         </div>
@@ -928,24 +1169,141 @@ function renderAskMessage(message) {
 }
 
 async function askReply(message) {
+  if (state.aiStatus?.checked && !state.aiStatus.connected) {
+    return aiNotReadyReply();
+  }
   const history = askConversationContext();
-  const local = localAskReply(message, history);
-  const fallbackProvider = askReplyProvider(message, history);
   try {
     const ai = await requestAiReply({
       type: "ask",
       message,
-      history: state.askMessages.filter((item) => !item.pending).slice(-8),
-      localReply: local,
+      history: state.askMessages.filter((item) => !item.pending).slice(-12),
       context: {
+        conversation: history,
         courses: askCourseMatches(message, 6).map(({ course, score }) => compactAiCourse(course, score))
       }
     });
     return { text: ai.text, provider: ai.provider || "Gemini" };
   } catch (error) {
-    console.warn("Ask AI fallback:", error);
-    return { text: local, provider: fallbackProvider };
+    logAiIssue("Ask AI failed:", error);
+    return aiErrorReply(error);
   }
+}
+
+function renderAiStatusBadge() {
+  const status = state.aiStatus || {};
+  const mode = !status.checked ? "checking" : status.connected ? "on" : status.configured ? "error" : "off";
+  const label = !status.checked ? "Checking AI" : status.connected ? "Gemini on" : status.configured ? "AI issue" : "AI off";
+  const detail = status.connected
+    ? `${status.provider || "Gemini"} is connected and grounded with this site's UAC course data.`
+    : status.configured
+      ? `Gemini is configured but failing: ${humanAiStatusError(status.error)}`
+      : "Set GEMINI_API_KEY on the server to enable real Gemini replies.";
+  return `<span class="ai-status ${mode}" title="${escapeHtml(detail)}">${escapeHtml(label)}</span>`;
+}
+
+function askIntroCopy() {
+  const status = state.aiStatus || {};
+  if (!status.checked) return "Checking the Gemini connection for real model replies.";
+  if (status.connected) return `${status.provider || "Gemini"} is connected. Ask full follow-up questions about UAC, ATAR adjustments, subjects, courses, pathways or universities.`;
+  if (status.configured) return "Gemini is configured, but the connection check is failing. The chat will show the setup issue instead of a scripted reply.";
+  return "Real AI is not connected on this server yet. Set GEMINI_API_KEY to enable Gemini; until then chat answers are paused.";
+}
+
+function askIntroMessageText() {
+  const status = state.aiStatus || {};
+  if (!status.checked) return "Checking whether Gemini is connected for real AI replies.";
+  if (status.connected) return `${status.provider || "Gemini"} is connected. Ask naturally; I will use the imported Sydney UAC course data, your chat context and search grounding when needed.`;
+  if (status.configured) return `Gemini is configured but not working yet: ${humanAiStatusError(status.error)} I will not fake an answer with scripts.`;
+  return "AI is not connected right now, so I will not generate scripted chat answers. To make this a real AI chat, add GEMINI_API_KEY to the server or Vercel environment, then restart/redeploy.";
+}
+
+function refreshAskIntroMessage() {
+  const intro = state.askMessages.find((message) => message.intro);
+  if (intro) intro.text = askIntroMessageText();
+}
+
+function aiPendingLabel() {
+  return state.aiStatus?.connected ? "Gemini" : state.aiStatus?.configured ? "AI issue" : "AI not connected";
+}
+
+function aiPendingText() {
+  return state.aiStatus?.connected
+    ? "Asking Gemini with the course data and chat context..."
+    : "Gemini is not ready, so I will show the setup issue instead of a scripted answer.";
+}
+
+function aiNotReadyReply() {
+  const status = state.aiStatus || {};
+  if (status.configured) {
+    return {
+      text: aiConnectionFailedReply(status.error || "Gemini connection check failed"),
+      provider: "AI connection failed"
+    };
+  }
+  return {
+    text: "Gemini is not connected on this server yet, so I cannot answer as AI. Add GEMINI_API_KEY locally or in Vercel, restart/redeploy, then ask again.",
+    provider: "AI not connected"
+  };
+}
+
+function aiConnectionFailedReply(error) {
+  const message = String(error?.message || error || "");
+  const reason = /PERMISSION_DENIED|403|denied/i.test(message)
+    ? "Google rejected this key or project with a permission error."
+    : /prepayment credits are depleted|RESOURCE_EXHAUSTED|billing|credits/i.test(message)
+      ? "Gemini is connected, but this Google project has depleted credits or a billing block."
+      : /quota|429|rate limit/i.test(message)
+        ? "Gemini is hitting a quota or rate-limit issue."
+      : "Gemini failed before a model answer came back.";
+  return `${reason} I am not going to fake an answer with local scripts. Use a valid Google AI Studio Gemini API key with API access enabled, then restart or redeploy the server.`;
+}
+
+function humanAiStatusError(error) {
+  const message = String(error || "");
+  if (/PERMISSION_DENIED|403|denied/i.test(message)) return "Google rejected the current key/project with a 403 permission error.";
+  if (/prepayment credits are depleted|RESOURCE_EXHAUSTED|billing|credits/i.test(message)) return "the Google project has depleted credits or needs billing/credits fixed in AI Studio.";
+  if (/quota|429|rate limit/i.test(message)) return "Gemini is hitting quota or rate limits.";
+  if (/aborted|timeout|timed out/i.test(message)) return "the request timed out before Gemini answered.";
+  if (/not configured|GEMINI_API_KEY/i.test(message)) return "no Gemini API key is configured.";
+  return "the connection check failed.";
+}
+
+function aiErrorReply(error) {
+  const message = String(error?.message || "");
+  if (/GEMINI_API_KEY is not configured|not configured|missing_key/i.test(message)) {
+    return { text: "Gemini is not connected on this server yet. Add GEMINI_API_KEY, restart/redeploy, then ask again.", provider: "AI not connected" };
+  }
+  return { text: aiConnectionFailedReply(error), provider: "AI connection failed" };
+}
+
+async function loadAiStatus() {
+  try {
+    const response = await fetch("/api/ai");
+    if (!response.ok) throw new Error(`AI status returned ${response.status}`);
+    const data = await response.json();
+    state.aiStatus = {
+      checked: true,
+      configured: Boolean(data.configured),
+      connected: Boolean(data.connected),
+      provider: data.provider || "Gemini",
+      model: data.model || "",
+      searchGrounding: Boolean(data.searchGrounding),
+      coursesAvailable: Number(data.coursesAvailable || 0),
+      error: data.error || ""
+    };
+  } catch (error) {
+    console.warn("AI status unavailable:", error);
+    state.aiStatus = { checked: true, configured: false, connected: false, provider: "Gemini", model: "", error: "AI status endpoint unavailable" };
+  }
+  refreshAskIntroMessage();
+  render();
+}
+
+function logAiIssue(label, error) {
+  const message = String(error?.message || "");
+  if (message.includes("GEMINI_API_KEY is not configured")) return;
+  console.warn(label, error);
 }
 
 async function requestAiReply(payload) {
@@ -984,15 +1342,12 @@ function localAskReply(message, history = "") {
   const context = cleanSearchText(history);
   if (!question) return "Ask me a question about UAC, ATAR, pathways, subjects or finding courses.";
 
-  if (isSchoolAdjustmentQuestion(question)) {
-    return schoolAdjustmentReply(question);
+  if (isVagueConfirmationFollowup(question) || isVagueChanceFollowup(question)) {
+    return contextualAskFollowupReply(context, question);
   }
 
-  if (isMarksFollowupQuestion(question)) {
-    if (isCourtOrHardshipQuestion(context)) {
-      return "No, not automatically. A court matter, being a witness, or a dismissed case does not give free ATAR points by itself, and your ATAR does not change. If it seriously disrupted your schooling over time, you may be able to apply for EAS or another access scheme with evidence, but UAC or the university decides and the adjustment depends on the course/provider.";
-    }
-    return "Not automatically. Extra marks are usually selection-rank adjustments, not changes to your ATAR, and they depend on the university, course and eligibility category. Tell me the course/provider and the reason you think you may qualify, and I can point you to the right UAC or uni pathway to check.";
+  if (isSchoolAdjustmentQuestion(question)) {
+    return schoolAdjustmentReply(question);
   }
 
   if (isCourtOrHardshipQuestion(question)) {
@@ -1001,6 +1356,21 @@ function localAskReply(message, history = "") {
 
   if (isHonoursExplainerQuestion(question)) {
     return "An honours degree is a bachelor degree with a higher-level honours component. In some courses, like Engineering (Honours), honours is built into the degree; in others, honours can be an extra research-focused year after a bachelor degree. Compared with a standard bachelor degree, honours usually means more advanced study, a major project or research component, and sometimes stronger preparation for professional accreditation, postgraduate research or competitive jobs. The exact structure differs by university, so check whether the course name means built-in honours or a separate honours year.";
+  }
+
+  if (isAdjustmentWaysQuestion(question)) {
+    return adjustmentWaysReply();
+  }
+
+  if (isAdjustmentQuestion(question)) {
+    return adjustmentQuestionReply(question, context);
+  }
+
+  if (isMarksFollowupQuestion(question)) {
+    if (isCourtOrHardshipQuestion(context)) {
+      return "No, not automatically. A court matter, being a witness, or a dismissed case does not give free ATAR points by itself, and your ATAR does not change. If it seriously disrupted your schooling over time, you may be able to apply for EAS or another access scheme with evidence, but UAC or the university decides and the adjustment depends on the course/provider.";
+    }
+    return "No, not automatically. Extra marks are usually selection-rank adjustments, not changes to your ATAR, and they depend on the university, course and eligibility category. Tell me the course/provider and the reason you think you may qualify, and I can point you to the right UAC or uni pathway to check.";
   }
 
   if (/bonus|extra point|adjust|adjustment|selection rank|scheme|points? for|marks? for/.test(question)) {
@@ -1035,15 +1405,27 @@ function localAskReply(message, history = "") {
   }
 
   const matches = askCourseMatches(question, 4);
+  if (/job|career|employ|income|salary|pay|money/.test(question) && matches.length) {
+    return `For jobs and money, start with ${formatAskCoursesWithIncome(matches)}. These income bands are broad planning ranges, not guaranteed salaries, so compare official career outcomes, accreditation and placements before choosing.`;
+  }
+
   if (questionMentionsCourse(question) && matches.length) {
     return `From the imported Sydney UAC records, start by checking ${formatAskCourses(matches)}. Search the course name, then expand each row for ATAR, prerequisites, assumed knowledge, campus, fees and official links.`;
+  }
+
+  if ((topicFromQuestion(question) || targetAtarFromQuestion(question) !== null) && matches.length) {
+    return `Based on the imported Sydney UAC records, I would inspect ${formatAskCourses(matches)}. Use the Search page to expand each one and check ATAR, prerequisites, assumed knowledge, campus and official links.`;
   }
 
   if (/fee|fees|cost|csp|commonwealth|hecs|help loan/.test(question)) {
     return "Fees depend on the course, place type and student status. A CSP means the government subsidises part of the cost, and eligible students may use HECS-HELP. This site shows imported fee text when UAC lists it, but final fees must be checked on the official provider page.";
   }
 
-  return "I can help with ATAR adjustments, pathways, subjects, prerequisites, saved courses, comparing courses or finding Sydney options. For exact entry numbers, I will use this site's imported UAC data when it is available and point you back to official pages when the rule is provider-specific.";
+  if (isConversationalFollowup(question) && context) {
+    return contextualAskFollowupReply(context, question);
+  }
+
+  return "Ask me that with one more detail and I can answer properly: the course, uni, subject, ATAR estimate, school, or pathway you mean. If you are asking about points or entry, the short rule is that your ATAR itself usually does not change; only selection rank can change for eligible courses.";
 }
 
 function isCourtOrHardshipQuestion(question) {
@@ -1062,6 +1444,116 @@ function isHonoursExplainerQuestion(question) {
     && /\b(what|mean|meaning|differ|difference|different|vs|versus|compare|how)\b/.test(question);
 }
 
+function isAdjustmentQuestion(question) {
+  return /\b(atar point|points? of atar|extra atar|bonus|bonus marks?|extra points?|adjustment|selection rank|subject adjustment|school scheme|scheme|eligible|qualify)\b/.test(question)
+    && /\b(atar|rank|point|points|mark|marks|subject|school|uni|university|course|eligible|qualify|get)\b/.test(question);
+}
+
+function isAdjustmentWaysQuestion(question) {
+  const asksWays = /\b(how|ways?|options?|methods?|what are|what can|how can|how do|how to|get|increase|improve|lift|boost)\b/.test(question);
+  const mentionsAdjustment = /\b(selection marks?|selection rank|adjustment factors?|adjustments?|bonus marks?|bonus points?|extra points?|extra marks?|atar points?|atar boost|rank boost)\b/.test(question);
+  return asksWays && mentionsAdjustment;
+}
+
+function adjustmentWaysReply() {
+  return "You do not get extra ATAR from selection marks. Your ATAR stays the same. What you can improve is your selection rank for a specific uni and course. The main ways are: subject adjustment factors, EAS for long-term disadvantage, SRS or early-entry schemes, school/location-based schemes, elite athlete or performer schemes, and pathway courses like diplomas or internal transfer. The exact points are different for every university and course, so you check the target course on UAC plus that uni's adjustment-factor page.";
+}
+
+function isVagueConfirmationFollowup(question) {
+  return /^(ok|okay|so|yeah|yea|yep|alright|aight|wait)?\s*(so\s+)?(that\s+)?(means?|mean)\s+(i\s+)?(can|could|will|would|am eligible|qualify)\b/.test(question)
+    || /^(ok|okay|so|yeah|yea|yep|alright|aight)\s*$/.test(question)
+    || /\b(so that means i can|does that mean i can|so i can|can i then|so yes)\b/.test(question);
+}
+
+function isVagueChanceFollowup(question) {
+  return /\b(there is a chance|there's a chance|but.*chance|so.*chance|maybe|possibly|possible|could still|could happen|not impossible)\b/.test(question)
+    && question.length < 90;
+}
+
+function isConversationalFollowup(question) {
+  return /^(but|wait|so|yeah|nah|no|ok|okay|what about|how about|then|and)\b/.test(question)
+    || /^(why|how|what do you mean|explain|wdym)\b/.test(question)
+    || question.split(" ").length <= 5;
+}
+
+function contextualAskFollowupReply(context, question = "") {
+  const wantsChance = /chance|maybe|possible|could|not impossible/.test(question);
+  const asksHow = /\b(how|what steps|what do i do|how do i|how can i|ok but how|but how)\b/.test(question);
+  if (/subject adjustment|adjustment factor|bonus mark|bonus point|extra point|extra mark|selection rank|selection mark|eas|srs|early entry/.test(context) && asksHow) {
+    return "Do it like this: first pick the exact course and university you care about. Then open the UAC course page and that uni's adjustment-factor page. Check each category: subject adjustments, EAS, SRS/early entry, school or location schemes, elite athlete/performer, and pathway entry. If you match a category, follow that scheme's application steps and evidence requirements. Then still put safer backup courses underneath because adjustments are course-specific and not guaranteed.";
+  }
+  if (/disadvantaged school|school scheme|location scheme|access scheme|eas|educational access|selection rank|adjustment factor|bonus|extra points|atar itself does not/.test(context)) {
+    if (wantsChance) {
+      return "Yes, there is a chance, but only as a selection-rank adjustment, not extra ATAR. The chance depends on the exact school, university, course and scheme. So treat it as something to check/apply for, not something to count until UAC or the uni confirms it.";
+    }
+    return "Not necessarily. It means you might be able to apply or be considered for a selection-rank adjustment, but you cannot assume you get points. Your ATAR itself stays the same. You need the exact school name, target university and target course, then check UAC EAS plus that university's adjustment-factor rules.";
+  }
+  if (/prerequisite|assumed knowledge|required subject|block entry/.test(context)) {
+    if (wantsChance) {
+      return "There can be a chance only if the subject is assumed knowledge or the uni accepts an equivalent. If it is a true prerequisite, you need to meet it or get official confirmation of an alternative entry route.";
+    }
+    return "Not necessarily. If it was a prerequisite, you need to meet it or confirm an accepted equivalent. If it was assumed knowledge, you can usually still enter, but first year may be harder without that background.";
+  }
+  if (/atar profile|below|pathway|backup|diploma|internal transfer/.test(context)) {
+    if (wantsChance) {
+      return "Yes, there can still be a chance, especially through adjustment factors, EAS/SRS, lower-entry related courses, diplomas or internal transfer. It is not a guarantee, so keep backup preferences under the dream course.";
+    }
+    return "Maybe, but do not rely on one path. Keep the dream course, add safer related courses, and check adjustment factors, diplomas, TAFE-to-uni options and internal transfer rules.";
+  }
+  if (/honours|bachelor|degree|course/.test(context)) {
+    return "Yes, but it depends on the exact course wording. Some course names mean the requirement is built in; others mean there is an optional later pathway. Send the course name or uni and I will separate what is required from what is just useful.";
+  }
+  return "I get what you mean, but I need the thing you are referring to. Send the school, course, uni, subject or ATAR rule and I will answer it directly instead of giving a generic answer.";
+}
+
+function adjustmentQuestionReply(question, context = "") {
+  const provider = providerAliasFromText(question);
+  const subjects = subjectsFromQuestion(question);
+  const asksNumber = /\b(how many|how much|number|amount|what.*points?|marks?)\b/.test(question);
+  const asksDirectEligibility = /\b(do i|can i|will i|would i|am i|eligible|qualify|get|receive)\b/.test(question);
+
+  if (/point of atar|atar point|extra atar|atar go up|increase my atar|free atar/.test(question)) {
+    return "No. Your ATAR itself does not gain a point. What can happen is a selection-rank adjustment for a specific university and course, which may make your application rank higher than your raw ATAR for that course only.";
+  }
+
+  if (isCourtOrHardshipQuestion(question) || isCourtOrHardshipQuestion(context)) {
+    return "No, not automatically. Legal/court disruption does not give free ATAR points by itself. If it caused serious educational disadvantage over time, EAS or another access scheme may be possible with evidence, but UAC or the university decides and it applies to selection rank, not your ATAR.";
+  }
+
+  if (subjects.length && provider) {
+    return `Maybe. ${provider.label} may offer subject or other selection-rank adjustments for some courses, but the number depends on the exact course and scheme. Your subjects mentioned here are ${subjects.join(", ")}. Check ${provider.label}'s adjustment-factor page and the UAC entry for the exact course before relying on any points.`;
+  }
+
+  if (subjects.length) {
+    return `Maybe, but not automatically. Subject adjustments depend on the university and exact course, not just the subject. You mentioned ${subjects.join(", ")}; to estimate it properly, choose the target provider and course, then check that provider's subject-adjustment rules.`;
+  }
+
+  if (provider) {
+    return `Not enough info. ${provider.label} may use adjustment factors for some courses, but I need the exact course and the reason you think you qualify, such as subjects, location/school scheme, EAS, SRS or elite athlete/performer. Your ATAR itself would not change; only selection rank may change.`;
+  }
+
+  if (asksNumber || asksDirectEligibility) {
+    return "Not enough info. Adjustment points are not universal. They depend on the exact university, course, year and category, such as subjects, EAS, school/location schemes, SRS or elite athlete/performer. Also, your ATAR does not change; eligible adjustments only affect selection rank for specific courses.";
+  }
+
+  return "Adjustment factors are extra selection-rank consideration, not extra ATAR. They can come from subjects, disadvantage/EAS, school or location schemes, SRS, elite athlete/performer schemes and provider-specific pathways. The exact rule must be checked against the exact university and course.";
+}
+
+function providerAliasFromText(value) {
+  const clean = cleanSearchText(value);
+  return providerAliases.find((group) => group.aliases.some((alias) => textMentionsAlias(clean, alias))) || null;
+}
+
+function subjectsFromQuestion(question) {
+  const clean = cleanSearchText(question);
+  return subjectOptions
+    .filter((subject) => {
+      const subjectText = cleanSearchText(subject);
+      return phraseMatch(clean, subjectText) || subjectText.split(" ").some((word) => word.length > 4 && tokenMatch(clean, word));
+    })
+    .slice(0, 4);
+}
+
 function isSchoolAdjustmentQuestion(question) {
   const mentionsSchool = /\b[a-z]{2,6}hs\b/.test(question)
     || /\b(high school|secondary school|school|selective school|public school|private school)\b/.test(question)
@@ -1072,14 +1564,20 @@ function isSchoolAdjustmentQuestion(question) {
 
 function schoolAdjustmentReply(question) {
   const school = schoolLabelFromQuestion(question);
-  return `${school ? `${school}: ` : ""}not automatically. Your ATAR itself does not go up just because you attend a particular school. A school can matter only if the exact university/course recognises it through a selection-rank adjustment, access scheme, location/school scheme, EAS-style disadvantage category, or another official pathway. If the school name is an acronym like BBHS, confirm the full school name first because different schools can share initials. The safe check is: pick the target course/provider, then check that provider's adjustment-factor page and UAC access scheme information for that exact school and course.`;
+  if (/disadvantaged|low ses|equity|educational disadvantage|access school/.test(question)) {
+    return "Maybe, but not automatically. Going to a disadvantaged school does not raise your ATAR itself. It may help only if your exact school is recognised through EAS, a school/location scheme, or a university-specific selection-rank adjustment for the exact course you apply to. So the answer is: you can check/apply, but do not count the points until UAC or the university confirms the rule.";
+  }
+  return `No, not automatically${school ? ` for ${school}` : ""}. Your ATAR itself does not go up just because you attend a particular school. A school can matter only if the exact university/course recognises it through a selection-rank adjustment, access scheme, location/school scheme, EAS-style disadvantage category, or another official pathway. If the school name is an acronym like BBHS, confirm the full school name first because different schools can share initials. The safe check is: pick the target course/provider, then check that provider's adjustment-factor page and UAC access scheme information for that exact school and course.`;
 }
 
 function schoolLabelFromQuestion(question) {
   const acronym = question.match(/\b([a-z]{2,6}hs)\b/);
   if (acronym) return acronym[1].toUpperCase();
   const phrase = question.match(/\b(?:going to|go to|attend|attending|from)\s+([a-z0-9 ]{3,45}?(?:high school|secondary school|college|school|high))\b/);
-  return phrase ? titleCase(phrase[1]) : "";
+  if (!phrase) return "";
+  const label = cleanSearchText(phrase[1]);
+  if (/^(a|an|the)\s/.test(label) || /disadvantaged school|public school|private school|selective school/.test(label)) return "";
+  return titleCase(phrase[1]);
 }
 
 function titleCase(value) {
@@ -1088,14 +1586,18 @@ function titleCase(value) {
 
 function askReplyProvider(message, history = "") {
   const question = cleanSearchText(message);
+  const context = cleanSearchText(history);
   if (isCourtOrHardshipQuestion(question)
     || isSchoolAdjustmentQuestion(question)
     || isHonoursExplainerQuestion(question)
+    || isAdjustmentWaysQuestion(question)
     || isMarksFollowupQuestion(question)
-    || (isMarksFollowupQuestion(question) && isCourtOrHardshipQuestion(cleanSearchText(history)))) {
-    return "UAC rule check";
+    || ((isVagueConfirmationFollowup(question) || isVagueChanceFollowup(question)) && /eas|school|adjustment|selection rank|atar itself/.test(context))
+    || (isConversationalFollowup(question) && /subject adjustment|adjustment factor|bonus mark|bonus point|extra point|extra mark|selection rank|selection mark|eas|srs|early entry/.test(context))
+    || (isMarksFollowupQuestion(question) && isCourtOrHardshipQuestion(context))) {
+    return "Local UAC guide";
   }
-  return "Site data";
+  return "Local guide";
 }
 
 function askConversationContext() {
@@ -1172,26 +1674,59 @@ function formatAskCourses(entries) {
   }).join("; ");
 }
 
+function formatAskCoursesWithIncome(entries) {
+  return entries.map(({ course }) => {
+    const rank = displayRank(course.atar);
+    const job = courseIncomeOutcomes(course)[0];
+    return `${course.name} (${course.university}, ATAR ${rank}, likely path: ${job.title} ${job.range})`;
+  }).join("; ");
+}
+
 function bindEvents() {
   app.querySelector('[data-form="search"]')?.addEventListener("submit", (event) => {
     event.preventDefault();
-    state.draft = event.target.search.value.trim();
-    state.query = state.draft;
-    state.visible = 24;
-    state.openCourseIds.clear();
-    render();
+    const value = event.target.search.value.trim();
+    state.draft = value;
+    runProcessing("search", () => {
+      state.query = state.draft;
+      state.visible = 24;
+      state.openCourseIds.clear();
+    });
   });
 
   app.querySelector('[name="search"]')?.addEventListener("input", (event) => {
     state.draft = event.target.value;
   });
 
-  ["level", "provider", "mode", "campus"].forEach((key) => {
+  ["level", "provider", "mode", "campus", "income"].forEach((key) => {
     app.querySelector(`[data-action="${key}"]`)?.addEventListener("change", (event) => {
-      state[key] = event.target.value;
-      state.visible = 24;
-      state.openCourseIds.clear();
-      render();
+      const value = event.target.value;
+      state[key] = value;
+      const update = () => {
+        state.visible = 24;
+        state.openCourseIds.clear();
+      };
+      if (state.query) runProcessing("search", update, null, 220);
+      else {
+        update();
+        render();
+      }
+    });
+  });
+
+  app.querySelectorAll("[data-income-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const value = button.dataset.incomeFilter || "Any income";
+      state.income = value;
+      const update = () => {
+        state.visible = 24;
+        state.openCourseIds.clear();
+      };
+      if (state.query) runProcessing("search", update, null, 220);
+      else {
+        update();
+        render();
+      }
     });
   });
 
@@ -1202,14 +1737,16 @@ function bindEvents() {
     state.provider = "All providers";
     state.mode = "All modes";
     state.campus = "All campuses";
+    state.income = "Any income";
     state.visible = 24;
     state.openCourseIds.clear();
     render();
   });
 
   app.querySelector('[data-action="more"]')?.addEventListener("click", () => {
-    state.visible += 24;
-    render();
+    runProcessing("search", () => {
+      state.visible += 24;
+    }, null, 180);
   });
 
   bindCourseActionButtons(app);
@@ -1296,52 +1833,32 @@ function bindEvents() {
   numberInput?.addEventListener("input", (event) => updateAtar(event.target.value, numberInput));
 
   app.querySelector('[data-action="run-atar"]')?.addEventListener("click", () => {
-    state.matcherProvider = app.querySelector('[data-action="matcherProvider"]').value;
-    state.matcherTopic = app.querySelector('[data-action="matcherTopic"]').value;
-    state.matcherRun = true;
-    state.openCourseIds.clear();
-    render();
-  });
-
-  app.querySelector('[data-action="open-ask"]')?.addEventListener("click", () => {
-    state.askOpen = true;
-    render();
-    scrollAskToBottom();
-  });
-
-  app.querySelectorAll('[data-action="close-ask"]').forEach((control) => {
-    control.addEventListener("click", () => {
-      state.askOpen = false;
-      if (window.location.hash === "#ask") history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-      render();
+    const providerValue = app.querySelector('[data-action="matcherProvider"]').value;
+    const topicValue = app.querySelector('[data-action="matcherTopic"]').value;
+    state.matcherProvider = providerValue;
+    state.matcherTopic = topicValue;
+    runProcessing("atar", () => {
+      state.matcherRun = true;
+      state.openCourseIds.clear();
     });
-  });
-
-  app.querySelectorAll("[data-ask-prompt]").forEach((button) => {
-    button.addEventListener("click", () => {
-      submitAskMessage(button.dataset.askPrompt || "");
-    });
-  });
-
-  app.querySelector('[data-form="ask-chat"]')?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const message = event.target.message.value.trim();
-    event.target.message.value = "";
-    submitAskMessage(message);
   });
 
   app.querySelector('[data-form="advisor"]')?.addEventListener("submit", (event) => {
     event.preventDefault();
+    const values = {};
     app.querySelectorAll("[data-advisor-field]").forEach((field) => {
-      state.advisor[field.dataset.advisorField] = field.value.trim();
+      values[field.dataset.advisorField] = field.value.trim();
     });
-    state.advisorRun = true;
-    state.advisorChat = [{
-      role: "assistant",
-      text: advisorOpeningMessage(advisorRankedCourses().slice(0, 3))
-    }];
-    render();
-    location.hash = "advisor";
+    Object.assign(state.advisor, values);
+    runProcessing("advisor", () => {
+      state.advisorRun = true;
+      state.advisorChat = [{
+        role: "assistant",
+        text: advisorOpeningMessage(advisorRankedCourses().slice(0, 3))
+      }];
+    }, () => {
+      location.hash = "advisor";
+    });
   });
 
   app.querySelectorAll("[data-advisor-field]").forEach((field) => {
@@ -1358,7 +1875,7 @@ function bindEvents() {
     const message = event.target.message.value.trim();
     if (!message) return;
     state.advisorChat.push({ role: "user", text: message });
-    const pending = { role: "assistant", text: "Checking Gemini against the course data...", pending: true, provider: "Gemini" };
+    const pending = { role: "assistant", text: aiPendingText(), pending: true, provider: aiPendingLabel() };
     state.advisorChat.push(pending);
     event.target.message.value = "";
     render();
@@ -1395,7 +1912,7 @@ async function submitAskMessage(message) {
   if (!text) return;
   state.askOpen = true;
   state.askMessages.push({ role: "user", text });
-  const pending = { role: "assistant", text: "Checking the site data...", pending: true, provider: "Thinking" };
+  const pending = { role: "assistant", text: aiPendingText(), pending: true, provider: aiPendingLabel() };
   state.askMessages.push(pending);
   state.askMessages = state.askMessages.slice(-12);
   render();
@@ -1418,7 +1935,7 @@ function scrollAskToBottom() {
 
 function scheduleHashScroll() {
   const hash = window.location.hash;
-  if (!hash || hash === "#ask") return;
+  if (!hash) return;
   const id = decodeURIComponent(hash.slice(1));
   if (!id) return;
   requestAnimationFrame(() => requestAnimationFrame(() => settleHashScroll(id)));
@@ -1486,6 +2003,7 @@ function advisorProfile() {
     topic: topicScores[0]?.score > 0 ? topicScores[0].topic : fallbackTopic,
     text: cleanSearchText(text),
     avoid: cleanSearchText(state.advisor.avoid),
+    avoidProviders: avoidedProviderLabels(state.advisor.avoid),
     mode: state.advisor.studyMode || "Any mode",
     campus: state.advisor.campus || "Any Sydney campus",
     careerPriority: state.advisor.careerPriority || "High employability",
@@ -1516,7 +2034,7 @@ function advisorScoreCourse(course, profile) {
   const campusScore = campusPreferenceScore(course, profile.campus);
   const providerScore = searchProviderQuality(course, profile.topic.label) * 0.12;
   const careerScore = careerPriorityScore(course, profile.careerPriority);
-  const avoidPenalty = tokenise(profile.avoid).filter((word) => tokenMatch(text, word)).length * 8;
+  const avoidPenalty = tokenise(profile.avoid).filter((word) => tokenMatch(text, word)).length * 8 + providerAvoidPenalty(course, profile.avoid);
   const pathwayBoost = profile.pathways !== "No" && /diploma|pathway|via diploma/i.test(course.name) ? 6 : 0;
   const score = Math.max(0, topicScore * 0.3 + subjectScore + passionScore + atarScore + modeScore + campusScore + providerScore + careerScore + pathwayBoost - avoidPenalty);
   const reasons = advisorReasons(course, profile, gap, rank, topicScore, modeScore, campusScore);
@@ -1542,6 +2060,37 @@ function careerPriorityScore(course, priority) {
   if (priority === "Lower ATAR risk") return numericRank(course.atar) !== null && numericRank(course.atar) <= Number(state.advisor.atar) ? 8 : 0;
   if (priority === "Prestige") return courseProviderScore(course) * 0.08;
   return 4;
+}
+
+function providerAvoidPenalty(course, avoidText) {
+  const avoided = avoidedProviderGroups(avoidText);
+  return avoided.some((group) => courseMatchesProviderGroup(course, group)) ? 72 : 0;
+}
+
+function avoidedProviderLabels(value) {
+  return avoidedProviderGroups(value).map((group) => group.label);
+}
+
+function avoidedProviderGroups(value) {
+  const clean = cleanSearchText(value);
+  if (!clean) return [];
+  return providerAliases.filter((group) => group.aliases.some((alias) => textMentionsAlias(clean, alias)));
+}
+
+function courseMatchesProviderGroup(course, group) {
+  if (!group) return false;
+  if (course.providerId === group.id) return true;
+  const providerText = cleanSearchText(`${course.providerId} ${course.university}`);
+  return group.aliases.some((alias) => textMentionsAlias(providerText, alias));
+}
+
+function textMentionsAlias(cleanText, alias) {
+  const cleanAlias = cleanSearchText(alias);
+  if (!cleanAlias) return false;
+  if (cleanAlias.length <= 4 || !cleanAlias.includes(" ")) {
+    return new RegExp(`\\b${escapeRegExp(cleanAlias)}\\b`).test(cleanText);
+  }
+  return phraseMatch(cleanText, cleanAlias);
 }
 
 function advisorReasons(course, profile, gap, rank, topicScore, modeScore, campusScore) {
@@ -1570,8 +2119,15 @@ function advisorOpeningMessage(ranked) {
 function advisorChatReply(message) {
   const question = cleanSearchText(message);
   const ranked = advisorRankedCourses().slice(0, 4);
+  const profile = advisorProfile();
   const primary = ranked[0]?.course;
   if (!primary) return "I need more answers first. Fill in subjects, passions and ATAR, then run the helper.";
+  if (isProviderWhyQuestion(question)) {
+    return providerWhyReply(question, ranked, profile);
+  }
+  if (isOtherUniOptionsQuestion(question)) {
+    return otherUniOptionsReply(ranked, profile);
+  }
   if (/atar|low|rank|entry|pathway|backup/.test(question)) {
     return `For ATAR risk, start with ${primary.name}, then keep pathway options open: adjustment factors, EAS/SRS, diploma pathways and related lower-entry courses. If a course is above your estimate by more than about 3 points, treat it as possible but not safe.`;
   }
@@ -1587,15 +2143,97 @@ function advisorChatReply(message) {
   return `I would keep ${primary.name} as your first serious option from the data. The next decision should be: do you like the actual subjects, can you meet entry requirements, and is the campus/pathway realistic?`;
 }
 
+function isProviderWhyQuestion(question) {
+  return /\bwhy\b/.test(question) && /\b(uni|university|provider|campus|wsu|uts|unsw|usyd|macquarie|acu|western sydney)\b/.test(question);
+}
+
+function isOtherUniOptionsQuestion(question) {
+  return /\b(other|another|alternative|alternatives|else|more|different|options?)\b/.test(question)
+    && /\b(uni|unis|university|universities|provider|providers|campus|course|courses|option|options)\b/.test(question);
+}
+
+function otherUniOptionsReply(ranked, profile) {
+  const primary = ranked[0]?.course;
+  const options = uniAlternativeOptions(profile, primary).slice(0, 4);
+  if (!options.length) return "I could not find strong alternative university options from the current answers. Try broadening the campus preference or removing anything in the avoid box, then run the helper again.";
+  const intro = primary
+    ? `Yes. If you are not locked into ${primary.university}, compare these Sydney options:`
+    : "Other Sydney university options to compare:";
+  const lines = options.map(({ course }) => `${course.university}: ${course.name} (${course.campus}, ATAR ${displayRank(course.atar)})`).join("; ");
+  return `${intro} ${lines}. Shortlist two or three, then compare commute, prerequisites, assumed knowledge, course projects/placements and official career outcomes.`;
+}
+
+function uniAlternativeOptions(profile, primary) {
+  const seenProviders = new Set(primary?.providerId ? [primary.providerId] : []);
+  return allCourses
+    .map((course) => advisorScoreCourse(course, profile))
+    .filter(({ course, score }) => {
+      if (primary && course.id === primary.id) return false;
+      if (score < 18) return false;
+      if (course.level && course.level !== "undergraduate") return false;
+      if (profile.campus !== "Online" && /^online$/i.test(String(course.campus || "").trim())) return false;
+      if (!isTopicAlternativeCourse(course, profile)) return false;
+      const title = cleanSearchText(course.name);
+      if (profile.atar >= 65 && /^advanced diploma|^diploma|via diploma/.test(title)) return false;
+      return true;
+    })
+    .sort((a, b) => b.score - a.score || a.course.name.localeCompare(b.course.name))
+    .filter(({ course }) => {
+      if (seenProviders.has(course.providerId)) return false;
+      seenProviders.add(course.providerId);
+      return true;
+    });
+}
+
+function isTopicAlternativeCourse(course, profile) {
+  const title = cleanSearchText(course.name);
+  if (profile.topic.label === "Technology") {
+    return /information technology|computer|computing|software|data|cyber|artificial intelligence|games|game development|information systems|analytics|programming|coding|interactive technology/.test(title);
+  }
+  return topicWeightedScore(course, profile.topic) > 0;
+}
+
+function providerWhyReply(question, ranked, profile) {
+  const mentioned = providerAliases.find((group) => group.aliases.some((alias) => textMentionsAlias(question, alias)));
+  const targetEntry = mentioned ? ranked.find(({ course }) => courseMatchesProviderGroup(course, mentioned)) : ranked[0];
+  const course = targetEntry?.course || ranked[0]?.course;
+  if (!course) return "I cannot explain the provider yet because there is no ranked course. Run the helper first.";
+
+  if (mentioned && !targetEntry) {
+    const avoided = profile.avoidProviders.includes(mentioned.label);
+    const rank = numericRank(course.atar);
+    const atarLine = rank === null ? "entry safety still needs an official check" : `its imported ATAR profile is ${displayRank(course.atar)} against your ${profile.atar} estimate`;
+    const quality = providerQuality[profile.topic.label]?.[course.providerId];
+    const qualityLine = quality?.note ? `The provider note for ${course.university} is: ${quality.note.toLowerCase()}.` : `${course.university} matched the course/provider scoring better in this run.`;
+    return `${mentioned.label} is not in the current top picks${avoided ? " because you put it in the avoid box and the helper penalised it heavily" : " because the other providers scored better from your answers"}. The current first option is ${course.name} at ${course.university}: it matches your ${profile.topic.label.toLowerCase()} direction, ${atarLine}, and your campus/mode settings. ${qualityLine}`;
+  }
+
+  const group = mentioned || providerAliases.find((item) => courseMatchesProviderGroup(course, item));
+  const providerName = group?.label || course.university;
+  const quality = providerQuality[profile.topic.label]?.[course.providerId];
+  const avoided = profile.avoidProviders.includes(providerName);
+  const rank = numericRank(course.atar);
+  const atarLine = rank === null ? "it has no numeric imported ATAR profile" : `its imported ATAR profile is ${displayRank(course.atar)} against your ${profile.atar} estimate`;
+  const providerLine = quality?.note ? `${providerName} also gets a provider-profile boost here because: ${quality.note.toLowerCase()}.` : `${providerName} appears because the course matched your topic, campus and entry pattern better than many alternatives.`;
+  const avoidLine = avoided ? `You also said to avoid ${providerName}, so I now penalise it heavily. If it still appears, it means the course fit is strong or there are not many better non-${providerName} options in the current answers.` : "";
+  const alternatives = ranked
+    .filter(({ course: item }) => item.id !== course.id)
+    .slice(0, 2)
+    .map(({ course: item }) => `${item.name} at ${item.university}`)
+    .join("; ");
+  return `${providerName}: it was not chosen just because of the brand. ${course.name} matched your ${profile.topic.label.toLowerCase()} direction, ${atarLine}, and the campus/mode settings were considered. ${providerLine} ${avoidLine} Compare it with ${alternatives || "the next saved courses"} before deciding.`;
+}
+
 async function advisorAiChatReply(message) {
+  if (state.aiStatus?.checked && !state.aiStatus.connected) {
+    return aiNotReadyReply();
+  }
   const ranked = advisorRankedCourses().slice(0, 6);
-  const local = advisorChatReply(message);
   try {
     const ai = await requestAiReply({
       type: "advisor",
       message,
-      history: state.advisorChat.filter((item) => !item.pending).slice(-8),
-      localReply: local,
+      history: state.advisorChat.filter((item) => !item.pending).slice(-12),
       context: {
         profile: advisorProfile(),
         answers: state.advisor,
@@ -1604,24 +2242,19 @@ async function advisorAiChatReply(message) {
     });
     return { text: ai.text, provider: ai.provider || "Gemini" };
   } catch (error) {
-    console.warn("Advisor AI fallback:", error);
-    return { text: local, provider: "Site data" };
+    logAiIssue("Advisor AI failed:", error);
+    return aiErrorReply(error);
   }
 }
 
 function searchScore(course, query) {
   if (!query) return 0;
   const cleanQuery = cleanSearchText(query);
-  const title = cleanSearchText(course.name);
-  const code = cleanSearchText(course.courseCode);
-  const provider = cleanSearchText(course.university);
-  const campus = cleanSearchText(course.campus);
-  const area = cleanSearchText(course.area);
-  const summary = cleanSearchText(course.summary);
-  const careers = cleanSearchText(course.careers);
+  const { title, code, provider, campus, area, summary, careers, primary } = courseSearchFields(course);
   const words = tokenise(cleanQuery);
   const orderedTitleMatch = words.length > 1 && new RegExp(words.map(escapeRegExp).join(".*")).test(title);
   const topic = isBroadTopicQuery(cleanQuery) ? topicForQuery(cleanQuery) : null;
+  const incomeMinimum = incomeMinimumFromQuery(cleanQuery);
   let score = 0;
 
   if (title === cleanQuery) score += 90000;
@@ -1638,21 +2271,24 @@ function searchScore(course, query) {
   if (phraseMatch(summary, cleanQuery) || aliasMatch(summary, cleanQuery)) score += 80;
   if (topic) score += topicWeightedScore(course, topic) * 120;
   score += words.filter((word) => tokenMatch(title, word)).length * 3500;
-  score += words.filter((word) => tokenMatch(primaryCourseText(course), word)).length * 70;
+  score += words.filter((word) => tokenMatch(primary, word)).length * 70;
   if (course.level === "undergraduate") score += 250;
   if (numericRank(course.atar) !== null) score += 20;
+  if (incomeMinimum && courseIncomeOutcomes(course).some((job) => job.max >= incomeMinimum)) score += 3200;
   score += searchProviderQuality(course, cleanQuery);
   return score;
 }
 
 function courseSearchMatch(course, query) {
-  const primaryText = primaryCourseText(course);
+  const primaryText = courseSearchFields(course).primary;
   const words = tokenise(query);
   const topic = isBroadTopicQuery(query) ? topicForQuery(query) : null;
+  const incomeMinimum = incomeMinimumFromQuery(query);
   if (phraseMatch(primaryText, query)) return true;
   if (aliasMatch(primaryText, query)) return true;
   if (words.length > 1 && words.every((word) => tokenMatch(primaryText, word))) return true;
   if (topic && topicWeightedScore(course, topic) > 0) return true;
+  if (incomeMinimum && courseIncomeOutcomes(course).some((job) => job.max >= incomeMinimum)) return true;
   return false;
 }
 
@@ -1743,6 +2379,22 @@ function primaryCourseText(course) {
   ].join(" "));
   primaryCourseTextCache.set(course, text);
   return text;
+}
+
+function courseSearchFields(course) {
+  if (searchFieldCache.has(course)) return searchFieldCache.get(course);
+  const fields = {
+    title: cleanSearchText(course.name),
+    code: cleanSearchText(course.courseCode),
+    provider: cleanSearchText(course.university),
+    campus: cleanSearchText(course.campus),
+    area: cleanSearchText(course.area),
+    summary: cleanSearchText(course.summary),
+    careers: cleanSearchText(course.careers),
+    primary: primaryCourseText(course)
+  };
+  searchFieldCache.set(course, fields);
+  return fields;
 }
 
 function numericRank(value) {
@@ -2038,19 +2690,10 @@ function escapeHtml(value) {
 }
 
 render();
-if (state.askOpen) scrollAskToBottom();
+loadAiStatus();
+window.setTimeout(scheduleIncomeWarmup, 1400);
 
 window.addEventListener("hashchange", () => {
-  if (window.location.hash === "#ask") {
-    state.askOpen = true;
-    render();
-    scrollAskToBottom();
-    return;
-  }
-  if (state.askOpen) {
-    state.askOpen = false;
-    render();
-    return;
-  }
   render();
+  window.setTimeout(scheduleIncomeWarmup, 300);
 });

@@ -120,6 +120,19 @@ const providerQuality = {
   }
 };
 
+const providerAliases = [
+  { id: "WS", label: "Western Sydney University", aliases: ["wsu", "western sydney university", "western sydney uni", "western sydney"] },
+  { id: "UTS", label: "University of Technology Sydney", aliases: ["uts", "university of technology sydney", "technology sydney"] },
+  { id: "UNSW", label: "UNSW", aliases: ["unsw", "university of new south wales", "new south wales uni"] },
+  { id: "USYD", label: "University of Sydney", aliases: ["usyd", "sydney uni", "sydney university", "university of sydney"] },
+  { id: "MQ", label: "Macquarie University", aliases: ["mq", "macquarie", "macquarie university"] },
+  { id: "ACU", label: "Australian Catholic University", aliases: ["acu", "australian catholic university"] },
+  { id: "SCU", label: "Southern Cross University", aliases: ["scu", "southern cross", "southern cross university"] },
+  { id: "CQU", label: "CQUniversity", aliases: ["cqu", "cquniversity", "central queensland university"] },
+  { id: "ICMS", label: "International College of Management, Sydney", aliases: ["icms", "international college of management"] },
+  { id: "AIT", label: "Academy of Interactive Technology", aliases: ["ait", "academy of interactive technology"] }
+];
+
 const rankCodeMeanings = {
   NC: "New course; no published selection-rank profile yet.",
   NO: "No offers were made on ATAR alone.",
@@ -269,7 +282,9 @@ const state = {
   },
   advisorRun: false,
   advisorChat: [],
-  helperProvider: "Site data"
+  processing: "",
+  helperProvider: "Checking AI",
+  aiStatus: { checked: false, configured: false, connected: false, provider: "Gemini", model: "gemini-3.5-flash" }
 };
 
 function render() {
@@ -287,12 +302,13 @@ function render() {
         <a href="./atar-calculator.html">ATAR calculator</a>
         <a href="./subject-helper.html">Subject helper</a>
         <a href="./advisor.html" aria-current="page">Course helper</a>
-        <a href="./index.html#ask">Ask?</a>
         <a href="./index.html#saved">Saved</a>
         <a href="./index.html#providers">Universities</a>
         <a href="./index.html#faq">FAQ</a>
       </nav>
+      <div class="topbar-actions">${window.courseFinderTheme?.buttonMarkup?.() || ""}</div>
     </header>
+    ${renderAdvisorProgress()}
 
     <main class="advisor-main">
       <section class="hero advisor-hero">
@@ -352,8 +368,35 @@ function renderAdvisor(ranked, profile) {
       ${advisorQuestions.map(renderAdvisorQuestion).join("")}
       <button type="submit" class="match-btn">Find my course direction</button>
     </form>
+    ${renderAdvisorProcessStrip("advisor", "Scoring your answers")}
     ${state.advisorRun ? renderAdvisorResult(ranked, profile) : `<p class="empty-note">The first recommendation is algorithmic. The follow-up chat uses the same imported course data, pathway rules and your answers.</p>`}
   `;
+}
+
+function renderAdvisorProgress() {
+  if (!state.processing) return "";
+  return `<div class="app-progress is-active" aria-hidden="true"><div class="app-progress-track"></div></div>`;
+}
+
+function renderAdvisorProcessStrip(key, label) {
+  if (state.processing !== key) return "";
+  return `
+    <div class="process-strip" role="status" aria-live="polite">
+      <span>${escapeHtml(label)}</span>
+      <span class="process-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    </div>
+  `;
+}
+
+function runAdvisorProcessing(key, action, after = null, delay = 260) {
+  state.processing = key;
+  render();
+  window.setTimeout(() => {
+    action();
+    state.processing = "";
+    render();
+    if (after) after();
+  }, delay);
 }
 
 function renderAdvisorQuestion(question) {
@@ -393,8 +436,8 @@ function renderAdvisorResult(ranked, profile) {
         <small>How this was decided: the app scores topic fit, subject fit, ATAR gap, campus/mode preference, provider profile and avoid-list penalties. The chat then explains that score in plain language.</small>
       </div>
       <div class="advisor-picks">
-        ${ranked.map(({ course, score, reasons }) => `
-          <article>
+        ${ranked.map(({ course, score, reasons }, index) => `
+          <article style="--item-delay:${Math.min(index, 8) * 24}ms">
             <strong>${highlight(course.name)}</strong>
             <small>${escapeHtml(course.university)} - ${escapeHtml(course.campus)} - ${term("ATAR")}: ${escapeHtml(displayRank(course.atar))}</small>
             <p>${escapeHtml(reasons.slice(0, 3).join(" "))}</p>
@@ -430,16 +473,18 @@ function renderAdvisorResult(ranked, profile) {
 function bindEvents() {
   advisorApp.querySelector('[data-form="advisor"]')?.addEventListener("submit", (event) => {
     event.preventDefault();
+    const values = {};
     advisorApp.querySelectorAll("[data-advisor-field]").forEach((field) => {
-      state.advisor[field.dataset.advisorField] = field.value.trim();
+      values[field.dataset.advisorField] = field.value.trim();
     });
-    state.advisorRun = true;
-    state.advisorChat = [{
-      role: "assistant",
-      text: advisorOpeningMessage(advisorRankedCourses().slice(0, 8))
-    }];
-    render();
-    scrollToResult();
+    Object.assign(state.advisor, values);
+    runAdvisorProcessing("advisor", () => {
+      state.advisorRun = true;
+      state.advisorChat = [{
+        role: "assistant",
+        text: advisorOpeningMessage(advisorRankedCourses().slice(0, 8))
+      }];
+    }, scrollToResult);
   });
 
   advisorApp.querySelectorAll("[data-advisor-field]").forEach((field) => {
@@ -459,12 +504,12 @@ function bindEvents() {
     event.target.message.value = "";
     const pending = {
       role: "assistant",
-      text: "Checking Gemini against your answers and the course data...",
-      provider: "Gemini",
+      text: advisorPendingText(),
+      provider: advisorPendingProvider(),
       pending: true
     };
     state.advisorChat.push(pending);
-    state.helperProvider = "Gemini";
+    state.helperProvider = advisorPendingProvider();
     renderPreservingScroll(true);
     const reply = await advisorAiChatReply(message);
     pending.text = cleanHelperText(reply.text);
@@ -503,6 +548,42 @@ function scrollChatToBottom() {
   if (log) log.scrollTop = log.scrollHeight;
 }
 
+function advisorPendingProvider() {
+  return state.aiStatus?.connected ? "Gemini" : state.aiStatus?.configured ? "AI issue" : "AI not connected";
+}
+
+function advisorPendingText() {
+  return state.aiStatus?.connected
+    ? "Asking Gemini with your answers and the course data..."
+    : "Gemini is not ready, so I will show the setup issue instead of a scripted answer.";
+}
+
+async function loadAiStatus() {
+  try {
+    const response = await fetch("/api/ai");
+    if (!response.ok) throw new Error(`AI status returned ${response.status}`);
+    const data = await response.json();
+    state.aiStatus = {
+      checked: true,
+      configured: Boolean(data.configured),
+      connected: Boolean(data.connected),
+      provider: data.provider || "Gemini",
+      model: data.model || "",
+      searchGrounding: Boolean(data.searchGrounding),
+      coursesAvailable: Number(data.coursesAvailable || 0),
+      error: data.error || ""
+    };
+    if (!state.advisorChat.length || state.helperProvider === "Checking AI") {
+      state.helperProvider = state.aiStatus.connected ? state.aiStatus.provider : state.aiStatus.configured ? "AI issue" : "AI not connected";
+    }
+  } catch (error) {
+    console.warn("AI status unavailable:", error);
+    state.aiStatus = { checked: true, configured: false, connected: false, provider: "Gemini", model: "", error: "AI status endpoint unavailable" };
+    if (!state.advisorChat.length || state.helperProvider === "Checking AI") state.helperProvider = "AI not connected";
+  }
+  render();
+}
+
 function advisorProfile() {
   const textParts = [
     [state.advisor.passions, 6],
@@ -537,6 +618,7 @@ function advisorProfile() {
     topicScores,
     text: combined,
     avoid,
+    avoidProviders: avoidedProviderLabels(state.advisor.avoid),
     lazyPreference,
     mode: state.advisor.studyMode || "Any mode",
     campus: state.advisor.campus || "Any Sydney campus",
@@ -699,6 +781,37 @@ function lowLoadFitScore(course, profile) {
   return score;
 }
 
+function providerAvoidPenalty(course, avoidText) {
+  const avoided = avoidedProviderGroups(avoidText);
+  return avoided.some((group) => courseMatchesProviderGroup(course, group)) ? 72 : 0;
+}
+
+function avoidedProviderLabels(value) {
+  return avoidedProviderGroups(value).map((group) => group.label);
+}
+
+function avoidedProviderGroups(value) {
+  const clean = cleanSearchText(value);
+  if (!clean) return [];
+  return providerAliases.filter((group) => group.aliases.some((alias) => textMentionsAlias(clean, alias)));
+}
+
+function courseMatchesProviderGroup(course, group) {
+  if (!group) return false;
+  if (course.providerId === group.id) return true;
+  const providerText = cleanSearchText(`${course.providerId} ${course.university}`);
+  return group.aliases.some((alias) => textMentionsAlias(providerText, alias));
+}
+
+function textMentionsAlias(cleanText, alias) {
+  const cleanAlias = cleanSearchText(alias);
+  if (!cleanAlias) return false;
+  if (cleanAlias.length <= 4 || !cleanAlias.includes(" ")) {
+    return new RegExp(`\\b${escapeRegExp(cleanAlias)}\\b`).test(cleanText);
+  }
+  return phraseMatch(cleanText, cleanAlias);
+}
+
 function avoidPenaltyScore(course, profile) {
   const text = courseText(course);
   const stopWords = new Set(["too", "much", "work", "course", "job", "study", "sydney", "university", "campus", "college", "institute"]);
@@ -706,6 +819,7 @@ function avoidPenaltyScore(course, profile) {
     .filter((word) => word.length > 2 && !stopWords.has(word))
     .filter((word) => tokenMatch(text, word))
     .length * 7;
+  penalty += providerAvoidPenalty(course, profile.avoid);
   if (profile.avoid && phraseMatch(course.university, profile.avoid)) penalty += 44;
   if (/math/.test(profile.avoid) && /mathematics|engineering|physics|data|computer science|software/.test(text)) penalty += 8;
   if (/clinical|care|people|patient/.test(profile.avoid) && /clinical|nursing|medicine|health|psychology|social work|counselling/.test(text)) penalty += 10;
@@ -779,20 +893,21 @@ function advisorChatReply(message) {
   const fallback = localAdvisorChatReply(message);
   return {
     text: avoidRepeatedReply(cleanHelperText(fallback), ranked, profile, message),
-    provider: "Site data"
+    provider: "Local guide"
   };
 }
 
 async function advisorAiChatReply(message) {
+  if (state.aiStatus?.checked && !state.aiStatus.connected) {
+    return aiNotReadyReply();
+  }
   const ranked = advisorRankedCourses().slice(0, 6);
   const profile = advisorProfile();
-  const local = advisorChatReply(message);
   try {
     const ai = await requestAiReply({
       type: "advisor",
       message,
-      history: state.advisorChat.filter((item) => !item.pending).slice(-8),
-      localReply: local.text,
+      history: state.advisorChat.filter((item) => !item.pending).slice(-12),
       context: {
         profile,
         answers: state.advisor,
@@ -801,9 +916,15 @@ async function advisorAiChatReply(message) {
     });
     return { text: ai.text, provider: ai.provider || "Gemini" };
   } catch (error) {
-    console.warn("Advisor AI fallback:", error);
-    return local;
+    logAiIssue("Advisor AI failed:", error);
+    return aiErrorReply(error);
   }
+}
+
+function logAiIssue(label, error) {
+  const message = String(error?.message || "");
+  if (message.includes("GEMINI_API_KEY is not configured")) return;
+  console.warn(label, error);
 }
 
 async function requestAiReply(payload) {
@@ -816,6 +937,40 @@ async function requestAiReply(payload) {
   const data = await response.json();
   if (!data.ok || !data.text) throw new Error(data.error || "AI endpoint unavailable");
   return data;
+}
+
+function aiNotReadyReply() {
+  const status = state.aiStatus || {};
+  if (status.configured) {
+    return {
+      text: aiConnectionFailedReply(status.error || "Gemini connection check failed"),
+      provider: "AI connection failed"
+    };
+  }
+  return {
+    text: "Gemini is not connected on this server yet, so I cannot answer as AI. Add GEMINI_API_KEY locally or in Vercel, restart/redeploy, then ask again.",
+    provider: "AI not connected"
+  };
+}
+
+function aiConnectionFailedReply(error) {
+  const message = String(error?.message || error || "");
+  const reason = /PERMISSION_DENIED|403|denied/i.test(message)
+    ? "Google rejected this key or project with a permission error."
+    : /prepayment credits are depleted|RESOURCE_EXHAUSTED|billing|credits/i.test(message)
+      ? "Gemini is connected, but this Google project has depleted credits or a billing block."
+      : /quota|429|rate limit/i.test(message)
+        ? "Gemini is hitting a quota or rate-limit issue."
+      : "Gemini failed before a model answer came back.";
+  return `${reason} I am not going to fake an answer with local scripts. Use a valid Google AI Studio Gemini API key with API access enabled, then restart or redeploy the server.`;
+}
+
+function aiErrorReply(error) {
+  const message = String(error?.message || "");
+  if (/GEMINI_API_KEY is not configured|not configured|missing_key/i.test(message)) {
+    return { text: "Gemini is not connected on this server yet. Add GEMINI_API_KEY, restart/redeploy, then ask again.", provider: "AI not connected" };
+  }
+  return { text: aiConnectionFailedReply(error), provider: "AI connection failed" };
 }
 
 function compactAiCourse(course, score, reasons = []) {
@@ -891,6 +1046,14 @@ function localAdvisorChatReply(message) {
   const directFacts = directCourseFactReply(question, ranked, profile);
   if (directFacts) return directFacts;
 
+  if (isProviderWhyQuestion(question)) {
+    return providerWhyReply(question, ranked, profile);
+  }
+
+  if (isOtherUniOptionsQuestion(question)) {
+    return otherUniOptionsReply(ranked, profile);
+  }
+
   if (isShortWhyQuestion(question)) {
     return explainRecommendationWhy(ranked, profile);
   }
@@ -964,6 +1127,119 @@ function isGameVsItQuestion(question) {
   return /\b(game|games|game development|game dev|gaming)\b/.test(question)
     && /\b(it|information technology|info tech|technology|information systems)\b/.test(question)
     && /\b(why|why not|not|instead|vs|versus|compare|better|choose)\b/.test(question);
+}
+
+function isProviderWhyQuestion(question) {
+  return /\bwhy\b/.test(question) && /\b(uni|university|provider|campus|wsu|uts|unsw|usyd|macquarie|acu|western sydney)\b/.test(question);
+}
+
+function isOtherUniOptionsQuestion(question) {
+  return /\b(other|another|alternative|alternatives|else|more|different|options?)\b/.test(question)
+    && /\b(uni|unis|university|universities|provider|providers|campus|course|courses|option|options)\b/.test(question);
+}
+
+function otherUniOptionsReply(ranked, profile) {
+  const primary = ranked[0]?.course;
+  const options = uniAlternativeOptions(profile, primary).slice(0, 5);
+  if (!options.length) {
+    return "I could not find strong alternative uni options from the current answers. Try broadening the campus preference, removing anything in the avoid box, or lowering the ATAR safety requirement, then run the helper again.";
+  }
+
+  const intro = primary
+    ? `Yes. If ${primary.university} is not the only option, compare these Sydney alternatives:`
+    : "Other Sydney uni options to compare:";
+  const optionText = options.map(({ course }) => {
+    return `${course.university}: ${course.name} (${course.campus}, ATAR ${displayRank(course.atar)}) - ${uniOptionReason(course, profile)}`;
+  }).join("; ");
+
+  return avoidRepeatedReply(`${intro} ${optionText}. I would shortlist two or three, then check commute, prerequisites, assumed knowledge, project/placement load and official career outcomes.`, options, profile, "other uni options");
+}
+
+function uniAlternativeOptions(profile, primary) {
+  const seenProviders = new Set(primary?.providerId ? [primary.providerId] : []);
+  return allCourses
+    .map((course) => advisorScoreCourse(course, profile))
+    .filter(({ course, score }) => {
+      if (primary && course.id === primary.id) return false;
+      if (score < 18) return false;
+      if (course.level && course.level !== "undergraduate") return false;
+      if (profile.campus !== "Online" && /^online$/i.test(String(course.campus || "").trim())) return false;
+      if (!isTopicAlternativeCourse(course, profile)) return false;
+      const title = cleanSearchText(course.name);
+      if (profile.atar >= 65 && /^advanced diploma|^diploma|via diploma/.test(title)) return false;
+      if (profile.avoidProviders.some((name) => cleanSearchText(course.university).includes(cleanSearchText(name)))) return false;
+      return true;
+    })
+    .sort((a, b) => b.score - a.score || a.course.name.localeCompare(b.course.name))
+    .filter(({ course }) => {
+      if (seenProviders.has(course.providerId)) return false;
+      seenProviders.add(course.providerId);
+      return true;
+    });
+}
+
+function isTopicAlternativeCourse(course, profile) {
+  const title = cleanSearchText(course.name);
+  if (profile.topic.label === "Technology") {
+    return /information technology|computer|computing|software|data|cyber|artificial intelligence|games|game development|information systems|analytics|programming|coding|interactive technology/.test(title);
+  }
+  return topicWeightedScore(course, profile.topic) > 0;
+}
+
+function uniOptionReason(course, profile) {
+  const rank = numericRank(course.atar);
+  const gap = rank === null ? null : profile.atar - rank;
+  const quality = providerQuality[profile.topic.label]?.[course.providerId];
+  if (quality?.note) return `${quality.note.toLowerCase()} and ${gapTextForOption(gap)}`;
+  return `matches the ${profile.topic.label.toLowerCase()} direction and ${gapTextForOption(gap)}`;
+}
+
+function gapTextForOption(gap) {
+  if (gap === null) return "entry safety needs an official check";
+  if (gap >= 0) return `its profile is ${gap.toFixed(1)} below your ATAR estimate`;
+  return `its profile is ${Math.abs(gap).toFixed(1)} above your estimate, so treat it as a reach`;
+}
+
+function providerWhyReply(question, ranked, profile) {
+  const mentioned = providerAliases.find((group) => group.aliases.some((alias) => textMentionsAlias(question, alias)));
+  const targetEntry = mentioned ? ranked.find(({ course }) => courseMatchesProviderGroup(course, mentioned)) : ranked[0];
+  const course = targetEntry?.course || ranked[0]?.course;
+  if (!course) return "I cannot explain the provider yet because there is no ranked course. Run the helper first.";
+
+  if (mentioned && !targetEntry) {
+    const avoided = profile.avoidProviders.includes(mentioned.label);
+    const rank = numericRank(course.atar);
+    const atarLine = rank === null
+      ? "entry safety still needs an official check"
+      : `its imported UAC ATAR profile is ${displayRank(course.atar)} against your ${profile.atar} estimate`;
+    const quality = providerQuality[profile.topic.label]?.[course.providerId];
+    const qualityLine = quality?.note
+      ? `The provider note for ${course.university} is: ${quality.note.toLowerCase()}.`
+      : `${course.university} matched the course/provider scoring better in this run.`;
+    return avoidRepeatedReply(`${mentioned.label} is not in the current top picks${avoided ? " because you put it in the avoid box and the helper penalised it heavily" : " because the other providers scored better from your answers"}. The current first option is ${course.name} at ${course.university}: it matches your ${profile.topic.label.toLowerCase()} direction, ${atarLine}, and your campus/mode settings. ${qualityLine}`, ranked, profile, "provider why");
+  }
+
+  const group = mentioned || providerAliases.find((item) => courseMatchesProviderGroup(course, item));
+  const providerName = group?.label || course.university;
+  const quality = providerQuality[profile.topic.label]?.[course.providerId];
+  const avoided = profile.avoidProviders.includes(providerName);
+  const rank = numericRank(course.atar);
+  const atarLine = rank === null
+    ? "it has no numeric imported UAC ATAR profile, so entry safety needs an official check"
+    : `its imported UAC ATAR profile is ${displayRank(course.atar)} against your ${profile.atar} estimate`;
+  const providerLine = quality?.note
+    ? `${providerName} also gets a provider-profile boost for this area because: ${quality.note.toLowerCase()}.`
+    : `${providerName} appears here because the course matched your topic, campus and entry pattern better than many alternatives.`;
+  const avoidLine = avoided
+    ? `You said to avoid ${providerName}, so the helper now penalises it heavily. If it still appears, it means the course fit is unusually strong or there are not many better non-${providerName} options from the current answers.`
+    : "";
+  const alternatives = ranked
+    .filter(({ course: item }) => item.id !== course.id)
+    .slice(0, 2)
+    .map(({ course: item }) => `${item.name} at ${item.university}`)
+    .join("; ");
+
+  return avoidRepeatedReply(`${providerName}: it was not chosen just because of the brand. ${course.name} matched your ${profile.topic.label.toLowerCase()} direction, ${atarLine}, and your campus/mode preferences were considered. ${providerLine} ${avoidLine} Compare it with ${alternatives || "the next ranked courses"} before deciding.`, ranked, profile, "provider why");
 }
 
 function isShortWhyQuestion(question) {
@@ -1075,7 +1351,7 @@ function cleanHelperText(value) {
     .replace(/\s+/g, " ")
     .replace(/^Helper:\s*/i, "")
     .replace(/\*{1,3}/g, "")
-    .replace(/_{2,}/g, "")
+    .replace(/_{3,}/g, "")
     .trim()
     .slice(0, 1400);
 }
@@ -1085,9 +1361,9 @@ function stripMarkdown(value) {
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/__([^_]+)__/g, "$1")
+    .replace(/(^|[\s([{])__([^_]+)__(?=$|[\s.,!?;:)\]}])/g, "$1$2")
     .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/_([^_]+)_/g, "$1")
+    .replace(/(^|[\s([{])_([^_\s][^_]*?[^_\s])_(?=$|[\s.,!?;:)\]}])/g, "$1$2")
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/^\s*[-*]\s+/gm, "");
 }
@@ -1095,7 +1371,8 @@ function stripMarkdown(value) {
 function avoidRepeatedReply(reply, ranked, profile, latestQuestion = "") {
   const previousAssistant = cleanHelperText([...state.advisorChat].reverse().find((message) => message.role === "assistant" && !message.pending)?.text || "");
   reply = cleanHelperText(reply);
-  if (isShortWhyQuestion(cleanSearchText(latestQuestion))) return reply;
+  const cleanLatest = cleanSearchText(latestQuestion);
+  if (isShortWhyQuestion(cleanLatest) || isOtherUniOptionsQuestion(cleanLatest)) return reply;
   if (!previousAssistant || similarityKey(previousAssistant) !== similarityKey(reply)) return reply;
   const names = listCourseNames(ranked, 3);
   return `New angle: compare ${names} by the actual weekly work, not just the title. For your ${profile.topic.label.toLowerCase()} direction, ask each course page: how much coding or project work is there, what maths is assumed, are there internships, and how long is the commute? That will separate a course that sounds good from one you can realistically stick with.`;
@@ -1378,3 +1655,4 @@ function escapeRegExp(value) {
 }
 
 render();
+loadAiStatus();

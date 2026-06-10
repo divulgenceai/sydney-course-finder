@@ -15,7 +15,8 @@ const params = new URLSearchParams(window.location.search);
 const helperState = {
   draft: params.get("q") || "",
   query: params.get("q") || "",
-  profile: params.get("area") || "Auto detect"
+  profile: params.get("area") || "Auto detect",
+  processing: ""
 };
 
 const subjectProfiles = [
@@ -232,12 +233,13 @@ function render() {
         <a href="./atar-calculator.html">ATAR calculator</a>
         <a href="./subject-helper.html" aria-current="page">Subject helper</a>
         <a href="./advisor.html">Course helper</a>
-        <a href="./index.html#ask">Ask?</a>
         <a href="./index.html#saved">Saved</a>
         <a href="./index.html#providers">Universities</a>
         <a href="./index.html#faq">FAQ</a>
       </nav>
+      <div class="topbar-actions">${window.courseFinderTheme?.buttonMarkup?.() || ""}</div>
     </header>
+    ${renderSubjectHelperProgress()}
 
     <main class="subject-main">
       <section class="hero subject-hero">
@@ -272,6 +274,7 @@ function render() {
           </label>
           <button type="submit">Find subjects</button>
         </form>
+        ${renderSubjectHelperProcessStrip("subject-search", "Finding subject plan")}
         <div class="quick-subject-searches" aria-label="Example searches">
           ${quickSearches.map((item) => `<button type="button" data-quick-search="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join("")}
         </div>
@@ -306,6 +309,31 @@ function render() {
 
   bindEvents();
   requestAnimationFrame(scrollActiveNavIntoView);
+}
+
+function renderSubjectHelperProgress() {
+  if (!helperState.processing) return "";
+  return `<div class="app-progress is-active" aria-hidden="true"><div class="app-progress-track"></div></div>`;
+}
+
+function renderSubjectHelperProcessStrip(key, label) {
+  if (helperState.processing !== key) return "";
+  return `
+    <div class="process-strip" role="status" aria-live="polite">
+      <span>${escapeHtml(label)}</span>
+      <span class="process-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    </div>
+  `;
+}
+
+function runSubjectHelperProcessing(key, action, delay = 240) {
+  helperState.processing = key;
+  render();
+  window.setTimeout(() => {
+    action();
+    helperState.processing = "";
+    render();
+  }, delay);
 }
 
 function renderEmptyState() {
@@ -433,7 +461,7 @@ function renderPlanGroup(title, items, note, emptyNote = "No strong subjects in 
   `;
 }
 
-function renderSubjectCard(item) {
+function renderSubjectCard(item, index = 0) {
   const subject = subjectIndex.get(cleanSearchText(item.name));
   const scaled = subject ? `Break-even about ${breakEvenMark(subject)} / 100` : "Check availability at your school";
   const evidence = item.evidence ? evidenceLine(item.evidence) : "Recommended from the degree/job map";
@@ -444,7 +472,7 @@ function renderSubjectCard(item) {
     stretch: "Stretch"
   }[item.tier] || "Suggested";
   return `
-    <article class="subject-card ${item.tier}">
+    <article class="subject-card ${item.tier}" style="--item-delay:${Math.min(index, 8) * 24}ms">
       <div class="subject-card-title">
         <strong>${escapeHtml(item.name)}</strong>
         <em>${escapeHtml(badge)}</em>
@@ -456,14 +484,14 @@ function renderSubjectCard(item) {
   `;
 }
 
-function renderCourseEvidence(match) {
+function renderCourseEvidence(match, index = 0) {
   const course = match.course;
   const entry = courseRequirementProfile(course);
   const prereq = requirementText(entry.hardPrerequisiteText, "No specific HSC subject prerequisite found in the imported UAC record.");
   const assumed = requirementText(entry.assumedText, "No assumed knowledge listed in the imported UAC record.");
   const additional = requirementText(course.additionalCriteria, "No extra criteria listed in the imported UAC record.");
   return `
-    <details class="subject-course-card">
+    <details class="subject-course-card" style="--item-delay:${Math.min(index, 8) * 24}ms">
       <summary>
         <span class="subject-course-title">
           <strong>${escapeHtml(course.name)}</strong>
@@ -507,20 +535,25 @@ function bindEvents() {
   subjectHelperApp.querySelector('[data-form="subject-search"]')?.addEventListener("submit", (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    helperState.draft = String(form.get("search") || "").trim();
-    helperState.query = helperState.draft;
-    helperState.profile = String(form.get("profile") || "Auto detect");
-    syncUrl();
-    render();
+    const draft = String(form.get("search") || "").trim();
+    const profile = String(form.get("profile") || "Auto detect");
+    helperState.draft = draft;
+    helperState.profile = profile;
+    runSubjectHelperProcessing("subject-search", () => {
+      helperState.query = helperState.draft;
+      syncUrl();
+    });
   });
 
   subjectHelperApp.querySelectorAll("[data-quick-search]").forEach((button) => {
     button.addEventListener("click", () => {
-      helperState.draft = button.dataset.quickSearch || "";
-      helperState.query = helperState.draft;
+      const draft = button.dataset.quickSearch || "";
+      helperState.draft = draft;
       helperState.profile = "Auto detect";
-      syncUrl();
-      render();
+      runSubjectHelperProcessing("subject-search", () => {
+        helperState.query = helperState.draft;
+        syncUrl();
+      });
     });
   });
 }

@@ -39,7 +39,8 @@ const calculatorState = {
   guideQuery: "",
   guideField: "All fields",
   guideLimit: 18,
-  activeSubjectRowId: ""
+  activeSubjectRowId: "",
+  processing: ""
 };
 
 renderCalculator();
@@ -58,12 +59,13 @@ function renderCalculator() {
         <a href="./atar-calculator.html" aria-current="page">ATAR calculator</a>
         <a href="./subject-helper.html">Subject helper</a>
         <a href="./advisor.html">Course helper</a>
-        <a href="./index.html#ask">Ask?</a>
         <a href="./index.html#saved">Saved</a>
         <a href="./index.html#providers">Universities</a>
         <a href="./index.html#faq">FAQ</a>
       </nav>
+      <div class="topbar-actions">${window.courseFinderTheme?.buttonMarkup?.() || ""}</div>
     </header>
+    ${renderCalculatorProgress()}
 
     <main class="calculator-main">
       <section class="hero calculator-hero">
@@ -102,6 +104,7 @@ function renderCalculator() {
 
         <div class="calculator-layout">
           <form class="calculator-form" data-form="calculator">
+            ${renderCalculatorProcessStrip("calculator", "Updating estimate")}
             <div class="calc-toolbar">
               <button type="button" class="match-btn" data-action="add-row">Add subject</button>
               <button type="button" class="clear-btn" data-action="reset-example">Reset example</button>
@@ -138,6 +141,7 @@ function renderCalculator() {
           </label>
         </div>
         <div class="subject-guide" data-role="subject-guide">
+          ${renderCalculatorProcessStrip("guide", "Filtering subjects")}
           ${renderSubjectGuide()}
         </div>
       </section>
@@ -173,6 +177,31 @@ function renderCalculator() {
   requestAnimationFrame(scrollActiveNavIntoView);
 }
 
+function renderCalculatorProgress() {
+  if (!calculatorState.processing) return "";
+  return `<div class="app-progress is-active" aria-hidden="true"><div class="app-progress-track"></div></div>`;
+}
+
+function renderCalculatorProcessStrip(key, label) {
+  if (calculatorState.processing !== key) return "";
+  return `
+    <div class="process-strip" role="status" aria-live="polite">
+      <span>${escapeHtml(label)}</span>
+      <span class="process-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    </div>
+  `;
+}
+
+function runCalculatorProcessing(key, action, delay = 220) {
+  calculatorState.processing = key;
+  renderCalculator();
+  window.setTimeout(() => {
+    action();
+    calculatorState.processing = "";
+    renderCalculator();
+  }, delay);
+}
+
 function scrollActiveNavIntoView() {
   calculatorApp.querySelector('.topnav [aria-current="page"]')?.scrollIntoView({
     block: "nearest",
@@ -180,11 +209,11 @@ function scrollActiveNavIntoView() {
   });
 }
 
-function renderSubjectRow(row) {
+function renderSubjectRow(row, index = 0) {
   const subject = subjectByName.get(row.subject);
   const max = subject ? subject.units * 50 : 100;
   return `
-    <div class="calc-subject-row" data-row-id="${escapeHtml(row.id)}">
+    <div class="calc-subject-row" style="--item-delay:${Math.min(index, 8) * 22}ms" data-row-id="${escapeHtml(row.id)}">
       <label class="subject-picker">
         <span>Subject</span>
         <input
@@ -386,27 +415,29 @@ function bindCalculatorEvents() {
 
   calculatorApp.querySelectorAll("[data-action='add-row']").forEach((button) => {
     button.addEventListener("click", () => {
-      calculatorState.rows.push(createRow("", ""));
-      persistRows();
-      renderCalculator();
+      runCalculatorProcessing("calculator", () => {
+        calculatorState.rows.push(createRow("", ""));
+        persistRows();
+      });
     });
   });
 
   calculatorApp.querySelectorAll("[data-action='reset-example']").forEach((button) => {
     button.addEventListener("click", () => {
-      calculatorState.rows = defaultRows();
-      persistRows();
-      renderCalculator();
+      runCalculatorProcessing("calculator", () => {
+        calculatorState.rows = defaultRows();
+        persistRows();
+      });
     });
   });
 
   calculatorApp.querySelectorAll("[data-action='remove-row']").forEach((button) => {
     button.addEventListener("click", (event) => {
       const rowElement = event.currentTarget.closest("[data-row-id]");
-      calculatorState.rows = calculatorState.rows.filter((row) => row.id !== rowElement.dataset.rowId);
-      if (!calculatorState.rows.length) calculatorState.rows.push(createRow("", ""));
-      persistRows();
-      renderCalculator();
+      runCalculatorProcessing("calculator", () => {
+        calculatorState.rows = calculatorState.rows.filter((row) => row.id !== rowElement.dataset.rowId);
+        persistRows();
+      }, 180);
     });
   });
 
@@ -419,10 +450,6 @@ function bindCalculatorEvents() {
       row.subjectInput = event.currentTarget.value;
       const resolvedSubject = resolveSubjectInput(event.currentTarget.value);
       row.subject = resolvedSubject ? resolvedSubject.name : "";
-      if (resolvedSubject) {
-        row.subjectInput = subjectDisplayName(resolvedSubject);
-        event.currentTarget.value = row.subjectInput;
-      }
       const subject = subjectByName.get(row.subject);
       const markInput = rowElement.querySelector("[data-action='mark-change']");
       if (subject && Number(row.mark) > subject.units * 50) {
@@ -447,6 +474,9 @@ function bindCalculatorEvents() {
       if (resolvedSubject) {
         row.subject = resolvedSubject.name;
         row.subjectInput = subjectDisplayName(resolvedSubject);
+      } else if (!event.currentTarget.value.trim()) {
+        row.subject = "";
+        row.subjectInput = "";
       }
       persistRows();
       renderCalculator();
@@ -466,8 +496,9 @@ function bindCalculatorEvents() {
       row.subject = subject.name;
       row.subjectInput = subjectDisplayName(subject);
       calculatorState.activeSubjectRowId = "";
-      persistRows();
-      renderCalculator();
+      runCalculatorProcessing("calculator", () => {
+        persistRows();
+      }, 180);
     });
   }
 
@@ -494,16 +525,18 @@ function bindCalculatorEvents() {
   const guideField = calculatorApp.querySelector("[data-action='guide-field']");
   if (guideField) {
     guideField.addEventListener("change", (event) => {
-      calculatorState.guideField = event.currentTarget.value;
-      calculatorState.guideLimit = 18;
-      updateSubjectGuide();
+      runCalculatorProcessing("guide", () => {
+        calculatorState.guideField = event.currentTarget.value;
+        calculatorState.guideLimit = 18;
+      }, 180);
     });
   }
 
   calculatorApp.querySelectorAll("[data-action='show-more-guide']").forEach((button) => {
     button.addEventListener("click", () => {
-      calculatorState.guideLimit += 24;
-      updateSubjectGuide();
+      runCalculatorProcessing("guide", () => {
+        calculatorState.guideLimit += 24;
+      }, 160);
     });
   });
 }
@@ -864,6 +897,7 @@ function subjectSuggestionScore(subject, query) {
 }
 
 function subjectInputValue(row) {
+  if (row.subjectInput) return row.subjectInput;
   if (row.subject && subjectByName.has(row.subject)) {
     return subjectDisplayName(subjectByName.get(row.subject));
   }
@@ -990,8 +1024,11 @@ function defaultRows() {
 
 function loadRows() {
   try {
-    const saved = JSON.parse(localStorage.getItem(calculatorStorageKey) || "[]");
-    if (Array.isArray(saved) && saved.length) {
+    const savedRaw = localStorage.getItem(calculatorStorageKey);
+    if (!savedRaw) return defaultRows();
+    const saved = JSON.parse(savedRaw);
+    if (Array.isArray(saved)) {
+      if (!saved.length) return [];
       const rows = saved
         .filter((row) => row && subjectByName.has(row.subject))
         .map((row) => createRow(row.subject, row.mark, row.subjectInput))
