@@ -203,7 +203,9 @@ function runCalculatorProcessing(key, action, delay = 220) {
 }
 
 function scrollActiveNavIntoView() {
-  calculatorApp.querySelector('.topnav [aria-current="page"]')?.scrollIntoView({
+  const nav = calculatorApp.querySelector(".topnav");
+  if (!nav || nav.scrollWidth <= nav.clientWidth + 2) return;
+  nav.querySelector('[aria-current="page"]')?.scrollIntoView({
     block: "nearest",
     inline: "start"
   });

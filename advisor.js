@@ -356,7 +356,9 @@ function render() {
 }
 
 function scrollActiveNavIntoView() {
-  advisorApp.querySelector('.topnav [aria-current="page"]')?.scrollIntoView({
+  const nav = advisorApp.querySelector(".topnav");
+  if (!nav || nav.scrollWidth <= nav.clientWidth + 2) return;
+  nav.querySelector('[aria-current="page"]')?.scrollIntoView({
     block: "nearest",
     inline: "start"
   });
@@ -388,14 +390,22 @@ function renderAdvisorProcessStrip(key, label) {
   `;
 }
 
-function runAdvisorProcessing(key, action, after = null, delay = 260) {
+function runAdvisorProcessing(key, action, after = null, delay = 140) {
+  const x = window.scrollX;
+  const y = window.scrollY;
   state.processing = key;
   render();
+  requestAnimationFrame(() => window.scrollTo(x, y));
   window.setTimeout(() => {
     action();
     state.processing = "";
+    const nextX = window.scrollX;
+    const nextY = window.scrollY;
     render();
-    if (after) after();
+    requestAnimationFrame(() => {
+      window.scrollTo(nextX, nextY);
+      if (after) after();
+    });
   }, delay);
 }
 
@@ -484,7 +494,7 @@ function bindEvents() {
         role: "assistant",
         text: advisorOpeningMessage(advisorRankedCourses().slice(0, 8))
       }];
-    }, scrollToResult);
+    });
   });
 
   advisorApp.querySelectorAll("[data-advisor-field]").forEach((field) => {
@@ -533,13 +543,6 @@ function renderPreservingScroll(keepChatAtBottom = false) {
   requestAnimationFrame(() => {
     window.scrollTo(x, y);
     if (keepChatAtBottom) scrollChatToBottom();
-  });
-}
-
-function scrollToResult() {
-  requestAnimationFrame(() => {
-    advisorApp.querySelector("#result")?.scrollIntoView({ block: "start", behavior: "smooth" });
-    scrollChatToBottom();
   });
 }
 

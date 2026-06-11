@@ -61,7 +61,7 @@ body {
 }
 
 html {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   scroll-padding-top: 96px;
 }
 
@@ -155,15 +155,6 @@ svg {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes calmSheen {
-  from {
-    background-position: 0% 50%;
-  }
-  to {
-    background-position: 100% 50%;
   }
 }
 
@@ -955,9 +946,8 @@ input[type="number"]:focus {
 }
 
 .chat-message.pending {
-  background: linear-gradient(90deg, #fff, var(--accent-soft), #fff);
-  background-size: 220% 100%;
-  animation: messageIn 180ms ease both, calmSheen 1.5s ease-in-out infinite alternate;
+  background: var(--accent-soft);
+  animation: messageIn 140ms ease both;
 }
 
 .chat-message strong {
@@ -1174,9 +1164,8 @@ input[type="number"]:focus {
 }
 
 .ask-message.pending {
-  background: linear-gradient(90deg, #fff, var(--accent-soft), #fff);
-  background-size: 220% 100%;
-  animation: messageIn 170ms ease both, calmSheen 1.5s ease-in-out infinite alternate;
+  background: var(--accent-soft);
+  animation: messageIn 140ms ease both;
 }
 
 .ask-message strong {
@@ -3586,6 +3575,41 @@ input[type="range"] {
 .subject-advice-grid article:hover,
 .theme-toggle:hover {
   transform: none;
+}
+
+.hero,
+.panel,
+.course-item,
+.top-provider-card,
+.provider-card,
+.pathway-grid a,
+.advisor-picks article,
+.calculator-result,
+.calc-subject-row,
+.atar-main-card,
+.atar-impact-card,
+.atar-context-card,
+.subject-impact-card,
+.subject-plan-panel,
+.subject-helper-panel,
+.subject-empty,
+.subject-card,
+.subject-course-card,
+.requirement-signal-grid article,
+.subject-advice-grid article {
+  animation: none;
+}
+
+.course-detail,
+.subject-course-detail,
+.chat-message,
+.ask-message {
+  animation-duration: 140ms;
+}
+
+.chat-message.pending,
+.ask-message.pending {
+  animation: messageIn 140ms ease both;
 }
 
 @media (prefers-reduced-motion: reduce) {

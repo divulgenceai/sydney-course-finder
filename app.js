@@ -626,7 +626,6 @@ function render() {
     </main>
   `;
   bindEvents();
-  scheduleHashScroll();
 }
 
 function navCurrent(targetHash) {
@@ -650,14 +649,29 @@ function renderProcessStrip(key, label) {
 }
 
 function runProcessing(key, action, after = null, delay = 260) {
+  const x = window.scrollX;
+  const y = window.scrollY;
   state.processing = key;
   render();
+  requestAnimationFrame(() => window.scrollTo(x, y));
   window.setTimeout(() => {
     action();
     state.processing = "";
+    const nextX = window.scrollX;
+    const nextY = window.scrollY;
     render();
-    if (after) after();
+    requestAnimationFrame(() => {
+      window.scrollTo(nextX, nextY);
+      if (after) after();
+    });
   }, delay);
+}
+
+function renderPreservingViewport() {
+  const x = window.scrollX;
+  const y = window.scrollY;
+  render();
+  requestAnimationFrame(() => window.scrollTo(x, y));
 }
 
 function filteredCourses() {
@@ -1856,8 +1870,6 @@ function bindEvents() {
         role: "assistant",
         text: advisorOpeningMessage(advisorRankedCourses().slice(0, 3))
       }];
-    }, () => {
-      location.hash = "advisor";
     });
   });
 
@@ -1878,14 +1890,12 @@ function bindEvents() {
     const pending = { role: "assistant", text: aiPendingText(), pending: true, provider: aiPendingLabel() };
     state.advisorChat.push(pending);
     event.target.message.value = "";
-    render();
-    location.hash = "advisor";
+    renderPreservingViewport();
     const reply = await advisorAiChatReply(message);
     pending.text = reply.text;
     pending.provider = reply.provider;
     pending.pending = false;
-    render();
-    location.hash = "advisor";
+    renderPreservingViewport();
   });
 }
 
@@ -2690,10 +2700,12 @@ function escapeHtml(value) {
 }
 
 render();
+scheduleHashScroll();
 loadAiStatus();
 window.setTimeout(scheduleIncomeWarmup, 1400);
 
 window.addEventListener("hashchange", () => {
   render();
+  scheduleHashScroll();
   window.setTimeout(scheduleIncomeWarmup, 300);
 });

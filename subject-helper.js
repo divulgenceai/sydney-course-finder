@@ -559,7 +559,9 @@ function bindEvents() {
 }
 
 function scrollActiveNavIntoView() {
-  subjectHelperApp.querySelector('.topnav [aria-current="page"]')?.scrollIntoView({
+  const nav = subjectHelperApp.querySelector(".topnav");
+  if (!nav || nav.scrollWidth <= nav.clientWidth + 2) return;
+  nav.querySelector('[aria-current="page"]')?.scrollIntoView({
     block: "nearest",
     inline: "start"
   });
