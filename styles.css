@@ -17,9 +17,9 @@
   --shadow: rgba(37, 99, 235, 0.07);
   --focus-ring: rgba(37, 99, 235, 0.28);
   --radius: 7px;
-  --motion-fast: 160ms;
-  --motion-medium: 260ms;
-  --motion-slow: 520ms;
+  --motion-fast: 120ms;
+  --motion-medium: 180ms;
+  --motion-slow: 280ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -106,7 +106,7 @@ svg {
 @keyframes fadeUp {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -117,7 +117,7 @@ svg {
 @keyframes pageArrive {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -128,31 +128,29 @@ svg {
 @keyframes cardRise {
   from {
     opacity: 0;
-    transform: translateY(12px) scale(0.985);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }
 
 @keyframes revealSoft {
   from {
     opacity: 0;
-    transform: translateY(8px);
-    filter: blur(2px);
+    transform: translateY(3px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
-    filter: blur(0);
   }
 }
 
 @keyframes messageIn {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(3px);
   }
   to {
     opacity: 1;
@@ -622,19 +620,14 @@ input[type="number"]:focus {
 .match-btn::after,
 .chat-form button::after,
 .ask-form button::after {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.26), transparent);
-  content: "";
-  transform: translateX(-120%);
-  transition: transform 420ms ease;
+  content: none;
 }
 
 .search-form button:hover::after,
 .match-btn:hover::after,
 .chat-form button:hover::after,
 .ask-form button:hover::after {
-  transform: translateX(120%);
+  transform: none;
 }
 
 .search-form button,
@@ -642,10 +635,9 @@ input[type="number"]:focus {
 .actions a:first-child,
 .ask-form button {
   border: 1px solid var(--accent);
-  background: linear-gradient(115deg, var(--accent), #3b82f6, var(--accent));
-  background-size: 180% 180%;
+  background: var(--accent);
   color: #fff;
-  animation: calmSheen 7s ease-in-out infinite alternate;
+  animation: none;
 }
 
 .search-form button:hover,
@@ -665,7 +657,7 @@ input[type="number"]:focus {
 .ask-form button,
 .clear-btn,
 .compare-scroll button {
-  transition: transform var(--motion-fast) ease, border-color var(--motion-fast) ease, background var(--motion-fast) ease, color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+  transition: border-color var(--motion-fast) ease, background var(--motion-fast) ease, color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
 }
 
 .search-form button:hover,
@@ -677,7 +669,7 @@ input[type="number"]:focus {
 .ask-form button:hover,
 .clear-btn:hover,
 .compare-scroll button:hover {
-  transform: translateY(-1px);
+  transform: none;
 }
 
 .search-form button:active,
@@ -3569,6 +3561,33 @@ input[type="range"] {
   color: var(--text);
 }
 
+.topnav a:hover,
+.topnav button:hover,
+.help-link:hover,
+.advisor-summary:hover,
+.chat-box:hover,
+.advisor-picks article:hover,
+.course-item:hover,
+.saved-empty a:hover,
+.top-provider-card:hover,
+.provider-card:hover,
+.pathway-grid a:hover,
+.calc-subject-row:hover,
+.calculator-result:hover,
+.method-grid article:hover,
+.row-remove:hover,
+.subject-impact-card:hover,
+.subject-search-form button:hover,
+.quick-subject-searches button:hover,
+.subject-empty-examples button:hover,
+.subject-card:hover,
+.subject-course-card:hover,
+.requirement-signal-grid article:hover,
+.subject-advice-grid article:hover,
+.theme-toggle:hover {
+  transform: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -3637,7 +3656,7 @@ input[type="range"] {
 
 @media (max-width: 640px) {
   html {
-    scroll-padding-top: 128px;
+    scroll-padding-top: 172px;
   }
 
   .topbar {
@@ -3657,22 +3676,28 @@ input[type="range"] {
   }
 
   .topnav {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     width: 100%;
-    gap: 7px;
-    padding: 0 44px 2px 0;
-    -webkit-overflow-scrolling: touch;
-    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 36px), transparent 100%);
-    scroll-padding-inline: 4px;
-    scroll-snap-type: x proximity;
+    gap: 6px;
+    padding: 0;
+    overflow: visible;
+    mask-image: none;
+    scroll-snap-type: none;
   }
 
   .topnav a,
   .topnav button {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     min-height: 40px;
-    padding: 0 11px;
-    scroll-snap-align: start;
+    padding: 0 6px;
+    text-align: center;
+    white-space: normal;
+    font-size: 12px;
+    line-height: 1.15;
+    scroll-snap-align: none;
   }
 
   .brand {
@@ -3688,7 +3713,7 @@ input[type="range"] {
   }
 
   .app-progress {
-    top: 106px;
+    top: 154px;
     padding: 0 10px;
   }
 
@@ -3724,6 +3749,26 @@ input[type="range"] {
 
   .stats dd {
     font-size: 17px;
+  }
+
+  .hero,
+  .panel,
+  .course-item,
+  .course-detail,
+  .top-provider-card,
+  .provider-card,
+  .advisor-picks article,
+  .chat-message,
+  .calculator-result,
+  .calc-subject-row,
+  .subject-impact-card,
+  .subject-plan-panel,
+  .subject-helper-panel,
+  .subject-empty,
+  .subject-card,
+  .subject-course-card,
+  .subject-course-detail {
+    animation: none;
   }
 
   .stats,
@@ -3779,7 +3824,7 @@ input[type="range"] {
   .panel {
     margin: 14px 0 22px;
     padding: 14px;
-    scroll-margin-top: 128px;
+    scroll-margin-top: 172px;
   }
 
   .panel-head {
