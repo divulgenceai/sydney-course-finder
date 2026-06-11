@@ -158,6 +158,17 @@ svg {
   }
 }
 
+@keyframes rowPulse {
+  0% {
+    border-color: rgba(37, 99, 235, 0.55);
+    background: rgba(239, 246, 255, 0.94);
+  }
+  100% {
+    border-color: var(--line);
+    background: #fff;
+  }
+}
+
 @keyframes progressSweep {
   0% {
     transform: translateX(-120%) scaleX(0.45);
@@ -1840,8 +1851,10 @@ input[type="range"] {
   border-radius: var(--radius);
   background: #fff;
   transition: transform var(--motion-fast) ease, border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
-  animation: cardRise 260ms var(--ease-out) both;
-  animation-delay: var(--item-delay, 0ms);
+}
+
+.calc-subject-row.is-fresh {
+  animation: rowPulse 520ms ease-out both;
 }
 
 .calc-subject-row:focus-within {
@@ -1884,7 +1897,8 @@ input[type="range"] {
   left: 0;
   z-index: 90;
   display: grid;
-  width: min(420px, 92vw);
+  width: min(420px, calc(100vw - 32px));
+  max-width: 100%;
   max-height: 292px;
   overflow-y: auto;
   border: 1px solid var(--line);
@@ -2042,7 +2056,6 @@ input[type="range"] {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #fff;
-  animation: revealSoft 280ms var(--ease-out) both;
 }
 
 .atar-main-card,

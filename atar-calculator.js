@@ -40,6 +40,7 @@ const calculatorState = {
   guideField: "All fields",
   guideLimit: 18,
   activeSubjectRowId: "",
+  highlightRowId: "",
   processing: ""
 };
 
@@ -173,7 +174,6 @@ function renderCalculator() {
   `;
 
   bindCalculatorEvents();
-  updateEstimateDom();
   requestAnimationFrame(scrollActiveNavIntoView);
 }
 
@@ -192,14 +192,23 @@ function renderCalculatorProcessStrip(key, label) {
   `;
 }
 
-function runCalculatorProcessing(key, action, delay = 220) {
-  calculatorState.processing = key;
+function renderCalculatorStable(highlightRowId = "") {
+  const x = window.scrollX;
+  const y = window.scrollY;
+  calculatorState.highlightRowId = highlightRowId;
+  calculatorState.processing = "";
   renderCalculator();
-  window.setTimeout(() => {
-    action();
-    calculatorState.processing = "";
-    renderCalculator();
-  }, delay);
+  requestAnimationFrame(() => {
+    window.scrollTo(x, y);
+    calculatorState.highlightRowId = "";
+    window.setTimeout(clearFreshCalculatorRows, 560);
+  });
+}
+
+function clearFreshCalculatorRows() {
+  calculatorApp.querySelectorAll(".calc-subject-row.is-fresh").forEach((row) => {
+    row.classList.remove("is-fresh");
+  });
 }
 
 function scrollActiveNavIntoView() {
@@ -214,8 +223,9 @@ function scrollActiveNavIntoView() {
 function renderSubjectRow(row, index = 0) {
   const subject = subjectByName.get(row.subject);
   const max = subject ? subject.units * 50 : 100;
+  const freshClass = row.id === calculatorState.highlightRowId ? " is-fresh" : "";
   return `
-    <div class="calc-subject-row" style="--item-delay:${Math.min(index, 8) * 22}ms" data-row-id="${escapeHtml(row.id)}">
+    <div class="calc-subject-row${freshClass}" data-row-id="${escapeHtml(row.id)}">
       <label class="subject-picker">
         <span>Subject</span>
         <input
@@ -228,7 +238,7 @@ function renderSubjectRow(row, index = 0) {
           title="${escapeHtml(subjectInputValue(row))}"
         />
         <div class="subject-suggestions" data-output="subject-suggestions">
-          ${renderSubjectSuggestions(row)}
+          ${row.id === calculatorState.activeSubjectRowId ? renderSubjectSuggestions(row) : ""}
         </div>
       </label>
       <label>
@@ -417,29 +427,30 @@ function bindCalculatorEvents() {
 
   calculatorApp.querySelectorAll("[data-action='add-row']").forEach((button) => {
     button.addEventListener("click", () => {
-      runCalculatorProcessing("calculator", () => {
-        calculatorState.rows.push(createRow("", ""));
-        persistRows();
-      });
+      const row = createRow("", "");
+      calculatorState.activeSubjectRowId = "";
+      calculatorState.rows.push(row);
+      persistRows();
+      renderCalculatorStable(row.id);
     });
   });
 
   calculatorApp.querySelectorAll("[data-action='reset-example']").forEach((button) => {
     button.addEventListener("click", () => {
-      runCalculatorProcessing("calculator", () => {
-        calculatorState.rows = defaultRows();
-        persistRows();
-      });
+      calculatorState.activeSubjectRowId = "";
+      calculatorState.rows = defaultRows();
+      persistRows();
+      renderCalculatorStable(calculatorState.rows[0]?.id || "");
     });
   });
 
   calculatorApp.querySelectorAll("[data-action='remove-row']").forEach((button) => {
     button.addEventListener("click", (event) => {
       const rowElement = event.currentTarget.closest("[data-row-id]");
-      runCalculatorProcessing("calculator", () => {
-        calculatorState.rows = calculatorState.rows.filter((row) => row.id !== rowElement.dataset.rowId);
-        persistRows();
-      }, 180);
+      calculatorState.activeSubjectRowId = "";
+      calculatorState.rows = calculatorState.rows.filter((row) => row.id !== rowElement.dataset.rowId);
+      persistRows();
+      renderCalculatorStable();
     });
   });
 
@@ -476,12 +487,14 @@ function bindCalculatorEvents() {
       if (resolvedSubject) {
         row.subject = resolvedSubject.name;
         row.subjectInput = subjectDisplayName(resolvedSubject);
+        event.currentTarget.value = subjectInputValue(row);
       } else if (!event.currentTarget.value.trim()) {
         row.subject = "";
         row.subjectInput = "";
       }
+      calculatorState.activeSubjectRowId = "";
       persistRows();
-      renderCalculator();
+      updateEstimateDom();
     });
   });
 
@@ -498,9 +511,14 @@ function bindCalculatorEvents() {
       row.subject = subject.name;
       row.subjectInput = subjectDisplayName(subject);
       calculatorState.activeSubjectRowId = "";
-      runCalculatorProcessing("calculator", () => {
-        persistRows();
-      }, 180);
+      const input = rowElement.querySelector("[data-action='subject-change']");
+      if (input) input.value = subjectInputValue(row);
+      persistRows();
+      updateEstimateDom();
+      rowElement.classList.remove("is-fresh");
+      void rowElement.offsetHeight;
+      rowElement.classList.add("is-fresh");
+      window.setTimeout(() => rowElement.classList.remove("is-fresh"), 560);
     });
   }
 
@@ -527,18 +545,16 @@ function bindCalculatorEvents() {
   const guideField = calculatorApp.querySelector("[data-action='guide-field']");
   if (guideField) {
     guideField.addEventListener("change", (event) => {
-      runCalculatorProcessing("guide", () => {
-        calculatorState.guideField = event.currentTarget.value;
-        calculatorState.guideLimit = 18;
-      }, 180);
+      calculatorState.guideField = event.currentTarget.value;
+      calculatorState.guideLimit = 18;
+      updateSubjectGuide();
     });
   }
 
   calculatorApp.querySelectorAll("[data-action='show-more-guide']").forEach((button) => {
     button.addEventListener("click", () => {
-      runCalculatorProcessing("guide", () => {
-        calculatorState.guideLimit += 24;
-      }, 160);
+      calculatorState.guideLimit += 24;
+      updateSubjectGuide();
     });
   });
 }
