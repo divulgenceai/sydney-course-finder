@@ -4136,3 +4136,260 @@ input[type="range"] {
     padding: 12px;
   }
 }
+
+@keyframes microReveal {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes menuReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.topnav a,
+.topnav button,
+.match-btn,
+.clear-btn,
+.load-more,
+.actions a,
+.actions button,
+.quick-actions button,
+.income-filter-bar button,
+.subject-search-form button,
+.quick-subject-searches button,
+.subject-empty-examples button,
+.chat-form button,
+.ask-form button,
+.row-remove,
+.theme-toggle {
+  transition:
+    transform 180ms var(--ease-out),
+    border-color 180ms ease,
+    background 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease,
+    opacity 180ms ease;
+}
+
+.course-item,
+.top-provider-card,
+.provider-card,
+.pathway-grid a,
+.advisor-summary,
+.chat-box,
+.advisor-picks article,
+.calc-subject-row,
+.calculator-result,
+.method-grid article,
+.subject-impact-card,
+.subject-card,
+.subject-course-card,
+.requirement-signal-grid article,
+.subject-advice-grid article,
+.faq-list details,
+.entry-snapshot article,
+.entry-rule {
+  transition:
+    transform 190ms var(--ease-out),
+    border-color 190ms ease,
+    background 190ms ease,
+    box-shadow 190ms ease;
+}
+
+.course-item img,
+.provider-card img,
+.top-provider-card img,
+.site-logo,
+.theme-toggle svg {
+  transition: transform 220ms var(--ease-out), opacity 180ms ease;
+}
+
+.topnav a[aria-current="page"],
+.topnav button[aria-current="page"] {
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.14);
+}
+
+.course-item > summary::after,
+.subject-course-card summary em,
+.course-entry-status,
+.row-breakdown span,
+.subject-impact-title span,
+.quick-actions button,
+.income-filter-bar button {
+  transition:
+    transform 180ms var(--ease-out),
+    background 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    opacity 180ms ease;
+}
+
+.course-item[open] .course-detail,
+.subject-course-card[open] .subject-course-detail,
+.faq-list details[open] p,
+.field-more[open] > div,
+.advisor-result,
+.subject-plan-panel,
+.subject-helper-panel {
+  animation: microReveal 180ms var(--ease-out) both;
+}
+
+.subject-suggestions:not(:empty),
+.term:hover::after,
+.term:focus::after {
+  animation: menuReveal 150ms var(--ease-out) both;
+}
+
+.faq-list summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  list-style: none;
+}
+
+.faq-list summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-list summary::after {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--accent);
+  content: "+";
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 180ms var(--ease-out), color 180ms ease;
+}
+
+.faq-list details[open] summary::after {
+  content: "-";
+}
+
+.course-item[open] > summary::after {
+  transform: translateX(-2px);
+}
+
+.subject-course-card[open] summary em {
+  transform: translateX(-2px);
+}
+
+.search-form label:focus-within,
+.advisor-form label:focus-within,
+.subject-search-form label:focus-within,
+.calc-subject-row:focus-within,
+.guide-controls label:focus-within {
+  transform: translateY(-1px);
+}
+
+.match-btn:active,
+.clear-btn:active,
+.load-more:active,
+.actions a:active,
+.actions button:active,
+.quick-actions button:active,
+.income-filter-bar button:active,
+.subject-search-form button:active,
+.quick-subject-searches button:active,
+.subject-empty-examples button:active,
+.chat-form button:active,
+.ask-form button:active,
+.row-remove:active,
+.theme-toggle:active {
+  transform: scale(0.985);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .topnav a:hover,
+  .topnav button:hover,
+  .help-link:hover,
+  .match-btn:hover,
+  .clear-btn:hover,
+  .load-more:hover,
+  .actions a:hover,
+  .actions button:hover,
+  .quick-actions button:hover,
+  .income-filter-bar button:hover,
+  .subject-search-form button:hover,
+  .quick-subject-searches button:hover,
+  .subject-empty-examples button:hover,
+  .chat-form button:hover,
+  .ask-form button:hover,
+  .row-remove:hover,
+  .theme-toggle:hover {
+    transform: translateY(-1px);
+  }
+
+  .course-item:hover,
+  .top-provider-card:hover,
+  .provider-card:hover,
+  .pathway-grid a:hover,
+  .advisor-summary:hover,
+  .chat-box:hover,
+  .advisor-picks article:hover,
+  .calc-subject-row:hover,
+  .calculator-result:hover,
+  .method-grid article:hover,
+  .subject-impact-card:hover,
+  .subject-card:hover,
+  .subject-course-card:hover,
+  .requirement-signal-grid article:hover,
+  .subject-advice-grid article:hover,
+  .faq-list details:hover,
+  .entry-snapshot article:hover,
+  .entry-rule:hover {
+    transform: translateY(-2px);
+  }
+
+  .course-item:hover img,
+  .provider-card:hover img,
+  .top-provider-card:hover img,
+  .brand:hover .site-logo {
+    transform: scale(1.035);
+  }
+
+  .match-btn:hover,
+  .search-form button:hover,
+  .subject-search-form button:hover,
+  .quick-subject-searches button:hover,
+  .subject-empty-examples button:hover,
+  .chat-form button:hover,
+  .ask-form button:hover {
+    box-shadow: 0 12px 24px rgba(37, 99, 235, 0.16);
+  }
+}
+
+@media (max-width: 640px) {
+  .course-item[open] .course-detail,
+  .subject-course-card[open] .subject-course-detail,
+  .faq-list details[open] p,
+  .advisor-result,
+  .subject-plan-panel,
+  .subject-helper-panel {
+    animation-duration: 130ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}
