@@ -8,6 +8,8 @@ const guideMeta = window.uacImportMeta || {};
 const guideSubjectLookup = buildSubjectLookup();
 const guideFieldCache = new WeakMap();
 const guideIncomeCache = new WeakMap();
+let guidePrewarmStarted = false;
+let guidePrewarmIndex = 0;
 
 const guideProviderQuality = {
   Technology: {
@@ -276,16 +278,16 @@ const guidePreferences = [
   "Flexible pathway"
 ];
 const guideCampuses = ["Any Sydney campus", "City / inner Sydney", "Western Sydney", "North Sydney / Macquarie", "Online or flexible"];
+const trueRewardUrl = "https://www.westernsydney.edu.au/future/study/application-pathways/hsc-true-reward";
+let guideSubjectRowId = 0;
 
 const guideState = {
-  year: "Year 11",
-  goal: new URLSearchParams(window.location.search).get("q") || "",
-  passions: "",
-  subjects: "",
-  atar: "",
-  income: "Any income",
+  year: "Year 10 or below",
+  dreamJob: new URLSearchParams(window.location.search).get("q") || "",
+  dreamCourse: "",
+  dreamIncome: "Any income",
   preference: "Balanced plan",
-  campus: "Any Sydney campus",
+  subjectsWithMarks: [createGuideSubjectRow()],
   avoid: "",
   processing: false,
   result: null
@@ -335,7 +337,7 @@ function renderGuide(options = {}) {
         <div class="panel-head">
           <div>
             <h2>Build your plan</h2>
-            <p>Use one answer or fill out everything. More detail gives a sharper result.</p>
+            <p>Start with the big intent. Subject marks only appear when they are useful for Year 11 or Year 12 planning.</p>
           </div>
           <span>${escapeHtml((guideMeta.importedAt || "").slice(0, 10) || "UAC data")}</span>
         </div>
@@ -343,21 +345,22 @@ function renderGuide(options = {}) {
           ${guideState.processing ? renderGuideProcessStrip("Building plan") : ""}
           <div class="guide-question-grid">
             ${renderGuideSelect("year", "What year are you in?", guideYears, guideState.year)}
-            ${renderGuideInput("atar", "Approximate ATAR or goal", "number", "Example: 75", guideState.atar)}
-            ${renderGuideInput("goal", "Dream degree, career or job", "text", "Example: software engineer, nursing, law, high income", guideState.goal)}
-            ${renderGuideInput("passions", "What are you interested in?", "text", "Example: coding, helping people, business, design, sport", guideState.passions)}
-            ${renderGuideInput("subjects", "Current or planned HSC subjects", "text", "Example: English Standard, Enterprise Computing, Maths Standard 2", guideState.subjects)}
-            ${renderGuideSelect("income", "Income goal", guideIncomeOptions, guideState.income)}
+            ${renderGuideInput("dreamJob", "Dream job", "text", "Example: software engineer, nurse, high-paying office job", guideState.dreamJob)}
+            ${renderGuideInput("dreamCourse", "Dream course", "text", "Example: computer science, nursing, business analytics", guideState.dreamCourse)}
+            ${renderGuideSelect("dreamIncome", "Dream income", guideIncomeOptions, guideState.dreamIncome)}
             ${renderGuideSelect("preference", "Preference", guidePreferences, guideState.preference)}
-            ${renderGuideSelect("campus", "Campus preference", guideCampuses, guideState.campus)}
-            ${renderGuideInput("avoid", "Anything you want to avoid?", "text", "Example: WSU, heavy maths, long commute, placements", guideState.avoid)}
           </div>
+          ${renderGuideSubjectMarks()}
+          <details class="guide-optional">
+            <summary>Anything to avoid?</summary>
+            ${renderGuideInput("avoid", "Optional avoid list", "text", "Example: WSU, heavy maths, long commute, placements", guideState.avoid)}
+          </details>
           <div class="guide-actions">
             <button class="match-btn" type="submit">Build my plan</button>
             <button class="clear-btn" type="button" data-guide-reset>Reset</button>
           </div>
           <div class="guide-quick" aria-label="Quick goals">
-            ${guideQuickGoals.map((goal) => `<button type="button" data-guide-goal="${escapeHtml(goal)}">${escapeHtml(goal)}</button>`).join("")}
+            ${guideQuickGoals.map((goal) => `<button type="button" data-guide-job="${escapeHtml(goal)}">${escapeHtml(goal)}</button>`).join("")}
           </div>
         </form>
       </section>
@@ -369,6 +372,7 @@ function renderGuide(options = {}) {
   bindGuideEvents();
   requestAnimationFrame(() => {
     scrollGuideNavIntoView();
+    scheduleGuidePrewarm();
     if (options.preserveScroll) window.scrollTo(x, y);
   });
 }
@@ -392,6 +396,63 @@ function renderGuideSelect(key, label, options, value) {
       </select>
     </label>
   `;
+}
+
+function renderGuideSubjectMarks() {
+  if (!needsGuideSubjectMarks()) {
+    return `
+      <div class="guide-year-note">
+        <strong>Subject picking comes next.</strong>
+        <span>For Year 10 or below, the plan recommends Year 11/12 subjects after it sees the job, course, income and preference.</span>
+      </div>
+    `;
+  }
+  const rows = guideState.subjectsWithMarks.length ? guideState.subjectsWithMarks : [createGuideSubjectRow()];
+  guideState.subjectsWithMarks = rows;
+  return `
+    <section class="guide-mark-panel" aria-label="Current subjects and marks">
+      <div class="guide-mark-head">
+        <div>
+          <h3>Current subjects and marks</h3>
+          <p>Optional. Add your subjects now; add marks only if you want an estimated ATAR and course reach level.</p>
+        </div>
+        <button type="button" class="clear-btn" data-guide-add-subject>Add subject</button>
+      </div>
+      <div class="guide-mark-rows">
+        ${rows.map(renderGuideSubjectRow).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderGuideSubjectRow(row, index) {
+  const selectedSubject = findGuideSubject(row.subject);
+  const maxMark = selectedSubject?.units === 1 ? 50 : 100;
+  return `
+    <div class="guide-mark-row" data-guide-row="${row.id}">
+      <label class="guide-field">
+        <span>Subject ${index + 1}</span>
+        <select data-guide-subject-row="${row.id}">
+          <option value="">Choose subject</option>
+          ${hscSubjects.map((subject) => `<option value="${escapeHtml(subject.name)}" ${subject.name === row.subject ? "selected" : ""}>${escapeHtml(subject.name)}</option>`).join("")}
+        </select>
+      </label>
+      <label class="guide-field">
+        <span>Expected mark</span>
+        <input type="number" inputmode="decimal" min="0" max="${maxMark}" step="0.5" value="${escapeHtml(row.mark)}" placeholder="Optional /${maxMark}" data-guide-mark-row="${row.id}" />
+      </label>
+      <button type="button" class="clear-btn guide-row-remove" data-guide-remove-subject="${row.id}" ${guideState.subjectsWithMarks.length <= 1 ? "disabled" : ""}>Remove</button>
+    </div>
+  `;
+}
+
+function createGuideSubjectRow(subject = "", mark = "") {
+  guideSubjectRowId += 1;
+  return { id: `subject-${guideSubjectRowId}`, subject, mark };
+}
+
+function needsGuideSubjectMarks() {
+  return guideState.year === "Year 11" || guideState.year === "Year 12";
 }
 
 function renderGuideProcessStrip(label) {
@@ -424,19 +485,19 @@ function renderGuideEmpty() {
 function renderGuideResult(result) {
   const primary = result.primary.course;
   const primaryJobs = result.jobs.slice(0, 3);
-  const providerNote = result.primary.providerNote ? ` ${result.primary.providerNote}` : "";
+  const providerNote = result.providerNote ? ` ${result.providerNote}` : "";
   return `
     <section class="panel guide-result" id="guide-result">
       <div class="guide-result-head">
         <div>
           <span class="guide-pill">${escapeHtml(result.profile.label)}</span>
-          <h2>Your first direction: ${escapeHtml(primary.name)}</h2>
-          <p>${escapeHtml(primary.name)} at ${escapeHtml(primary.university)} is the strongest first match because it fits your ${escapeHtml(result.profile.label.toLowerCase())} signal, ${escapeHtml(result.entryLine.toLowerCase())}, and your stated preferences.${escapeHtml(providerNote)}</p>
+          <h2>Best direction: ${escapeHtml(primary.name)}</h2>
+          <p>${escapeHtml(primary.name)} at ${escapeHtml(primary.university)} is the strongest first plan because it fits your job/course intent, ${escapeHtml(result.entryLine.toLowerCase())}, and the preference you gave.${escapeHtml(providerNote)}</p>
         </div>
         <div class="guide-score-card">
-          <span>Fit score</span>
-          <strong>${Math.min(100, Math.max(0, Math.round(result.primary.score)))}/100</strong>
-          <small>${escapeHtml(result.scoreNote)}</small>
+          <span>Course reach</span>
+          <strong>${escapeHtml(result.reach.label)}</strong>
+          <small>${escapeHtml(result.reach.text)}</small>
         </div>
       </div>
 
@@ -475,55 +536,36 @@ function renderGuideResult(result) {
         </article>
       </div>
 
-      <div class="guide-section-row">
-        <section class="guide-section-card">
-          <div class="guide-card-head">
-            <h3>Subject plan</h3>
-            <p>${escapeHtml(result.subjectIntro)}</p>
-          </div>
-          <div class="guide-subject-targets">
-            ${result.subjectTargets.map(renderGuideSubjectTarget).join("")}
-          </div>
-        </section>
+      ${result.markEstimate?.hasMarks ? renderGuideEstimatePanel(result.markEstimate) : ""}
+      ${result.hasTrueReward ? renderTrueRewardCard() : ""}
 
-        <section class="guide-section-card">
-          <div class="guide-card-head">
-            <h3>Entry checks</h3>
-            <p>Prerequisites can block entry. Assumed knowledge usually does not block entry, but it can make first year harder.</p>
-          </div>
-          <div class="guide-entry-checks">
-            ${renderEntryCheck("Prerequisites", primary.prerequisites, "Must confirm")}
-            ${renderEntryCheck("Assumed knowledge", primary.assumed, "Preparation")}
-            ${renderEntryCheck("Extra notes", primary.summary || primary.careers, "Course context")}
-          </div>
-        </section>
-      </div>
-
-      <section class="guide-section-card">
-        <div class="guide-card-head">
-          <h3>Universities to apply for</h3>
-          <p>Keep your first choice first, then add realistic related courses and backup pathways.</p>
+      ${renderPlanSection("Subjects to pick / keep", result.subjectIntro, `
+        <div class="guide-subject-targets">
+          ${result.subjectTargets.map(renderGuideSubjectTarget).join("")}
         </div>
+      `, true)}
+
+      ${renderPlanSection("ATAR and entry checks", "Prerequisites can block entry. Assumed knowledge usually does not block entry, but it can make first year harder.", `
+        <div class="guide-entry-checks">
+          ${renderEntryCheck("Prerequisites", primary.prerequisites, "Must confirm")}
+          ${renderEntryCheck("Assumed knowledge", primary.assumed, "Preparation")}
+          ${renderEntryCheck("Extra notes", primary.summary || primary.careers, "Course context")}
+        </div>
+      `, true)}
+
+      ${renderPlanSection("Universities to apply for through UAC", "Keep your first choice first, then add realistic related courses and backup pathways.", `
         <div class="guide-course-options">
           ${result.options.map((entry, index) => renderGuideCourseOption(entry, index)).join("")}
         </div>
-      </section>
+      `, true)}
 
-      <section class="guide-section-card">
-        <div class="guide-card-head">
-          <h3>Plan to follow</h3>
-          <p>${escapeHtml(result.timelineIntro)}</p>
+      ${renderPlanSection("Jobs this can lead to", "These are broad career signals matched from course titles and career text. Salaries are rough planning ranges.", `
+        <div class="guide-job-grid">
+          ${primaryJobs.map((job) => `<article><strong>${escapeHtml(job.title)}</strong><span>${escapeHtml(job.range)}</span><p>${escapeHtml(job.text || "Build practical experience, internships and projects while studying.")}</p></article>`).join("")}
         </div>
-        <ol class="guide-timeline">
-          ${result.steps.map((step) => `<li><strong>${escapeHtml(step.title)}</strong><p>${escapeHtml(step.text)}</p></li>`).join("")}
-        </ol>
-      </section>
+      `)}
 
-      <section class="guide-section-card">
-        <div class="guide-card-head">
-          <h3>Pathways if direct entry is hard</h3>
-          <p>${escapeHtml(result.pathwayReason)}</p>
-        </div>
+      ${renderPlanSection("Backup and pathway options", result.pathwayReason, `
         <div class="guide-pathway-grid">
           ${result.pathways.map((item) => `
             <a href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">
@@ -532,9 +574,61 @@ function renderGuideResult(result) {
             </a>
           `).join("")}
         </div>
-      </section>
+      `)}
 
-      <p class="guide-disclaimer">How this was made: course title/field/career matches, ATAR fit, provider profile, income signal, subject fit, campus preference and avoid-list penalties. It uses imported UAC records plus public HSC scaling summary data, so final decisions still need official UAC/university confirmation.</p>
+      ${renderPlanSection("Next steps by year group", result.timelineIntro, `
+        <ol class="guide-timeline">
+          ${result.steps.map((step) => `<li><strong>${escapeHtml(step.title)}</strong><p>${escapeHtml(step.text)}</p></li>`).join("")}
+        </ol>
+      `, true)}
+
+      <p class="guide-disclaimer">How this was made: dream job/course matches, ATAR fit, provider profile, income signal, subject fit, preference and avoid-list penalties. It uses imported UAC records plus public HSC scaling summary data, so final decisions still need official UAC/university confirmation.</p>
+    </section>
+  `;
+}
+
+function renderPlanSection(title, intro, body, open = false) {
+  return `
+    <details class="guide-plan-section" ${open ? "open" : ""}>
+      <summary>
+        <span>${escapeHtml(title)}</span>
+        <small>${escapeHtml(intro)}</small>
+      </summary>
+      <div class="guide-section-body">${body}</div>
+    </details>
+  `;
+}
+
+function renderGuideEstimatePanel(estimate) {
+  return `
+    <section class="guide-estimate-panel">
+      <div>
+        <span>Estimated ATAR</span>
+        <strong>${escapeHtml(estimate.atarLabel)}</strong>
+        <small>${escapeHtml(estimate.note)}</small>
+      </div>
+      <div class="guide-estimate-list">
+        ${estimate.subjects.slice(0, 5).map((subject) => `
+          <article class="${subject.impact >= 0 ? "up" : "down"}">
+            <strong>${escapeHtml(subject.name)}</strong>
+            <span>${escapeHtml(formatNumber(subject.scaledTotal, 1))}</span>
+            <small>${subject.impact >= 0 ? "+" : ""}${escapeHtml(formatNumber(subject.impact, 1))} vs break-even line</small>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderTrueRewardCard() {
+  return `
+    <section class="guide-true-reward">
+      <div>
+        <span>Western Sydney pathway check</span>
+        <h3>Consider HSC True Reward?</h3>
+        <p>Because Western Sydney University appears in the recommended options, check HSC True Reward as a backup or early-offer pathway. WSU says it uses Year 11/12 subject results rather than your scaled ATAR, but it is not automatic entry: excluded courses, subject-band rules and official dates must be confirmed on WSU's page.</p>
+      </div>
+      <a href="${trueRewardUrl}" target="_blank" rel="noreferrer">Open WSU HSC True Reward ${icon("external")}</a>
     </section>
   `;
 }
@@ -586,12 +680,26 @@ function bindGuideEvents() {
   window.courseFinderTheme?.bind?.(guideApp);
   const form = guideApp.querySelector("[data-guide-form]");
   form?.addEventListener("input", (event) => {
-    if (!event.target.name) return;
-    guideState[event.target.name] = event.target.value;
+    const target = event.target;
+    if (target.dataset.guideMarkRow) {
+      const row = guideState.subjectsWithMarks.find((item) => item.id === target.dataset.guideMarkRow);
+      if (row) row.mark = target.value;
+      return;
+    }
+    if (!target.name) return;
+    guideState[target.name] = target.value;
   });
   form?.addEventListener("change", (event) => {
-    if (!event.target.name) return;
-    guideState[event.target.name] = event.target.value;
+    const target = event.target;
+    if (target.dataset.guideSubjectRow) {
+      const row = guideState.subjectsWithMarks.find((item) => item.id === target.dataset.guideSubjectRow);
+      if (row) row.subject = target.value;
+      renderGuide({ preserveScroll: true });
+      return;
+    }
+    if (!target.name) return;
+    guideState[target.name] = target.value;
+    if (target.name === "year") renderGuide({ preserveScroll: true });
   });
   form?.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -614,42 +722,51 @@ function bindGuideEvents() {
   });
   guideApp.querySelector("[data-guide-reset]")?.addEventListener("click", () => {
     Object.assign(guideState, {
-      year: "Year 11",
-      goal: "",
-      passions: "",
-      subjects: "",
-      atar: "",
-      income: "Any income",
+      year: "Year 10 or below",
+      dreamJob: "",
+      dreamCourse: "",
+      dreamIncome: "Any income",
       preference: "Balanced plan",
-      campus: "Any Sydney campus",
+      subjectsWithMarks: [createGuideSubjectRow()],
       avoid: "",
       processing: false,
       result: null
     });
     renderGuide({ preserveScroll: true });
   });
-  guideApp.querySelectorAll("[data-guide-goal]").forEach((button) => {
+  guideApp.querySelector("[data-guide-add-subject]")?.addEventListener("click", () => {
+    guideState.subjectsWithMarks.push(createGuideSubjectRow());
+    renderGuide({ preserveScroll: true });
+  });
+  guideApp.querySelectorAll("[data-guide-remove-subject]").forEach((button) => {
     button.addEventListener("click", () => {
-      guideState.goal = button.dataset.guideGoal || "";
+      guideState.subjectsWithMarks = guideState.subjectsWithMarks.filter((row) => row.id !== button.dataset.guideRemoveSubject);
+      if (!guideState.subjectsWithMarks.length) guideState.subjectsWithMarks.push(createGuideSubjectRow());
+      renderGuide({ preserveScroll: true });
+    });
+  });
+  guideApp.querySelectorAll("[data-guide-job]").forEach((button) => {
+    button.addEventListener("click", () => {
+      guideState.dreamJob = button.dataset.guideJob || "";
       guideState.result = null;
       renderGuide({ preserveScroll: true });
-      guideApp.querySelector('input[name="goal"]')?.focus();
+      guideApp.querySelector('input[name="dreamJob"]')?.focus();
     });
   });
 }
 
 function readGuideForm(form) {
   const data = new FormData(form);
-  for (const key of ["year", "goal", "passions", "subjects", "atar", "income", "preference", "campus", "avoid"]) {
+  for (const key of ["year", "dreamJob", "dreamCourse", "dreamIncome", "preference", "avoid"]) {
     guideState[key] = String(data.get(key) || "").trim();
   }
 }
 
 function hasAnyGuideAnswer() {
-  return ["goal", "passions", "subjects", "atar", "avoid"].some((key) => String(guideState[key] || "").trim())
-    || guideState.income !== "Any income"
+  return ["dreamJob", "dreamCourse", "avoid"].some((key) => String(guideState[key] || "").trim())
+    || guideState.dreamIncome !== "Any income"
     || guideState.preference !== "Balanced plan"
-    || guideState.campus !== "Any Sydney campus";
+    || guideState.subjectsWithMarks.some((row) => String(row.subject || row.mark || "").trim());
 }
 
 function buildGuidePlan() {
@@ -660,12 +777,14 @@ function buildGuidePlan() {
   const options = uniqueProviderOptions(ranked, primary.course).slice(0, 5);
   const jobs = courseIncomeOutcomes(primary.course);
   const rank = numericRank(primary.course.atar);
-  const estimatedAtar = parseAtar(values.atar);
+  const estimatedAtar = values.markEstimate?.atarNumber ?? null;
   const targetAtar = rank || estimatedAtar || fallbackAtarForProfile(profile);
   const subjectTargets = buildSubjectTargets(values, profile, primary.course, targetAtar);
   const gap = rank !== null && estimatedAtar !== null ? rank - estimatedAtar : null;
   const pathwayNeeded = gap !== null ? gap > 3 : estimatedAtar !== null && estimatedAtar < 65;
   const providerQuality = guideProviderQuality[profile.label]?.[primary.course.providerId];
+  const reach = courseReachLevel(rank, estimatedAtar);
+  const hasTrueReward = [primary, ...options].some((entry) => entry?.course?.providerId === "WS" || /western sydney/i.test(entry?.course?.university || ""));
 
   return {
     profile,
@@ -673,6 +792,9 @@ function buildGuidePlan() {
     options,
     jobs,
     subjectTargets,
+    markEstimate: values.markEstimate,
+    reach,
+    hasTrueReward,
     entryLine: rank === null
       ? "the ATAR profile needs official confirmation"
       : estimatedAtar === null
@@ -697,19 +819,33 @@ function buildGuidePlan() {
 }
 
 function normalisedGuideValues() {
+  const markEstimate = calculateGuideAtarEstimate(guideState.subjectsWithMarks);
+  const subjectNames = guideState.subjectsWithMarks
+    .map((row) => findGuideSubject(row.subject)?.name || row.subject)
+    .filter(Boolean)
+    .join(", ");
+  const goal = [guideState.dreamJob, guideState.dreamCourse].filter(Boolean).join(" ");
+  const passionSignal = [guideState.dreamJob, guideState.preference, guideState.dreamIncome === "Any income" ? "" : guideState.dreamIncome].filter(Boolean).join(" ");
   return {
-    year: guideState.year || "Year 11",
-    goal: guideState.goal.trim(),
-    passions: guideState.passions.trim(),
-    subjects: guideState.subjects.trim(),
-    atar: guideState.atar.trim(),
-    income: guideState.income || "Any income",
+    year: guideState.year || "Year 10 or below",
+    dreamJob: guideState.dreamJob.trim(),
+    dreamCourse: guideState.dreamCourse.trim(),
+    dreamIncome: guideState.dreamIncome || "Any income",
+    goal: goal.trim(),
+    passions: passionSignal.trim(),
+    subjects: subjectNames,
+    subjectsWithMarks: guideState.subjectsWithMarks,
+    atar: markEstimate.atarNumber === null ? "" : String(markEstimate.atarNumber),
+    income: guideState.dreamIncome || "Any income",
     preference: guideState.preference || "Balanced plan",
-    campus: guideState.campus || "Any Sydney campus",
+    campus: "Any Sydney campus",
     avoid: guideState.avoid.trim(),
-    cleanGoal: cleanSearchText(guideState.goal),
-    cleanPassions: cleanSearchText(guideState.passions),
-    cleanSubjects: cleanSearchText(guideState.subjects),
+    markEstimate,
+    cleanDreamJob: cleanSearchText(guideState.dreamJob),
+    cleanDreamCourse: cleanSearchText(guideState.dreamCourse),
+    cleanGoal: cleanSearchText(goal),
+    cleanPassions: cleanSearchText(passionSignal),
+    cleanSubjects: cleanSearchText(subjectNames),
     cleanPreference: cleanSearchText(guideState.preference),
     cleanAvoid: cleanSearchText(guideState.avoid)
   };
@@ -761,6 +897,8 @@ function isGuideCourseEligible(course) {
 function scoreGuideCourse(course, values, profile) {
   const fields = guideCourseFields(course);
   const query = cleanSearchText([values.goal, values.passions].join(" "));
+  const dreamCourse = values.cleanDreamCourse;
+  const dreamJob = values.cleanDreamJob;
   const queryTokens = tokenise(query).filter((word) => word.length > 1);
   const jobs = courseIncomeOutcomes(course);
   const reasons = [];
@@ -782,16 +920,42 @@ function scoreGuideCourse(course, values, profile) {
     score += wantsPathway ? 4 : -18;
   }
 
+  if (dreamCourse) {
+    if (fields.title === dreamCourse || fields.title.includes(`bachelor of ${dreamCourse}`)) {
+      score += 72;
+      reasons.push("Course title directly matches the dream course.");
+    } else if (fieldPhraseMatch(fields, "title", dreamCourse)) {
+      score += 54;
+      reasons.push("Course title strongly matches the dream course.");
+    } else if (tokenise(dreamCourse).some((word) => fieldTokenMatch(fields, "title", word))) {
+      score += 18;
+      reasons.push("Course title partly matches the dream course.");
+    }
+    if ((/\/|bachelor of .+ and bachelor/.test(fields.title)) && !/law|laws|double|combined/.test(dreamCourse)) {
+      score -= 18;
+    }
+  }
+
+  if (dreamJob) {
+    const jobTokens = tokenise(dreamJob).filter((word) => word.length > 2);
+    const jobHits = jobTokens.filter((word) => fieldTokenMatch(fields, "title", word) || fieldTokenMatch(fields, "careers", word) || fieldTokenMatch(fields, "area", word)).length;
+    score += jobHits * 8;
+    if (jobHits) reasons.push("The course points toward the dream job.");
+    if (/\b(software engineer|software developer|developer|coding|programming)\b/.test(dreamJob) && /\b(law|laws|criminology|justice)\b/.test(fields.title)) {
+      score -= 24;
+    }
+  }
+
   if (query) {
     if (fields.title === query || fields.title.includes(`bachelor of ${query}`)) {
       score += 44;
       reasons.push("Course title closely matches the goal.");
-    } else if (phraseMatch(fields.title, query)) {
+    } else if (fieldPhraseMatch(fields, "title", query)) {
       score += 34;
       reasons.push("Course title matches the goal.");
     }
-    const titleHits = queryTokens.filter((word) => tokenMatch(fields.title, word)).length;
-    const fieldHits = queryTokens.filter((word) => tokenMatch(fields.area, word) || tokenMatch(fields.careers, word)).length;
+    const titleHits = queryTokens.filter((word) => fieldTokenMatch(fields, "title", word)).length;
+    const fieldHits = queryTokens.filter((word) => fieldTokenMatch(fields, "area", word) || fieldTokenMatch(fields, "careers", word)).length;
     score += titleHits * 9 + fieldHits * 5;
     if (titleHits || fieldHits) reasons.push("Keywords match the course field or career outcomes.");
   }
@@ -838,10 +1002,10 @@ function topicScoreForCourse(course, profile) {
   const fields = guideCourseFields(course);
   return profile.cleanKeywords.reduce((sum, keyword) => {
     if (!keyword) return sum;
-    if (phraseMatch(fields.title, keyword)) return sum + 17;
-    if (phraseMatch(fields.area, keyword)) return sum + 11;
-    if (phraseMatch(fields.careers, keyword)) return sum + 7;
-    if (phraseMatch(fields.summary, keyword)) return sum + 3;
+    if (fieldPhraseMatch(fields, "title", keyword)) return sum + 17;
+    if (fieldPhraseMatch(fields, "area", keyword)) return sum + 11;
+    if (fieldPhraseMatch(fields, "careers", keyword)) return sum + 7;
+    if (fieldPhraseMatch(fields, "summary", keyword)) return sum + 3;
     return sum;
   }, 0);
 }
@@ -876,8 +1040,8 @@ function subjectFitScore(fields, cleanSubjects, profile) {
   if (!source) return 0;
   const subjectTokens = tokenise(source).filter((word) => word.length > 2);
   return subjectTokens.reduce((sum, word) => {
-    if (tokenMatch(fields.title, word)) return sum + 2.8;
-    if (tokenMatch(fields.area, word) || tokenMatch(fields.assumed, word) || tokenMatch(fields.prerequisites, word)) return sum + 1.4;
+    if (fieldTokenMatch(fields, "title", word)) return sum + 2.8;
+    if (fieldTokenMatch(fields, "area", word) || fieldTokenMatch(fields, "assumed", word) || fieldTokenMatch(fields, "prerequisites", word)) return sum + 1.4;
     return sum;
   }, 0);
 }
@@ -932,9 +1096,16 @@ function preferenceFitScore(course, jobs, values, profile) {
   const rank = numericRank(course.atar);
   let score = 0;
   if (/easiest job that pays a lot/.test(preference)) {
+    const broadEasyRequest = !values.cleanDreamCourse && !values.cleanDreamJob;
     score += jobs[0] ? jobs[0].max / 12000 : 0;
     if (rank !== null) score += Math.max(0, 90 - rank) / 7;
-    if (/medicine|law|architecture/.test(fields.title)) score -= 5;
+    if (/information technology|information systems|business analytics|data analytics|construction management|project management|cyber security|business information systems/.test(fields.primary)) score += 18;
+    if (broadEasyRequest && /information technology|information systems|business analytics|data analytics|construction management|project management|cyber security|business information systems/.test(fields.primary)) score += 18;
+    if (/\bcommerce\b|\bbusiness\b/.test(fields.title) && !/advanced studies|laws|law|engineering/.test(fields.title)) score += 8;
+    if (/advanced studies|advanced science|honours|double degree|\/|bachelor of .+ and bachelor|laws|law|medicine|architecture/.test(fields.title)) score -= 18;
+    if (broadEasyRequest && /(science|engineering|advanced|honours|bachelor of .+ and bachelor)/.test(fields.title)) score -= 20;
+    if (/medicine|law|architecture|actuarial|pharmacy|physiotherapy|occupational therapy|paramedicine|midwifery|veterinary|advanced mathematics/.test(fields.title)) score -= 12;
+    if (/placement|clinical|portfolio|audition|interview|chemistry|mathematics extension|physics/.test(fields.prerequisites)) score -= 6;
   }
   if (/highest income/.test(preference)) score += jobs[0] ? jobs[0].max / 9000 : 0;
   if (/safest entry/.test(preference) && rank !== null) score += Math.max(0, 85 - rank) / 4;
@@ -1047,7 +1218,7 @@ function subjectReason(profile, subjectName) {
 }
 
 function requiredSubjectsFromCourse(course) {
-  const text = cleanSearchText([course.prerequisites, course.assumed, course.summary].join(" "));
+  const text = cleanSearchText(course.prerequisites || "");
   const matches = [];
   for (const subject of hscSubjects) {
     const cleanName = cleanSearchText(subject.name);
@@ -1180,25 +1351,43 @@ function sameSubject(a, b) {
 
 function guideCourseFields(course) {
   if (guideFieldCache.has(course)) return guideFieldCache.get(course);
+  const title = cleanSearchText(course.name);
+  const provider = cleanSearchText(course.university);
+  const campus = cleanSearchText(course.campus);
+  const area = cleanSearchText(course.area);
+  const summary = cleanSearchText(course.summary);
+  const careers = cleanSearchText(course.careers);
+  const prerequisites = cleanSearchText(course.prerequisites);
+  const assumed = cleanSearchText(course.assumed);
+  const primary = cleanSearchText([
+    course.name,
+    course.university,
+    course.campus,
+    course.area,
+    course.summary,
+    course.careers,
+    course.prerequisites,
+    course.assumed
+  ].join(" "));
   const fields = {
-    title: cleanSearchText(course.name),
-    provider: cleanSearchText(course.university),
-    campus: cleanSearchText(course.campus),
-    area: cleanSearchText(course.area),
-    summary: cleanSearchText(course.summary),
-    careers: cleanSearchText(course.careers),
-    prerequisites: cleanSearchText(course.prerequisites),
-    assumed: cleanSearchText(course.assumed),
-    primary: cleanSearchText([
-      course.name,
-      course.university,
-      course.campus,
-      course.area,
-      course.summary,
-      course.careers,
-      course.prerequisites,
-      course.assumed
-    ].join(" "))
+    title,
+    provider,
+    campus,
+    area,
+    summary,
+    careers,
+    prerequisites,
+    assumed,
+    primary,
+    titleTokens: new Set(tokenise(title)),
+    providerTokens: new Set(tokenise(provider)),
+    campusTokens: new Set(tokenise(campus)),
+    areaTokens: new Set(tokenise(area)),
+    summaryTokens: new Set(tokenise(summary)),
+    careersTokens: new Set(tokenise(careers)),
+    prerequisitesTokens: new Set(tokenise(prerequisites)),
+    assumedTokens: new Set(tokenise(assumed)),
+    primaryTokens: new Set(tokenise(primary))
   };
   guideFieldCache.set(course, fields);
   return fields;
@@ -1211,9 +1400,9 @@ function courseIncomeOutcomes(course) {
     .map((profile) => {
       const titleHit = fields.title.includes(profile.cleanTitle) ? 20 : 0;
       const keywordHits = profile.cleanKeywords.reduce((sum, keyword) => {
-        if (phraseMatch(fields.careers, keyword)) return sum + 16;
-        if (phraseMatch(fields.title, keyword)) return sum + 10;
-        if (phraseMatch(fields.primary, keyword)) return sum + 4;
+        if (fieldPhraseMatch(fields, "careers", keyword)) return sum + 16;
+        if (fieldPhraseMatch(fields, "title", keyword)) return sum + 10;
+        if (fieldPhraseMatch(fields, "primary", keyword)) return sum + 4;
         return sum;
       }, 0);
       return { ...profile, score: titleHit + keywordHits };
@@ -1233,6 +1422,25 @@ function courseIncomeOutcomes(course) {
   return outcomes;
 }
 
+function scheduleGuidePrewarm() {
+  if (guidePrewarmStarted) return;
+  guidePrewarmStarted = true;
+  window.setTimeout(runGuidePrewarmChunk, 80);
+}
+
+function runGuidePrewarmChunk() {
+  const startedAt = Date.now();
+  while (guidePrewarmIndex < guideCourses.length && Date.now() - startedAt < 12) {
+    const course = guideCourses[guidePrewarmIndex];
+    guideCourseFields(course);
+    courseIncomeOutcomes(course);
+    guidePrewarmIndex += 1;
+  }
+  if (guidePrewarmIndex < guideCourses.length) {
+    window.setTimeout(runGuidePrewarmChunk, 24);
+  }
+}
+
 function providerOverallScore(providerId) {
   const scores = Object.values(guideProviderQuality)
     .map((area) => area[providerId]?.score)
@@ -1240,6 +1448,106 @@ function providerOverallScore(providerId) {
   if (scores.length) return scores.reduce((sum, score) => sum + score, 0) / scores.length;
   const provider = guideProviders.find((item) => item.id === providerId);
   return provider ? Math.min(70, 42 + (provider.courseCount || 0) * 0.08) : 55;
+}
+
+function calculateGuideAtarEstimate(rows) {
+  const entries = [];
+  const bySubject = new Map();
+  for (const row of rows || []) {
+    const subject = findGuideSubject(row.subject);
+    const rawMark = Number(row.mark);
+    if (!subject || !Number.isFinite(rawMark)) continue;
+    const max = subject.units * 50;
+    const hscTotal = clamp(rawMark, 0, max);
+    const scaledPerUnit = estimateScaledPerUnit(subject, hscTotal / subject.units);
+    const entry = {
+      name: subject.name,
+      units: subject.units,
+      hscTotal,
+      scaledPerUnit,
+      scaledTotal: scaledPerUnit * subject.units,
+      impact: scaledPerUnit * subject.units - 25 * subject.units,
+      isEnglish: /english/i.test(subject.name)
+    };
+    const existing = bySubject.get(subject.name);
+    if (!existing || entry.scaledTotal > existing.scaledTotal) bySubject.set(subject.name, entry);
+  }
+  entries.push(...bySubject.values());
+  if (!entries.length) {
+    return {
+      hasMarks: false,
+      atarNumber: null,
+      atarLabel: "No marks yet",
+      aggregate: null,
+      note: "Add marks if you want the Guide to estimate reach level.",
+      subjects: []
+    };
+  }
+
+  const counted = [];
+  const bestEnglish = entries.filter((entry) => entry.isEnglish).sort((a, b) => b.scaledTotal - a.scaledTotal)[0];
+  if (bestEnglish) counted.push({ ...bestEnglish, countedUnits: Math.min(2, bestEnglish.units) });
+  const remaining = entries
+    .filter((entry) => entry.name !== bestEnglish?.name)
+    .sort((a, b) => b.scaledPerUnit - a.scaledPerUnit || b.scaledTotal - a.scaledTotal);
+  for (const entry of remaining) {
+    const usedUnits = counted.reduce((sum, item) => sum + item.countedUnits, 0);
+    if (usedUnits >= 10) break;
+    counted.push({ ...entry, countedUnits: Math.min(entry.units, 10 - usedUnits) });
+  }
+
+  const countedUnits = counted.reduce((sum, item) => sum + item.countedUnits, 0);
+  const countedAggregate = counted.reduce((sum, item) => sum + item.scaledPerUnit * item.countedUnits, 0);
+  const missingUnits = Math.max(0, 10 - countedUnits);
+  const assumedAggregate = countedAggregate + missingUnits * 25;
+  const atarNumber = estimateAtarFromAggregate(assumedAggregate);
+  const warnings = [];
+  if (!bestEnglish) warnings.push("Official ATAR eligibility needs English units.");
+  if (missingUnits > 0) warnings.push(`${formatNumber(missingUnits, 0)} missing units assumed at the neutral break-even line.`);
+
+  return {
+    hasMarks: true,
+    atarNumber,
+    atarLabel: atarNumber === null ? "Not enough data" : formatAtar(atarNumber),
+    aggregate: assumedAggregate,
+    note: warnings.length ? warnings.join(" ") : "Uses your best 10 eligible units, including English.",
+    subjects: entries.sort((a, b) => b.scaledTotal - a.scaledTotal)
+  };
+}
+
+function estimateAtarFromAggregate(aggregate) {
+  const value = Number(aggregate);
+  if (!Number.isFinite(value) || !atarThresholds.length) return null;
+  const sorted = [...atarThresholds].sort((a, b) => b.aggregate - a.aggregate);
+  const highest = sorted[0];
+  const lowest = sorted[sorted.length - 1];
+  if (value >= highest.aggregate) return highest.atar;
+  if (value <= lowest.aggregate) return lowest.atar;
+  for (let index = 1; index < sorted.length; index += 1) {
+    const high = sorted[index - 1];
+    const low = sorted[index];
+    if (value <= high.aggregate && value >= low.aggregate) {
+      const ratio = (value - low.aggregate) / (high.aggregate - low.aggregate);
+      return low.atar + ratio * (high.atar - low.atar);
+    }
+  }
+  return null;
+}
+
+function courseReachLevel(rank, estimate) {
+  if (rank === null && estimate === null) {
+    return { label: "Check", text: "No numeric course profile or mark estimate yet." };
+  }
+  if (rank === null) {
+    return { label: "Check", text: "The course has no numeric imported ATAR profile, so confirm entry rules." };
+  }
+  if (estimate === null) {
+    return { label: "Target", text: `Use ${displayRank(rank)} as the planning target until marks are entered.` };
+  }
+  const gap = rank - estimate;
+  if (gap <= 0) return { label: "Likely", text: `Your estimate is at or above the imported ${displayRank(rank)} profile.` };
+  if (gap <= 5) return { label: "Stretch", text: `About ${formatAtar(gap)} ATAR points above the estimate. Keep backups.` };
+  return { label: "Pathway", text: `About ${formatAtar(gap)} above the estimate. Build lower-entry and pathway options.` };
 }
 
 function aggregateForAtar(targetAtar) {
@@ -1429,6 +1737,18 @@ function normaliseSubjectDisplay(value) {
     .replace(/\bPDHPE\b/gi, "HMS");
 }
 
+function fieldPhraseMatch(fields, key, phrase) {
+  const cleanPhrase = cleanSearchText(phrase);
+  if (!cleanPhrase) return false;
+  const phraseTokens = tokenise(cleanPhrase);
+  if (phraseTokens.length === 1) return fieldTokenMatch(fields, key, phraseTokens[0]);
+  return String(fields[key] || "").includes(cleanPhrase);
+}
+
+function fieldTokenMatch(fields, key, word) {
+  return tokenSetHas(fields[`${key}Tokens`], word);
+}
+
 function phraseMatch(text, phrase) {
   const cleanPhrase = cleanSearchText(phrase);
   if (!cleanPhrase) return false;
@@ -1439,6 +1759,11 @@ function phraseMatch(text, phrase) {
 
 function tokenMatch(text, word) {
   const tokens = new Set(tokenise(text));
+  return tokenSetHas(tokens, word);
+}
+
+function tokenSetHas(tokens, word) {
+  if (!tokens) return false;
   return [...tokenVariants(word)].some((variant) => tokens.has(variant));
 }
 

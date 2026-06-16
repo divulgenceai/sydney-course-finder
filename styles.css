@@ -4440,6 +4440,107 @@ input[type="range"] {
   outline: 0;
 }
 
+.guide-year-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.guide-year-note strong {
+  color: var(--text);
+}
+
+.guide-mark-panel,
+.guide-optional,
+.guide-plan-section,
+.guide-estimate-panel,
+.guide-true-reward {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.guide-mark-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.guide-mark-head,
+.guide-true-reward,
+.guide-estimate-panel {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.guide-mark-head h3,
+.guide-true-reward h3 {
+  margin-bottom: 4px;
+}
+
+.guide-mark-head p,
+.guide-true-reward p,
+.guide-estimate-panel small {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.guide-mark-rows {
+  display: grid;
+  gap: 10px;
+}
+
+.guide-mark-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(140px, 0.55fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.guide-row-remove:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.guide-optional {
+  padding: 0;
+  overflow: hidden;
+}
+
+.guide-optional summary,
+.guide-plan-section summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.guide-optional summary::-webkit-details-marker,
+.guide-plan-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.guide-optional summary {
+  padding: 12px 14px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.guide-optional .guide-field {
+  padding: 0 14px 14px;
+}
+
 .guide-actions,
 .guide-quick,
 .guide-link-row {
@@ -4701,6 +4802,62 @@ input[type="range"] {
   background: linear-gradient(90deg, var(--accent), #38bdf8);
 }
 
+.guide-estimate-panel {
+  align-items: stretch;
+  padding: 14px;
+  background: linear-gradient(135deg, #f8fbff, #fff);
+}
+
+.guide-estimate-panel > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 190px;
+}
+
+.guide-estimate-panel span,
+.guide-true-reward span {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.guide-estimate-panel strong {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.guide-estimate-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: min(100%, 660px);
+}
+
+.guide-estimate-list article {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.guide-estimate-list article.up {
+  border-color: #bfdbfe;
+}
+
+.guide-estimate-list article.down {
+  border-color: #fecaca;
+}
+
+.guide-estimate-list article span {
+  color: var(--text);
+  font-size: 18px;
+  text-transform: none;
+}
+
 .guide-section-row {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
@@ -4711,6 +4868,45 @@ input[type="range"] {
   display: grid;
   gap: 13px;
   padding: 16px;
+}
+
+.guide-plan-section {
+  overflow: hidden;
+}
+
+.guide-plan-section summary {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 15px;
+}
+
+.guide-plan-section summary span {
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.guide-plan-section summary small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.guide-plan-section summary::after {
+  justify-self: end;
+  color: var(--accent);
+  content: "Open";
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.guide-plan-section[open] summary::after {
+  content: "Close";
+}
+
+.guide-section-body {
+  padding: 0 15px 15px;
 }
 
 .guide-card-head {
@@ -4894,6 +5090,54 @@ input[type="range"] {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.guide-job-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.guide-job-grid article {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.guide-job-grid span {
+  color: var(--accent);
+  font-weight: 900;
+}
+
+.guide-job-grid p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.guide-true-reward {
+  padding: 16px;
+  background: linear-gradient(135deg, #eff6ff, #fff);
+}
+
+.guide-true-reward a {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--accent);
+  font-weight: 900;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 .guide-pathway-grid a {
   display: grid;
   gap: 6px;
@@ -4948,13 +5192,21 @@ input[type="range"] {
 :root[data-theme="dark"] .guide-score-card,
 :root[data-theme="dark"] .guide-plan-card,
 :root[data-theme="dark"] .guide-section-card,
+:root[data-theme="dark"] .guide-plan-section,
+:root[data-theme="dark"] .guide-mark-panel,
+:root[data-theme="dark"] .guide-optional,
+:root[data-theme="dark"] .guide-estimate-panel,
+:root[data-theme="dark"] .guide-true-reward,
 :root[data-theme="dark"] .guide-subject-target,
 :root[data-theme="dark"] .guide-course-option,
 :root[data-theme="dark"] .guide-entry-checks article,
+:root[data-theme="dark"] .guide-job-grid article,
+:root[data-theme="dark"] .guide-estimate-list article,
 :root[data-theme="dark"] .guide-empty-steps span,
 :root[data-theme="dark"] .guide-link-row a,
 :root[data-theme="dark"] .guide-course-option a,
-:root[data-theme="dark"] .guide-pathway-grid a {
+:root[data-theme="dark"] .guide-pathway-grid a,
+:root[data-theme="dark"] .guide-true-reward a {
   border-color: var(--line);
   background: var(--surface-strong);
   color: var(--text);
@@ -4964,6 +5216,8 @@ input[type="range"] {
 :root[data-theme="dark"] .guide-plan-card dl div,
 :root[data-theme="dark"] .guide-entry-checks article.has-info,
 :root[data-theme="dark"] .guide-timeline li,
+:root[data-theme="dark"] .guide-mark-row,
+:root[data-theme="dark"] .guide-year-note,
 :root[data-theme="dark"] .guide-quick button {
   border-color: var(--line);
   background: var(--surface);
@@ -4990,6 +5244,10 @@ input[type="range"] {
 :root[data-theme="dark"] .guide-score-card strong,
 :root[data-theme="dark"] .guide-mini-list em,
 :root[data-theme="dark"] .guide-course-option em,
+:root[data-theme="dark"] .guide-job-grid span,
+:root[data-theme="dark"] .guide-true-reward span,
+:root[data-theme="dark"] .guide-estimate-panel span,
+:root[data-theme="dark"] .guide-true-reward a,
 :root[data-theme="dark"] .guide-link-row a,
 :root[data-theme="dark"] .guide-pathway-grid a,
 :root[data-theme="dark"] .guide-course-option a {
@@ -5000,10 +5258,21 @@ input[type="range"] {
   .guide-question-grid,
   .guide-result-head,
   .guide-plan-grid,
+  .guide-mark-row,
+  .guide-estimate-list,
+  .guide-plan-section summary,
   .guide-section-row,
+  .guide-job-grid,
   .guide-subject-targets,
   .guide-pathway-grid {
     grid-template-columns: 1fr;
+  }
+
+  .guide-mark-head,
+  .guide-estimate-panel,
+  .guide-true-reward {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .guide-empty {
@@ -5054,15 +5323,22 @@ input[type="range"] {
 
   .guide-result-head,
   .guide-plan-card,
+  .guide-plan-section summary,
   .guide-section-card {
     gap: 11px;
   }
 
   .guide-score-card,
   .guide-plan-card,
+  .guide-plan-section,
+  .guide-mark-panel,
+  .guide-estimate-panel,
+  .guide-true-reward,
   .guide-section-card,
   .guide-subject-target,
   .guide-entry-checks article,
+  .guide-job-grid article,
+  .guide-estimate-list article,
   .guide-course-option {
     padding: 12px;
   }
