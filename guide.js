@@ -278,6 +278,35 @@ const guidePreferences = [
   "Flexible pathway"
 ];
 const guideCampuses = ["Any Sydney campus", "City / inner Sydney", "Western Sydney", "North Sydney / Macquarie", "Online or flexible"];
+const guideSchoolLevels = [
+  "Not sure yet",
+  "Consistently strong",
+  "Above average",
+  "Around average",
+  "Building momentum",
+  "Needs a pathway plan"
+];
+const guideSchoolLevelEstimates = {
+  "Consistently strong": { atar: 88, label: "Strong school tracking", text: "Used as a planning signal only because you have not entered senior marks yet." },
+  "Above average": { atar: 78, label: "Above-average tracking", text: "Used as a planning signal only because you have not entered senior marks yet." },
+  "Around average": { atar: 68, label: "Average tracking", text: "Used as a planning signal only because you have not entered senior marks yet." },
+  "Building momentum": { atar: 58, label: "Building momentum", text: "Used to keep the plan realistic and pathway-aware before senior marks exist." },
+  "Needs a pathway plan": { atar: 50, label: "Pathway-first planning", text: "Used to prioritise accessible courses and backup pathways before senior marks exist." }
+};
+const guideTermFields = {
+  year11: [
+    { key: "y11Term1", label: "Y11 T1" },
+    { key: "y11Term2", label: "Y11 T2" },
+    { key: "y11Term3", label: "Y11 T3" },
+    { key: "y11Term4", label: "Y11 T4" }
+  ],
+  year12: [
+    { key: "y12Term1", label: "Y12 T1" },
+    { key: "y12Term2", label: "Y12 T2" },
+    { key: "y12Term3", label: "Y12 T3" },
+    { key: "y12Term4", label: "Y12 T4" }
+  ]
+};
 const trueRewardUrl = "https://www.westernsydney.edu.au/future/study/application-pathways/hsc-true-reward";
 let guideSubjectRowId = 0;
 
@@ -286,6 +315,8 @@ const guideState = {
   dreamJob: new URLSearchParams(window.location.search).get("q") || "",
   dreamCourse: "",
   dreamIncome: "Any income",
+  passions: "",
+  schoolPerformance: "Not sure yet",
   preference: "Balanced plan",
   subjectsWithMarks: [createGuideSubjectRow()],
   avoid: "",
@@ -348,6 +379,8 @@ function renderGuide(options = {}) {
             ${renderGuideInput("dreamJob", "Dream job", "text", "Example: software engineer, nurse, high-paying office job", guideState.dreamJob)}
             ${renderGuideInput("dreamCourse", "Dream course", "text", "Example: computer science, nursing, business analytics", guideState.dreamCourse)}
             ${renderGuideSelect("dreamIncome", "Dream income", guideIncomeOptions, guideState.dreamIncome)}
+            ${renderGuideInput("passions", "What are you passionate about?", "text", "Example: coding, helping people, business, design, sport", guideState.passions)}
+            ${guideState.year === "Year 10 or below" ? renderGuideSelect("schoolPerformance", "How are you tracking at school?", guideSchoolLevels, guideState.schoolPerformance) : ""}
             ${renderGuideSelect("preference", "Preference", guidePreferences, guideState.preference)}
           </div>
           ${renderGuideSubjectMarks()}
@@ -403,18 +436,19 @@ function renderGuideSubjectMarks() {
     return `
       <div class="guide-year-note">
         <strong>Subject picking comes next.</strong>
-        <span>For Year 10 or below, the plan recommends Year 11/12 subjects after it sees the job, course, income and preference.</span>
+        <span>For Year 10 or below, the plan recommends Year 11/12 subjects after it sees the job, course, income, passions and school tracking.</span>
       </div>
     `;
   }
   const rows = guideState.subjectsWithMarks.length ? guideState.subjectsWithMarks : [createGuideSubjectRow()];
   guideState.subjectsWithMarks = rows;
+  const isYear12 = guideState.year === "Year 12";
   return `
     <section class="guide-mark-panel" aria-label="Current subjects and marks">
       <div class="guide-mark-head">
         <div>
-          <h3>Current subjects and marks</h3>
-          <p>Optional. Add your subjects now; add marks only if you want an estimated ATAR and course reach level.</p>
+          <h3>${isYear12 ? "Year 11 and Year 12 marks so far" : "Year 11 subjects and marks so far"}</h3>
+          <p>${isYear12 ? "Optional. Add Year 11 marks and any Year 12 term marks you have. The Guide weights Year 12 more when projecting." : "Optional. Add term marks you have so far. The Guide will estimate a rough ATAR direction from the filled terms."}</p>
         </div>
         <button type="button" class="clear-btn" data-guide-add-subject>Add subject</button>
       </div>
@@ -428,6 +462,8 @@ function renderGuideSubjectMarks() {
 function renderGuideSubjectRow(row, index) {
   const selectedSubject = findGuideSubject(row.subject);
   const maxMark = selectedSubject?.units === 1 ? 50 : 100;
+  const projection = projectedMarkForGuideRow(row, selectedSubject);
+  const termFields = guideTermFieldsForYear(guideState.year);
   return `
     <div class="guide-mark-row" data-guide-row="${row.id}">
       <label class="guide-field">
@@ -437,10 +473,19 @@ function renderGuideSubjectRow(row, index) {
           ${hscSubjects.map((subject) => `<option value="${escapeHtml(subject.name)}" ${subject.name === row.subject ? "selected" : ""}>${escapeHtml(subject.name)}</option>`).join("")}
         </select>
       </label>
-      <label class="guide-field">
-        <span>Expected mark</span>
-        <input type="number" inputmode="decimal" min="0" max="${maxMark}" step="0.5" value="${escapeHtml(row.mark)}" placeholder="Optional /${maxMark}" data-guide-mark-row="${row.id}" />
-      </label>
+      <div class="guide-term-grid" aria-label="Term marks for subject ${index + 1}">
+        ${termFields.map((term) => `
+          <label class="guide-term-field">
+            <span>${escapeHtml(term.label)}</span>
+            <input type="number" inputmode="decimal" min="0" max="${maxMark}" step="0.5" value="${escapeHtml(row[term.key] || "")}" placeholder="/${maxMark}" data-guide-term-row="${row.id}" data-guide-term-key="${escapeHtml(term.key)}" />
+          </label>
+        `).join("")}
+      </div>
+      <div class="guide-row-summary">
+        <span>Projected mark</span>
+        <strong>${projection.hasMarks ? `${escapeHtml(formatNumber(projection.mark, 1))}/${maxMark}` : "No marks yet"}</strong>
+        <small>${escapeHtml(projection.note)}</small>
+      </div>
       <button type="button" class="clear-btn guide-row-remove" data-guide-remove-subject="${row.id}" ${guideState.subjectsWithMarks.length <= 1 ? "disabled" : ""}>Remove</button>
     </div>
   `;
@@ -448,7 +493,92 @@ function renderGuideSubjectRow(row, index) {
 
 function createGuideSubjectRow(subject = "", mark = "") {
   guideSubjectRowId += 1;
-  return { id: `subject-${guideSubjectRowId}`, subject, mark };
+  const row = {
+    id: `subject-${guideSubjectRowId}`,
+    subject,
+    y11Term1: "",
+    y11Term2: "",
+    y11Term3: "",
+    y11Term4: "",
+    y12Term1: "",
+    y12Term2: "",
+    y12Term3: "",
+    y12Term4: ""
+  };
+  if (mark !== "") row.y12Term1 = mark;
+  return row;
+}
+
+function guideTermFieldsForYear(year) {
+  if (year === "Year 12") return [...guideTermFields.year11, ...guideTermFields.year12];
+  return guideTermFields.year11;
+}
+
+function projectedMarkForGuideRow(row, subject = findGuideSubject(row.subject)) {
+  const maxMark = subject?.units === 1 ? 50 : 100;
+  const year11 = guideTermFields.year11
+    .map((term) => parseGuideTermMark(row?.[term.key], maxMark))
+    .filter((value) => value !== null);
+  const year12 = guideTermFields.year12
+    .map((term) => parseGuideTermMark(row?.[term.key], maxMark))
+    .filter((value) => value !== null);
+  const legacyMark = Number(row?.mark);
+  if (!year11.length && !year12.length && Number.isFinite(legacyMark)) {
+    return {
+      hasMarks: true,
+      mark: clamp(legacyMark, 0, maxMark),
+      count: 1,
+      note: "Uses the old expected mark saved for this row."
+    };
+  }
+  const average = (items) => items.reduce((sum, value) => sum + value, 0) / items.length;
+  if (guideState.year === "Year 12") {
+    if (year12.length && year11.length) {
+      return {
+        hasMarks: true,
+        mark: clamp(average(year12) * 0.7 + average(year11) * 0.3, 0, maxMark),
+        count: year11.length + year12.length,
+        note: "Year 12 terms weighted 70%, Year 11 terms 30%."
+      };
+    }
+    if (year12.length) {
+      return {
+        hasMarks: true,
+        mark: clamp(average(year12), 0, maxMark),
+        count: year12.length,
+        note: "Uses the Year 12 terms entered so far."
+      };
+    }
+    if (year11.length) {
+      return {
+        hasMarks: true,
+        mark: clamp(average(year11), 0, maxMark),
+        count: year11.length,
+        note: "Uses Year 11 marks until Year 12 terms are added."
+      };
+    }
+  }
+  if (year11.length) {
+    return {
+      hasMarks: true,
+      mark: clamp(average(year11), 0, maxMark),
+      count: year11.length,
+      note: `Uses ${year11.length} Year 11 term${year11.length === 1 ? "" : "s"}.`
+    };
+  }
+  return {
+    hasMarks: false,
+    mark: null,
+    count: 0,
+    note: "Add any term marks you have."
+  };
+}
+
+function parseGuideTermMark(value, maxMark) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const number = Number(text);
+  return Number.isFinite(number) ? clamp(number, 0, maxMark) : null;
 }
 
 function needsGuideSubjectMarks() {
@@ -492,7 +622,7 @@ function renderGuideResult(result) {
         <div>
           <span class="guide-pill">${escapeHtml(result.profile.label)}</span>
           <h2>Best direction: ${escapeHtml(primary.name)}</h2>
-          <p>${escapeHtml(primary.name)} at ${escapeHtml(primary.university)} is the strongest first plan because it fits your job/course intent, ${escapeHtml(result.entryLine.toLowerCase())}, and the preference you gave.${escapeHtml(providerNote)}</p>
+          <p>${escapeHtml(primary.name)} at ${escapeHtml(primary.university)} is the strongest first plan because it fits your job/course/passion signals, ${escapeHtml(result.entryLine.toLowerCase())}, and the preference you gave.${escapeHtml(providerNote)}</p>
         </div>
         <div class="guide-score-card">
           <span>Course reach</span>
@@ -537,6 +667,7 @@ function renderGuideResult(result) {
       </div>
 
       ${result.markEstimate?.hasMarks ? renderGuideEstimatePanel(result.markEstimate) : ""}
+      ${!result.markEstimate?.hasMarks && result.schoolEstimate?.hasEstimate ? renderGuideSchoolPanel(result.schoolEstimate) : ""}
       ${result.hasTrueReward ? renderTrueRewardCard() : ""}
 
       ${renderPlanSection("Subjects to pick / keep", result.subjectIntro, `
@@ -582,7 +713,8 @@ function renderGuideResult(result) {
         </ol>
       `, true)}
 
-      <p class="guide-disclaimer">How this was made: dream job/course matches, ATAR fit, provider profile, income signal, subject fit, preference and avoid-list penalties. It uses imported UAC records plus public HSC scaling summary data, so final decisions still need official UAC/university confirmation.</p>
+      <p class="guide-disclaimer">How this was made: dream job/course/passion matches, projected ATAR or school-tracking fit, provider profile, income signal, subject fit, preference and avoid-list penalties. It uses imported UAC records plus public HSC scaling summary data, so final decisions still need official UAC/university confirmation.</p>
+      ${renderGuideEasNote()}
     </section>
   `;
 }
@@ -603,7 +735,7 @@ function renderGuideEstimatePanel(estimate) {
   return `
     <section class="guide-estimate-panel">
       <div>
-        <span>Estimated ATAR</span>
+        <span>Projected ATAR from marks</span>
         <strong>${escapeHtml(estimate.atarLabel)}</strong>
         <small>${escapeHtml(estimate.note)}</small>
       </div>
@@ -612,9 +744,35 @@ function renderGuideEstimatePanel(estimate) {
           <article class="${subject.impact >= 0 ? "up" : "down"}">
             <strong>${escapeHtml(subject.name)}</strong>
             <span>${escapeHtml(formatNumber(subject.scaledTotal, 1))}</span>
-            <small>${subject.impact >= 0 ? "+" : ""}${escapeHtml(formatNumber(subject.impact, 1))} vs break-even line</small>
+            <small>${escapeHtml(formatNumber(subject.projectedMark, 1))}/${subject.maxMark} projected. ${subject.impact >= 0 ? "+" : ""}${escapeHtml(formatNumber(subject.impact, 1))} vs break-even line</small>
           </article>
         `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderGuideSchoolPanel(estimate) {
+  return `
+    <section class="guide-estimate-panel guide-school-panel">
+      <div>
+        <span>School tracking signal</span>
+        <strong>${escapeHtml(estimate.atarLabel)}</strong>
+        <small>${escapeHtml(estimate.text)}</small>
+      </div>
+      <p>This is not an ATAR prediction. It only helps the Guide avoid suggesting courses that are wildly unrealistic before Year 11/12 marks exist.</p>
+    </section>
+  `;
+}
+
+function renderGuideEasNote() {
+  return `
+    <section class="guide-eas-note">
+      <strong>EAS and adjustment reminder</strong>
+      <p>You may be eligible for EAS, subject adjustments, location adjustments, SRS or other selection-rank schemes depending on your circumstances, school, course and uni. This Guide does not add those points to your projected ATAR or recommendations because they are provider-specific and need official checking.</p>
+      <div>
+        <a href="https://www.uac.edu.au/future-applicants/scholarships-and-schemes/educational-access-schemes" target="_blank" rel="noreferrer">Check EAS ${icon("external")}</a>
+        <a href="https://www.uac.edu.au/future-applicants/admission-criteria/university-selection-rank-adjustments/" target="_blank" rel="noreferrer">Check adjustments ${icon("external")}</a>
       </div>
     </section>
   `;
@@ -681,6 +839,11 @@ function bindGuideEvents() {
   const form = guideApp.querySelector("[data-guide-form]");
   form?.addEventListener("input", (event) => {
     const target = event.target;
+    if (target.dataset.guideTermRow) {
+      const row = guideState.subjectsWithMarks.find((item) => item.id === target.dataset.guideTermRow);
+      if (row && target.dataset.guideTermKey) row[target.dataset.guideTermKey] = target.value;
+      return;
+    }
     if (target.dataset.guideMarkRow) {
       const row = guideState.subjectsWithMarks.find((item) => item.id === target.dataset.guideMarkRow);
       if (row) row.mark = target.value;
@@ -699,7 +862,10 @@ function bindGuideEvents() {
     }
     if (!target.name) return;
     guideState[target.name] = target.value;
-    if (target.name === "year") renderGuide({ preserveScroll: true });
+    if (target.name === "year") {
+      if (guideState.year !== "Year 10 or below") guideState.schoolPerformance = "Not sure yet";
+      renderGuide({ preserveScroll: true });
+    }
   });
   form?.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -726,6 +892,8 @@ function bindGuideEvents() {
       dreamJob: "",
       dreamCourse: "",
       dreamIncome: "Any income",
+      passions: "",
+      schoolPerformance: "Not sure yet",
       preference: "Balanced plan",
       subjectsWithMarks: [createGuideSubjectRow()],
       avoid: "",
@@ -757,16 +925,23 @@ function bindGuideEvents() {
 
 function readGuideForm(form) {
   const data = new FormData(form);
-  for (const key of ["year", "dreamJob", "dreamCourse", "dreamIncome", "preference", "avoid"]) {
+  for (const key of ["year", "dreamJob", "dreamCourse", "dreamIncome", "passions", "schoolPerformance", "preference", "avoid"]) {
     guideState[key] = String(data.get(key) || "").trim();
   }
+  if (guideState.year !== "Year 10 or below") guideState.schoolPerformance = "Not sure yet";
 }
 
 function hasAnyGuideAnswer() {
-  return ["dreamJob", "dreamCourse", "avoid"].some((key) => String(guideState[key] || "").trim())
+  return ["dreamJob", "dreamCourse", "passions", "avoid"].some((key) => String(guideState[key] || "").trim())
     || guideState.dreamIncome !== "Any income"
+    || guideState.schoolPerformance !== "Not sure yet"
     || guideState.preference !== "Balanced plan"
-    || guideState.subjectsWithMarks.some((row) => String(row.subject || row.mark || "").trim());
+    || guideState.subjectsWithMarks.some((row) => guideSubjectRowHasValue(row));
+}
+
+function guideSubjectRowHasValue(row) {
+  return Boolean(String(row?.subject || row?.mark || "").trim())
+    || guideTermFieldsForYear(guideState.year).some((term) => String(row?.[term.key] || "").trim());
 }
 
 function buildGuidePlan() {
@@ -777,7 +952,7 @@ function buildGuidePlan() {
   const options = uniqueProviderOptions(ranked, primary.course).slice(0, 5);
   const jobs = courseIncomeOutcomes(primary.course);
   const rank = numericRank(primary.course.atar);
-  const estimatedAtar = values.markEstimate?.atarNumber ?? null;
+  const estimatedAtar = values.planningAtar ?? null;
   const targetAtar = rank || estimatedAtar || fallbackAtarForProfile(profile);
   const subjectTargets = buildSubjectTargets(values, profile, primary.course, targetAtar);
   const gap = rank !== null && estimatedAtar !== null ? rank - estimatedAtar : null;
@@ -793,6 +968,7 @@ function buildGuidePlan() {
     jobs,
     subjectTargets,
     markEstimate: values.markEstimate,
+    schoolEstimate: values.schoolEstimate,
     reach,
     hasTrueReward,
     entryLine: rank === null
@@ -820,27 +996,32 @@ function buildGuidePlan() {
 
 function normalisedGuideValues() {
   const markEstimate = calculateGuideAtarEstimate(guideState.subjectsWithMarks);
+  const schoolEstimate = guideState.year === "Year 10 or below" ? schoolPerformanceEstimate(guideState.schoolPerformance) : null;
+  const planningAtar = markEstimate.atarNumber ?? schoolEstimate?.atar ?? null;
   const subjectNames = guideState.subjectsWithMarks
     .map((row) => findGuideSubject(row.subject)?.name || row.subject)
     .filter(Boolean)
     .join(", ");
   const goal = [guideState.dreamJob, guideState.dreamCourse].filter(Boolean).join(" ");
-  const passionSignal = [guideState.dreamJob, guideState.preference, guideState.dreamIncome === "Any income" ? "" : guideState.dreamIncome].filter(Boolean).join(" ");
+  const passionSignal = [guideState.passions, guideState.dreamJob, guideState.dreamCourse, guideState.preference, guideState.dreamIncome === "Any income" ? "" : guideState.dreamIncome].filter(Boolean).join(" ");
   return {
     year: guideState.year || "Year 10 or below",
     dreamJob: guideState.dreamJob.trim(),
     dreamCourse: guideState.dreamCourse.trim(),
     dreamIncome: guideState.dreamIncome || "Any income",
+    schoolPerformance: guideState.schoolPerformance || "Not sure yet",
     goal: goal.trim(),
     passions: passionSignal.trim(),
     subjects: subjectNames,
     subjectsWithMarks: guideState.subjectsWithMarks,
-    atar: markEstimate.atarNumber === null ? "" : String(markEstimate.atarNumber),
+    atar: planningAtar === null ? "" : String(planningAtar),
+    planningAtar,
     income: guideState.dreamIncome || "Any income",
     preference: guideState.preference || "Balanced plan",
     campus: "Any Sydney campus",
     avoid: guideState.avoid.trim(),
     markEstimate,
+    schoolEstimate,
     cleanDreamJob: cleanSearchText(guideState.dreamJob),
     cleanDreamCourse: cleanSearchText(guideState.dreamCourse),
     cleanGoal: cleanSearchText(goal),
@@ -848,6 +1029,16 @@ function normalisedGuideValues() {
     cleanSubjects: cleanSearchText(subjectNames),
     cleanPreference: cleanSearchText(guideState.preference),
     cleanAvoid: cleanSearchText(guideState.avoid)
+  };
+}
+
+function schoolPerformanceEstimate(value) {
+  const estimate = guideSchoolLevelEstimates[value];
+  if (!estimate) return null;
+  return {
+    ...estimate,
+    hasEstimate: true,
+    atarLabel: formatAtar(estimate.atar)
   };
 }
 
@@ -1102,7 +1293,8 @@ function preferenceFitScore(course, jobs, values, profile) {
     if (/information technology|information systems|business analytics|data analytics|construction management|project management|cyber security|business information systems/.test(fields.primary)) score += 18;
     if (broadEasyRequest && /information technology|information systems|business analytics|data analytics|construction management|project management|cyber security|business information systems/.test(fields.primary)) score += 18;
     if (/\bcommerce\b|\bbusiness\b/.test(fields.title) && !/advanced studies|laws|law|engineering/.test(fields.title)) score += 8;
-    if (/advanced studies|advanced science|honours|double degree|\/|bachelor of .+ and bachelor|laws|law|medicine|architecture/.test(fields.title)) score -= 18;
+    if (/advanced studies|advanced science|honours|double degree|\/|bachelor of .+ and bachelor|laws|law|medicine|architecture/.test(fields.title)) score -= 26;
+    if (/bachelor of .+ and bachelor|\/.*bachelor|bachelor.*\/bachelor/.test(fields.title)) score -= 18;
     if (broadEasyRequest && /(science|engineering|advanced|honours|bachelor of .+ and bachelor)/.test(fields.title)) score -= 20;
     if (/medicine|law|architecture|actuarial|pharmacy|physiotherapy|occupational therapy|paramedicine|midwifery|veterinary|advanced mathematics/.test(fields.title)) score -= 12;
     if (/placement|clinical|portfolio|audition|interview|chemistry|mathematics extension|physics/.test(fields.prerequisites)) score -= 6;
@@ -1455,14 +1647,17 @@ function calculateGuideAtarEstimate(rows) {
   const bySubject = new Map();
   for (const row of rows || []) {
     const subject = findGuideSubject(row.subject);
-    const rawMark = Number(row.mark);
-    if (!subject || !Number.isFinite(rawMark)) continue;
+    const projection = projectedMarkForGuideRow(row, subject);
+    if (!subject || !projection.hasMarks || !Number.isFinite(projection.mark)) continue;
     const max = subject.units * 50;
-    const hscTotal = clamp(rawMark, 0, max);
+    const hscTotal = clamp(projection.mark, 0, max);
     const scaledPerUnit = estimateScaledPerUnit(subject, hscTotal / subject.units);
     const entry = {
       name: subject.name,
       units: subject.units,
+      maxMark: max,
+      projectedMark: hscTotal,
+      sourceNote: projection.note,
       hscTotal,
       scaledPerUnit,
       scaledTotal: scaledPerUnit * subject.units,
@@ -1479,7 +1674,7 @@ function calculateGuideAtarEstimate(rows) {
       atarNumber: null,
       atarLabel: "No marks yet",
       aggregate: null,
-      note: "Add marks if you want the Guide to estimate reach level.",
+      note: "Add term marks if you want the Guide to estimate reach level.",
       subjects: []
     };
   }
@@ -1503,14 +1698,14 @@ function calculateGuideAtarEstimate(rows) {
   const atarNumber = estimateAtarFromAggregate(assumedAggregate);
   const warnings = [];
   if (!bestEnglish) warnings.push("Official ATAR eligibility needs English units.");
-  if (missingUnits > 0) warnings.push(`${formatNumber(missingUnits, 0)} missing units assumed at the neutral break-even line.`);
+  if (missingUnits > 0) warnings.push(`${formatNumber(missingUnits, 0)} missing units temporarily held at the neutral break-even line.`);
 
   return {
     hasMarks: true,
     atarNumber,
     atarLabel: atarNumber === null ? "Not enough data" : formatAtar(atarNumber),
     aggregate: assumedAggregate,
-    note: warnings.length ? warnings.join(" ") : "Uses your best 10 eligible units, including English.",
+    note: warnings.length ? warnings.join(" ") : "Uses projected subject marks from entered terms and counts your best 10 eligible units, including English.",
     subjects: entries.sort((a, b) => b.scaledTotal - a.scaledTotal)
   };
 }

@@ -4501,13 +4501,71 @@ input[type="range"] {
 
 .guide-mark-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(140px, 0.55fr) auto;
+  grid-template-columns: minmax(190px, 0.8fr) minmax(0, 1.5fr) minmax(150px, 0.55fr) auto;
   gap: 10px;
   align-items: end;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+}
+
+.guide-term-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(70px, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.guide-term-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.guide-term-field span,
+.guide-row-summary span {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 900;
+}
+
+.guide-term-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.guide-term-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  outline: 0;
+}
+
+.guide-row-summary {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.guide-row-summary strong {
+  color: var(--accent);
+  line-height: 1.1;
+}
+
+.guide-row-summary small {
+  color: var(--muted);
+  line-height: 1.3;
 }
 
 .guide-row-remove:disabled {
@@ -4806,6 +4864,13 @@ input[type="range"] {
   align-items: stretch;
   padding: 14px;
   background: linear-gradient(135deg, #f8fbff, #fff);
+}
+
+.guide-school-panel p,
+.guide-eas-note p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .guide-estimate-panel > div:first-child {
@@ -5122,6 +5187,40 @@ input[type="range"] {
   background: linear-gradient(135deg, #eff6ff, #fff);
 }
 
+.guide-eas-note {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.guide-eas-note strong {
+  color: var(--text);
+}
+
+.guide-eas-note div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.guide-eas-note a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
 .guide-true-reward a {
   display: inline-flex;
   gap: 7px;
@@ -5189,6 +5288,7 @@ input[type="range"] {
 
 :root[data-theme="dark"] .guide-field input,
 :root[data-theme="dark"] .guide-field select,
+:root[data-theme="dark"] .guide-term-field input,
 :root[data-theme="dark"] .guide-score-card,
 :root[data-theme="dark"] .guide-plan-card,
 :root[data-theme="dark"] .guide-section-card,
@@ -5206,7 +5306,10 @@ input[type="range"] {
 :root[data-theme="dark"] .guide-link-row a,
 :root[data-theme="dark"] .guide-course-option a,
 :root[data-theme="dark"] .guide-pathway-grid a,
-:root[data-theme="dark"] .guide-true-reward a {
+:root[data-theme="dark"] .guide-true-reward a,
+:root[data-theme="dark"] .guide-row-summary,
+:root[data-theme="dark"] .guide-eas-note,
+:root[data-theme="dark"] .guide-eas-note a {
   border-color: var(--line);
   background: var(--surface-strong);
   color: var(--text);
@@ -5250,7 +5353,9 @@ input[type="range"] {
 :root[data-theme="dark"] .guide-true-reward a,
 :root[data-theme="dark"] .guide-link-row a,
 :root[data-theme="dark"] .guide-pathway-grid a,
-:root[data-theme="dark"] .guide-course-option a {
+:root[data-theme="dark"] .guide-course-option a,
+:root[data-theme="dark"] .guide-row-summary strong,
+:root[data-theme="dark"] .guide-eas-note a {
   color: #93c5fd;
 }
 
@@ -5259,6 +5364,7 @@ input[type="range"] {
   .guide-result-head,
   .guide-plan-grid,
   .guide-mark-row,
+  .guide-term-grid,
   .guide-estimate-list,
   .guide-plan-section summary,
   .guide-section-row,
@@ -5273,6 +5379,10 @@ input[type="range"] {
   .guide-true-reward {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .guide-mark-row .guide-term-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .guide-empty {
@@ -5303,7 +5413,8 @@ input[type="range"] {
   }
 
   .guide-field input,
-  .guide-field select {
+  .guide-field select,
+  .guide-term-field input {
     min-height: 46px;
   }
 
@@ -5334,6 +5445,7 @@ input[type="range"] {
   .guide-mark-panel,
   .guide-estimate-panel,
   .guide-true-reward,
+  .guide-eas-note,
   .guide-section-card,
   .guide-subject-target,
   .guide-entry-checks article,
