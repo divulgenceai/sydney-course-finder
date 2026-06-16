@@ -4384,6 +4384,710 @@ input[type="range"] {
   }
 }
 
+.guide-main .panel {
+  overflow: visible;
+}
+
+.guide-hero {
+  align-items: center;
+}
+
+.guide-panel {
+  scroll-margin-top: 108px;
+}
+
+.guide-form {
+  display: grid;
+  gap: 14px;
+}
+
+.guide-question-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.guide-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.guide-field span {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.guide-field input,
+.guide-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.35;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.guide-field:focus-within input,
+.guide-field:focus-within select {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  outline: 0;
+}
+
+.guide-actions,
+.guide-quick,
+.guide-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.guide-actions {
+  align-items: center;
+}
+
+.guide-quick button {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 800;
+  transition: transform 160ms var(--ease-out), border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.guide-empty {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+}
+
+.guide-empty h2,
+.guide-result-head h2,
+.guide-card-head h3,
+.guide-plan-card h3 {
+  margin-bottom: 6px;
+}
+
+.guide-empty p,
+.guide-card-head p,
+.guide-disclaimer {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.guide-empty-steps {
+  display: grid;
+  gap: 8px;
+  min-width: 230px;
+}
+
+.guide-empty-steps span {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.guide-result {
+  display: grid;
+  gap: 18px;
+}
+
+.guide-result-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 18px;
+  align-items: stretch;
+}
+
+.guide-result-head p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.guide-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  margin-bottom: 10px;
+  padding: 0 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.guide-score-card,
+.guide-plan-card,
+.guide-section-card,
+.guide-subject-target,
+.guide-course-option,
+.guide-entry-checks article {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.guide-score-card {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 14px;
+}
+
+.guide-score-card span,
+.guide-plan-card > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.guide-score-card strong {
+  color: var(--accent);
+  font-size: 32px;
+  line-height: 1;
+}
+
+.guide-score-card small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.guide-plan-grid {
+  display: grid;
+  grid-template-columns: 1.25fr 0.9fr 0.9fr;
+  gap: 12px;
+}
+
+.guide-plan-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 15px;
+  transition: transform 160ms var(--ease-out), border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.guide-plan-card.primary img {
+  width: 118px;
+  height: 48px;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.guide-plan-card h3 {
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+.guide-plan-card p,
+.guide-plan-card small,
+.guide-course-option p,
+.guide-course-option small {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.guide-plan-card dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.guide-plan-card dl div {
+  min-width: 0;
+  padding: 9px;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.guide-plan-card dl div:last-child {
+  border-right: 0;
+}
+
+.guide-plan-card dt {
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.guide-plan-card dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.guide-link-row a,
+.guide-pathway-grid a,
+.guide-course-option a {
+  color: var(--accent);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.guide-link-row a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 12.5px;
+}
+
+.guide-mini-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guide-mini-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+
+.guide-mini-list em {
+  color: var(--accent);
+  font-style: normal;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.guide-meter {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+
+.guide-meter i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), #38bdf8);
+}
+
+.guide-section-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 12px;
+}
+
+.guide-section-card {
+  display: grid;
+  gap: 13px;
+  padding: 16px;
+}
+
+.guide-card-head {
+  display: grid;
+  gap: 3px;
+}
+
+.guide-subject-targets,
+.guide-entry-checks,
+.guide-course-options,
+.guide-pathway-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.guide-subject-targets {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.guide-subject-target {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.guide-subject-target strong {
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.guide-subject-target span {
+  width: fit-content;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 900;
+}
+
+.guide-subject-target.required span {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.guide-subject-target.current span {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.guide-subject-target p,
+.guide-subject-target small,
+.guide-entry-checks p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.guide-subject-target small {
+  font-weight: 800;
+}
+
+.guide-entry-checks article {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.guide-entry-checks article.has-info {
+  background: #f8fbff;
+}
+
+.guide-entry-checks span {
+  width: fit-content;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 900;
+}
+
+.guide-course-option {
+  display: grid;
+  grid-template-columns: 34px 86px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  transition: transform 160ms var(--ease-out), border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.guide-course-option > span {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.guide-course-option img {
+  width: 82px;
+  height: 38px;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.guide-course-option strong {
+  display: block;
+  line-height: 1.3;
+}
+
+.guide-course-option em {
+  display: block;
+  margin-top: 4px;
+  color: var(--accent);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.guide-course-option a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 12.5px;
+}
+
+.guide-timeline {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  counter-reset: guide-step;
+  list-style: none;
+}
+
+.guide-timeline li {
+  position: relative;
+  min-height: 68px;
+  padding: 12px 12px 12px 54px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  counter-increment: guide-step;
+}
+
+.guide-timeline li::before {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  content: counter(guide-step);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.guide-timeline p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.guide-pathway-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.guide-pathway-grid a {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  min-height: 116px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  transition: transform 160ms var(--ease-out), border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.guide-pathway-grid small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.guide-disclaimer {
+  font-size: 13px;
+}
+
+.guide-quick button:active,
+.guide-course-option a:active,
+.guide-link-row a:active,
+.guide-pathway-grid a:active {
+  transform: scale(0.985);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .guide-quick button:hover,
+  .guide-link-row a:hover,
+  .guide-course-option a:hover,
+  .guide-pathway-grid a:hover {
+    border-color: #b9c8d1;
+    background: #fff;
+    transform: translateY(-1px);
+  }
+
+  .guide-plan-card:hover,
+  .guide-course-option:hover,
+  .guide-section-card:hover,
+  .guide-subject-target:hover,
+  .guide-entry-checks article:hover {
+    border-color: #b9c8d1;
+    box-shadow: 0 8px 20px rgba(17, 24, 39, 0.045);
+    transform: translateY(-1px);
+  }
+}
+
+:root[data-theme="dark"] .guide-field input,
+:root[data-theme="dark"] .guide-field select,
+:root[data-theme="dark"] .guide-score-card,
+:root[data-theme="dark"] .guide-plan-card,
+:root[data-theme="dark"] .guide-section-card,
+:root[data-theme="dark"] .guide-subject-target,
+:root[data-theme="dark"] .guide-course-option,
+:root[data-theme="dark"] .guide-entry-checks article,
+:root[data-theme="dark"] .guide-empty-steps span,
+:root[data-theme="dark"] .guide-link-row a,
+:root[data-theme="dark"] .guide-course-option a,
+:root[data-theme="dark"] .guide-pathway-grid a {
+  border-color: var(--line);
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .guide-plan-card dl,
+:root[data-theme="dark"] .guide-plan-card dl div,
+:root[data-theme="dark"] .guide-entry-checks article.has-info,
+:root[data-theme="dark"] .guide-timeline li,
+:root[data-theme="dark"] .guide-quick button {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+:root[data-theme="dark"] .guide-pill,
+:root[data-theme="dark"] .guide-subject-target span,
+:root[data-theme="dark"] .guide-entry-checks span,
+:root[data-theme="dark"] .guide-meter {
+  background: var(--accent-soft);
+  color: #93c5fd;
+}
+
+:root[data-theme="dark"] .guide-subject-target.required span {
+  background: rgba(124, 45, 18, 0.35);
+  color: #fed7aa;
+}
+
+:root[data-theme="dark"] .guide-subject-target.current span {
+  background: rgba(5, 46, 22, 0.52);
+  color: #a7f3d0;
+}
+
+:root[data-theme="dark"] .guide-score-card strong,
+:root[data-theme="dark"] .guide-mini-list em,
+:root[data-theme="dark"] .guide-course-option em,
+:root[data-theme="dark"] .guide-link-row a,
+:root[data-theme="dark"] .guide-pathway-grid a,
+:root[data-theme="dark"] .guide-course-option a {
+  color: #93c5fd;
+}
+
+@media (max-width: 980px) {
+  .guide-question-grid,
+  .guide-result-head,
+  .guide-plan-grid,
+  .guide-section-row,
+  .guide-subject-targets,
+  .guide-pathway-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-empty {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-empty-steps {
+    min-width: 0;
+  }
+
+  .guide-plan-card dl {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-plan-card dl div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .guide-plan-card dl div:last-child {
+    border-bottom: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .guide-panel {
+    scroll-margin-top: 172px;
+  }
+
+  .guide-field input,
+  .guide-field select {
+    min-height: 46px;
+  }
+
+  .guide-actions button {
+    width: 100%;
+    min-height: 46px;
+  }
+
+  .guide-quick {
+    gap: 7px;
+  }
+
+  .guide-quick button {
+    flex: 1 1 142px;
+    min-height: 40px;
+  }
+
+  .guide-result-head,
+  .guide-plan-card,
+  .guide-section-card {
+    gap: 11px;
+  }
+
+  .guide-score-card,
+  .guide-plan-card,
+  .guide-section-card,
+  .guide-subject-target,
+  .guide-entry-checks article,
+  .guide-course-option {
+    padding: 12px;
+  }
+
+  .guide-course-option {
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .guide-course-option img {
+    grid-column: 1;
+    width: 58px;
+  }
+
+  .guide-course-option div,
+  .guide-course-option a {
+    grid-column: 1 / -1;
+  }
+
+  .guide-course-option a {
+    width: 100%;
+    min-height: 42px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

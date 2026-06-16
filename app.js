@@ -466,6 +466,7 @@ function render() {
       </a>
       <nav class="topnav" aria-label="Main">
         <a href="#courses" ${navCurrent("#courses")}>Courses</a>
+        <a href="./guide.html">Guide</a>
         <a href="#atar" ${navCurrent("#atar")}>ATAR match</a>
         <a href="./atar-calculator.html">ATAR calculator</a>
         <a href="./subject-helper.html">Subject helper</a>
