@@ -8,7 +8,8 @@ Clean website for searching Sydney-campus UAC undergraduate course records, comp
 - `app.js`: course search, filters, ATAR matching, saved courses, compare library, provider list and FAQ.
 - `advisor.js`: question-based course direction helper grounded in the imported UAC course data.
 - `api/ai.js`: server-side Gemini endpoint used by Course helper chats. The browser never receives the API key.
-- `subject-helper.html`, `subject-helper.js`: degree/job-to-HSC-subject helper using course matches, prerequisites and assumed knowledge signals.
+- `guide.html`, `guide.js`: full Year 10-or-below, Year 11 and Year 12 plan covering subject choices, degree directions, Sydney universities, UAC preference bands, pathways, careers and income.
+- `subject-helper.html`, `subject-helper.js`, `subject-helper-logic.js`: focused automatic job-or-degree lookup that recommends Year 11/12 subjects and shows connected degrees, careers, Sydney course evidence and indicative income.
 - `atar-calculator.html`, `atar-calculator.js`, `atar-data.js`: NSW HSC ATAR estimator using public UAC 2025 scaling-report summaries.
 - Course helper chat uses the server-side Gemini endpoint only. If the key is missing or Google rejects the key/project/quota, the UI shows the setup issue instead of falling back to scripted local replies.
 
