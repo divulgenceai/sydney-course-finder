@@ -5,11 +5,16 @@ const guideProviders = window.uacProviders || [];
 const hscSubjects = (window.hscSubjectData || []).slice().sort((a, b) => a.name.localeCompare(b.name));
 const atarThresholds = (window.atarAggregateThresholds2025 || []).slice().sort((a, b) => b.aggregate - a.aggregate);
 const guideMeta = window.uacImportMeta || {};
+const guidePlanningLogic = window.SubjectHelperLogic;
+const guideStorageKey = "sydneyCourseFinder.guideProgress";
+const storedGuideState = guidePlanningLogic.restoreGuideState(localStorage.getItem(guideStorageKey));
 const guideSubjectLookup = buildSubjectLookup();
 const guideFieldCache = new WeakMap();
 const guideIncomeCache = new WeakMap();
 let guidePrewarmStarted = false;
 let guidePrewarmIndex = 0;
+let guidePersistTimer = 0;
+let guideRestoreHandled = false;
 
 const guideProviderQuality = {
   Technology: {
@@ -263,6 +268,81 @@ const guideProfiles = [
   }
 ].map((profile) => ({ ...profile, cleanKeywords: profile.keywords.map(cleanSearchText) }));
 
+const directionCards = [
+  {
+    label: "Lifestyle",
+    question: "Which work-life trade-off suits you?",
+    a: { title: "Higher income, longer hours", copy: "More pressure is fine if the reward and career growth are stronger.", icon: "↗", signals: { Business: 2, Technology: 2, Engineering: 1, "Law and Justice": 1 } },
+    b: { title: "More time, lower pressure", copy: "Predictable hours and energy outside work matter more.", icon: "⏱", signals: { Education: 2, "Social Work and Community": 2, "Creative Arts and Design": 1 } }
+  },
+  {
+    label: "People",
+    question: "Who do you want to help most?",
+    a: { title: "Individuals face-to-face", copy: "I like supporting people directly and seeing the human impact.", icon: "♥", signals: { "Medicine and Health": 3, Education: 2, "Social Work and Community": 3 } },
+    b: { title: "Teams, clients or organisations", copy: "I like solving problems through systems, products, strategy or projects.", icon: "◈", signals: { Business: 2, Technology: 2, Engineering: 2, "Architecture and Built Environment": 1 } }
+  },
+  {
+    label: "Thinking style",
+    question: "Which problems feel more satisfying?",
+    a: { title: "Numbers, code and logic", copy: "I enjoy technical answers, patterns and exact problem solving.", icon: "Σ", signals: { Technology: 3, Engineering: 3, Science: 2, Business: 1 } },
+    b: { title: "Words, behaviour and arguments", copy: "I enjoy writing, persuasion, people and social questions.", icon: "¶", signals: { "Law and Justice": 3, Education: 2, "Humanities and Social Impact": 3, "Social Work and Community": 2 } }
+  },
+  {
+    label: "Environment",
+    question: "Where would you rather work?",
+    a: { title: "Desk, lab or technical space", copy: "I like focused work with tools, data, science or design software.", icon: "⌘", signals: { Technology: 2, Science: 2, Engineering: 2, "Creative Arts and Design": 1 } },
+    b: { title: "Active, social or changing places", copy: "I want movement, people, placements, sites or real-world settings.", icon: "◎", signals: { "Medicine and Health": 2, "Sport and Exercise": 3, Education: 2, "Food, Hospitality and Tourism": 2 } }
+  },
+  {
+    label: "Subject comfort",
+    question: "What school work feels more natural?",
+    a: { title: "Maths/science/technology", copy: "I do not mind formulas, technical subjects or precise answers.", icon: "∞", signals: { Engineering: 3, Technology: 3, Science: 3, "Medicine and Health": 1 } },
+    b: { title: "English/humanities/creative", copy: "I prefer communication, interpretation, design or human stories.", icon: "✦", signals: { "Creative Arts and Design": 3, "Law and Justice": 2, "Humanities and Social Impact": 3, Education: 1 } }
+  },
+  {
+    label: "Creativity",
+    question: "How much creative freedom do you want?",
+    a: { title: "A lot of creative ownership", copy: "I want to make, design, perform, write or shape original work.", icon: "✎", signals: { "Creative Arts and Design": 4, "Architecture and Built Environment": 2, "Food, Hospitality and Tourism": 1 } },
+    b: { title: "Clear rules and proven methods", copy: "I like structured work where standards and correctness matter.", icon: "✓", signals: { "Law and Justice": 2, Engineering: 2, "Medicine and Health": 2, Business: 1 } }
+  },
+  {
+    label: "Risk",
+    question: "Which path feels safer to you?",
+    a: { title: "Stable job market first", copy: "I want a practical pathway with steady employability.", icon: "▣", signals: { Education: 2, "Medicine and Health": 3, Engineering: 2, Technology: 2 } },
+    b: { title: "Chase upside and interest", copy: "I can handle uncertainty if the work is exciting or high-upside.", icon: "⚡", signals: { Business: 2, Technology: 2, "Creative Arts and Design": 2, "Food, Hospitality and Tourism": 1 } }
+  },
+  {
+    label: "Study load",
+    question: "What kind of degree difficulty are you willing to take on?",
+    a: { title: "Hard content is okay", copy: "I can take demanding subjects if they open strong options.", icon: "▲", signals: { "Medicine and Health": 2, Engineering: 3, Science: 2, Technology: 2 } },
+    b: { title: "I need a manageable route", copy: "I want a pathway that builds confidence and has backup options.", icon: "▤", signals: { Business: 1, Education: 2, "Social Work and Community": 2, "Food, Hospitality and Tourism": 2 } }
+  },
+  {
+    label: "Impact",
+    question: "What kind of impact motivates you?",
+    a: { title: "Build useful things", copy: "Products, structures, systems and tools sound satisfying.", icon: "⚙", signals: { Technology: 3, Engineering: 3, "Architecture and Built Environment": 2 } },
+    b: { title: "Improve people’s lives", copy: "Care, education, justice, wellbeing and community matter most.", icon: "☀", signals: { "Medicine and Health": 3, Education: 3, "Social Work and Community": 3, "Law and Justice": 1 } }
+  },
+  {
+    label: "Money",
+    question: "How important is income?",
+    a: { title: "Very important", copy: "I want the plan to prioritise income potential and progression.", icon: "$", signals: { Business: 3, Technology: 3, Engineering: 2, "Law and Justice": 1 } },
+    b: { title: "Important, but not everything", copy: "Fit, meaning and manageable study matter too.", icon: "◇", signals: { Education: 2, "Social Work and Community": 2, "Creative Arts and Design": 1, Science: 1 } }
+  },
+  {
+    label: "Learning style",
+    question: "Which learning style would you choose?",
+    a: { title: "Projects and practical work", copy: "I learn best by making, testing, placing or doing.", icon: "▧", signals: { Engineering: 2, Technology: 2, "Architecture and Built Environment": 2, "Food, Hospitality and Tourism": 2, "Sport and Exercise": 2 } },
+    b: { title: "Reading, discussion and theory", copy: "I can handle essays, cases, research and concepts.", icon: "☰", signals: { "Law and Justice": 2, "Humanities and Social Impact": 3, Education: 2, Science: 1 } }
+  },
+  {
+    label: "Future self",
+    question: "Which future sounds more like you?",
+    a: { title: "Specialist with technical skill", copy: "I want a clear skill set people hire me for.", icon: "◆", signals: { Technology: 3, Engineering: 3, "Medicine and Health": 2, Science: 2 } },
+    b: { title: "Flexible communicator/leader", copy: "I want broad skills across people, organisations and ideas.", icon: "✺", signals: { Business: 2, Education: 2, "Law and Justice": 2, "Humanities and Social Impact": 2 } }
+  }
+];
+
 const guideQuickGoals = ["Software engineer", "Nursing", "Lawyer", "Civil engineer", "Business analyst", "Psychology", "Teacher", "High income tech"];
 const guideYears = ["Year 10 or below", "Year 11", "Year 12"];
 const guidePreferences = [
@@ -310,21 +390,18 @@ const guideTermFields = {
 const trueRewardUrl = "https://www.westernsydney.edu.au/future/study/application-pathways/hsc-true-reward";
 let guideSubjectRowId = 0;
 
-const guideState = {
-  year: "Year 10 or below",
-  dreamJob: new URLSearchParams(window.location.search).get("q") || "",
-  dreamCourse: "",
-  dreamIncome: "Any income",
-  passions: "",
-  schoolPerformance: "Not sure yet",
-  preference: "Balanced plan",
-  subjectsWithMarks: [createGuideSubjectRow()],
-  avoid: "",
-  processing: false,
-  result: null
-};
+const guideState = guidePlanningLogic.createGuideState({
+  ...storedGuideState,
+  dreamJob: new URLSearchParams(window.location.search).get("q") || storedGuideState.dreamJob || "",
+  subjectsWithMarks: storedGuideState.subjectsWithMarks.length
+    ? normaliseGuideSubjectRows(storedGuideState.subjectsWithMarks)
+    : [createGuideSubjectRow()]
+});
+guideState.processing = false;
+guideState.result = null;
 
 renderGuide();
+restoreGuideResultIfNeeded();
 
 function renderGuide(options = {}) {
   const x = window.scrollX;
@@ -383,6 +460,7 @@ function renderGuide(options = {}) {
             ${guideState.year === "Year 10 or below" ? renderGuideSelect("schoolPerformance", "How are you tracking at school?", guideSchoolLevels, guideState.schoolPerformance) : ""}
             ${renderGuideSelect("preference", "Preference", guidePreferences, guideState.preference)}
           </div>
+          ${renderGuideDirectionDeck()}
           ${renderGuideSubjectMarks()}
           <details class="guide-optional">
             <summary>Anything to avoid?</summary>
@@ -428,6 +506,55 @@ function renderGuideSelect(key, label, options, value) {
         ${options.map((option) => `<option ${option === value ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}
       </select>
     </label>
+  `;
+}
+
+function renderGuideDirectionDeck() {
+  const index = Math.min(directionCards.length - 1, guideState.deckIndex || 0);
+  const card = directionCards[index];
+  const answer = guideState.deckAnswers[index] || "";
+  const complete = guidePlanningLogic.isDirectionDeckComplete(guideState.deckAnswers, directionCards.length);
+  return `
+    <section class="guide-direction-deck" data-guide-deck>
+      <div class="guide-deck-head">
+        <div>
+          <span>Direction questions</span>
+          <h3>Pick the card that feels more like you</h3>
+          <p>These answers improve the course, career and subject plan. "Not sure yet" is valid.</p>
+        </div>
+        <strong>${index + 1} / ${directionCards.length}</strong>
+      </div>
+      <div class="guide-deck-progress" aria-hidden="true"><i style="width:${((index + 1) / directionCards.length) * 100}%"></i></div>
+      <div class="guide-deck-question">
+        <span>${escapeHtml(card.label)}</span>
+        <h4>${escapeHtml(card.question)}</h4>
+      </div>
+      <div class="guide-deck-options">
+        ${renderGuideDirectionOption(card.a, "a", answer)}
+        ${renderGuideDirectionOption(card.b, "b", answer)}
+      </div>
+      <div class="guide-deck-actions">
+        <button type="button" class="clear-btn" data-guide-deck-back ${index === 0 ? "disabled" : ""}>Back</button>
+        <button type="button" class="clear-btn" data-guide-deck-answer="unsure" aria-pressed="${answer === "unsure"}">Not sure yet</button>
+        <span>${complete ? "Direction questions complete" : `${directionCards.length - guideState.deckAnswers.filter(Boolean).length} remaining`}</span>
+      </div>
+    </section>
+  `;
+}
+
+function renderGuideDirectionOption(option, value, selected) {
+  return `
+    <button
+      type="button"
+      class="guide-direction-option"
+      data-guide-deck-answer="${escapeHtml(value)}"
+      aria-pressed="${selected === value}"
+    >
+      <span class="guide-direction-icon" aria-hidden="true">${escapeHtml(option.icon)}</span>
+      <small>Pick this card</small>
+      <strong>${escapeHtml(option.title)}</strong>
+      <p>${escapeHtml(option.copy)}</p>
+    </button>
   `;
 }
 
@@ -507,6 +634,24 @@ function createGuideSubjectRow(subject = "", mark = "") {
   };
   if (mark !== "") row.y12Term1 = mark;
   return row;
+}
+
+function normaliseGuideSubjectRows(rows) {
+  return (rows || []).map((row) => {
+    guideSubjectRowId += 1;
+    return {
+      id: row?.id || `subject-${guideSubjectRowId}`,
+      subject: row?.subject || "",
+      y11Term1: row?.y11Term1 || "",
+      y11Term2: row?.y11Term2 || "",
+      y11Term3: row?.y11Term3 || "",
+      y11Term4: row?.y11Term4 || "",
+      y12Term1: row?.y12Term1 || row?.mark || "",
+      y12Term2: row?.y12Term2 || "",
+      y12Term3: row?.y12Term3 || "",
+      y12Term4: row?.y12Term4 || ""
+    };
+  });
 }
 
 function guideTermFieldsForYear(year) {
@@ -616,13 +761,14 @@ function renderGuideResult(result) {
   const primary = result.primary.course;
   const primaryJobs = result.jobs.slice(0, 3);
   const providerNote = result.providerNote ? ` ${result.providerNote}` : "";
+  const deckNote = guideState.deckAnswers.some(Boolean) ? " Your direction-card choices also influenced this match." : "";
   return `
     <section class="panel guide-result" id="guide-result">
       <div class="guide-result-head">
         <div>
           <span class="guide-pill">${escapeHtml(result.profile.label)}</span>
           <h2>Best direction: ${escapeHtml(primary.name)}</h2>
-          <p>${escapeHtml(primary.name)} at ${escapeHtml(primary.university)} is the strongest first plan because it fits your job/course/passion signals, ${escapeHtml(result.entryLine.toLowerCase())}, and the preference you gave.${escapeHtml(providerNote)}</p>
+          <p>${escapeHtml(primary.name)} at ${escapeHtml(primary.university)} is the strongest first plan because it fits your job/course/passion signals, ${escapeHtml(result.entryLine.toLowerCase())}, and the preference you gave.${escapeHtml(providerNote)}${escapeHtml(deckNote)}</p>
         </div>
         <div class="guide-score-card">
           <span>Course reach</span>
@@ -837,26 +983,32 @@ function renderGuideCourseOption(entry, index) {
 function bindGuideEvents() {
   window.courseFinderTheme?.bind?.(guideApp);
   const form = guideApp.querySelector("[data-guide-form]");
+  bindGuideDeckEvents();
   form?.addEventListener("input", (event) => {
     const target = event.target;
     if (target.dataset.guideTermRow) {
       const row = guideState.subjectsWithMarks.find((item) => item.id === target.dataset.guideTermRow);
       if (row && target.dataset.guideTermKey) row[target.dataset.guideTermKey] = target.value;
+      scheduleGuideProgressSave();
       return;
     }
     if (target.dataset.guideMarkRow) {
       const row = guideState.subjectsWithMarks.find((item) => item.id === target.dataset.guideMarkRow);
       if (row) row.mark = target.value;
+      scheduleGuideProgressSave();
       return;
     }
     if (!target.name) return;
     guideState[target.name] = target.value;
+    guideState.result = null;
+    scheduleGuideProgressSave();
   });
   form?.addEventListener("change", (event) => {
     const target = event.target;
     if (target.dataset.guideSubjectRow) {
       const row = guideState.subjectsWithMarks.find((item) => item.id === target.dataset.guideSubjectRow);
       if (row) row.subject = target.value;
+      persistGuideProgress();
       renderGuide({ preserveScroll: true });
       return;
     }
@@ -864,14 +1016,18 @@ function bindGuideEvents() {
     guideState[target.name] = target.value;
     if (target.name === "year") {
       if (guideState.year !== "Year 10 or below") guideState.schoolPerformance = "Not sure yet";
+      persistGuideProgress();
       renderGuide({ preserveScroll: true });
+      return;
     }
+    persistGuideProgress();
   });
   form?.addEventListener("submit", (event) => {
     event.preventDefault();
     readGuideForm(form);
     if (!hasAnyGuideAnswer()) {
       guideState.result = null;
+      persistGuideProgress();
       renderGuide({ preserveScroll: true });
       return;
     }
@@ -880,6 +1036,7 @@ function bindGuideEvents() {
     window.setTimeout(() => {
       guideState.result = buildGuidePlan();
       guideState.processing = false;
+      persistGuideProgress();
       renderGuide({ preserveScroll: true });
       requestAnimationFrame(() => {
         guideApp.querySelector("#guide-result")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -887,29 +1044,24 @@ function bindGuideEvents() {
     }, 220);
   });
   guideApp.querySelector("[data-guide-reset]")?.addEventListener("click", () => {
-    Object.assign(guideState, {
-      year: "Year 10 or below",
-      dreamJob: "",
-      dreamCourse: "",
-      dreamIncome: "Any income",
-      passions: "",
-      schoolPerformance: "Not sure yet",
-      preference: "Balanced plan",
-      subjectsWithMarks: [createGuideSubjectRow()],
-      avoid: "",
-      processing: false,
-      result: null
-    });
+    localStorage.removeItem(guideStorageKey);
+    Object.assign(guideState, guidePlanningLogic.createGuideState({
+      subjectsWithMarks: [createGuideSubjectRow()]
+    }));
+    guideState.processing = false;
+    guideState.result = null;
     renderGuide({ preserveScroll: true });
   });
   guideApp.querySelector("[data-guide-add-subject]")?.addEventListener("click", () => {
     guideState.subjectsWithMarks.push(createGuideSubjectRow());
+    persistGuideProgress();
     renderGuide({ preserveScroll: true });
   });
   guideApp.querySelectorAll("[data-guide-remove-subject]").forEach((button) => {
     button.addEventListener("click", () => {
       guideState.subjectsWithMarks = guideState.subjectsWithMarks.filter((row) => row.id !== button.dataset.guideRemoveSubject);
       if (!guideState.subjectsWithMarks.length) guideState.subjectsWithMarks.push(createGuideSubjectRow());
+      persistGuideProgress();
       renderGuide({ preserveScroll: true });
     });
   });
@@ -917,10 +1069,64 @@ function bindGuideEvents() {
     button.addEventListener("click", () => {
       guideState.dreamJob = button.dataset.guideJob || "";
       guideState.result = null;
+      persistGuideProgress();
       renderGuide({ preserveScroll: true });
       guideApp.querySelector('input[name="dreamJob"]')?.focus();
     });
   });
+}
+
+function replaceGuideDeck() {
+  const current = guideApp.querySelector("[data-guide-deck]");
+  if (!current) return;
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = renderGuideDirectionDeck().trim();
+  current.replaceWith(wrapper.firstElementChild);
+  bindGuideDeckEvents();
+}
+
+function bindGuideDeckEvents() {
+  guideApp.querySelectorAll("[data-guide-deck-answer]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const next = guidePlanningLogic.updateDirectionAnswer(
+        guideState,
+        guideState.deckIndex,
+        button.dataset.guideDeckAnswer
+      );
+      guideState.deckAnswers = next.deckAnswers;
+      guideState.deckIndex = next.deckIndex;
+      guideState.resultRequested = false;
+      guideState.result = null;
+      persistGuideProgress();
+      replaceGuideDeck();
+    });
+  });
+  guideApp.querySelector("[data-guide-deck-back]")?.addEventListener("click", () => {
+    guideState.deckIndex = Math.max(0, guideState.deckIndex - 1);
+    persistGuideProgress();
+    replaceGuideDeck();
+  });
+}
+
+function persistGuideProgress() {
+  localStorage.setItem(guideStorageKey, guidePlanningLogic.serialiseGuideState({
+    ...guideState,
+    resultRequested: Boolean(guideState.result)
+  }));
+}
+
+function scheduleGuideProgressSave() {
+  window.clearTimeout(guidePersistTimer);
+  guidePersistTimer = window.setTimeout(persistGuideProgress, 150);
+}
+
+function restoreGuideResultIfNeeded() {
+  if (guideRestoreHandled) return;
+  guideRestoreHandled = true;
+  if (storedGuideState.resultRequested && hasAnyGuideAnswer()) {
+    guideState.result = buildGuidePlan();
+    renderGuide({ preserveScroll: true });
+  }
 }
 
 function readGuideForm(form) {
@@ -936,6 +1142,7 @@ function hasAnyGuideAnswer() {
     || guideState.dreamIncome !== "Any income"
     || guideState.schoolPerformance !== "Not sure yet"
     || guideState.preference !== "Balanced plan"
+    || guideState.deckAnswers.some(Boolean)
     || guideState.subjectsWithMarks.some((row) => guideSubjectRowHasValue(row));
 }
 
@@ -1042,6 +1249,10 @@ function schoolPerformanceEstimate(value) {
   };
 }
 
+function guideDeckScores() {
+  return guidePlanningLogic.scoreDirectionDeck(guideState.deckAnswers, directionCards);
+}
+
 function detectGuideProfile(values) {
   const source = cleanSearchText([
     values.goal,
@@ -1050,6 +1261,7 @@ function detectGuideProfile(values) {
     values.preference,
     values.income === "Any income" ? "" : "income money salary"
   ].join(" "));
+  const deckScores = guideDeckScores();
   const scored = guideProfiles.map((profile) => {
     let score = 0;
     for (const keyword of profile.cleanKeywords) {
@@ -1060,6 +1272,7 @@ function detectGuideProfile(values) {
         if (tokenMatch(source, token)) score += 4;
       }
     }
+    score += Number(deckScores[profile.label] || 0) * 5;
     return { profile, score };
   }).sort((a, b) => b.score - a.score);
 

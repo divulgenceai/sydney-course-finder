@@ -27,3 +27,13 @@ test("both planning pages load the shared planning logic", () => {
   assert.match(read("subject-helper.html"), /subject-helper-logic\.js/);
   assert.match(read("guide.html"), /subject-helper-logic\.js/);
 });
+
+test("Guide owns the school-year modes and direction questionnaire", () => {
+  const source = read("guide.js");
+  assert.match(source, /Year 10 or below/);
+  assert.match(source, /Year 11/);
+  assert.match(source, /Year 12/);
+  assert.match(source, /directionCards/);
+  assert.match(source, /deckAnswers/);
+  assert.match(source, /localStorage/);
+});
