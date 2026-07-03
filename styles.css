@@ -207,10 +207,10 @@ svg {
   z-index: 20;
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 12px;
   width: 100%;
   min-height: 68px;
-  padding: 0 28px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--line);
   background: var(--topbar-bg);
   box-shadow: 0 1px 22px var(--shadow);
@@ -229,8 +229,8 @@ svg {
   display: inline-flex;
   align-items: center;
   gap: 11px;
-  min-width: 260px;
-  font-size: 18px;
+  min-width: 214px;
+  font-size: 17px;
   font-weight: 700;
 }
 
@@ -243,7 +243,7 @@ svg {
 .topnav {
   display: flex;
   flex: 1 1 auto;
-  gap: 6px;
+  gap: 3px;
   min-width: 0;
   max-width: 100%;
   overflow-x: auto;
@@ -264,12 +264,12 @@ svg {
 
 .topnav a,
 .topnav button {
-  padding: 10px 12px;
+  padding: 9px 8px;
   border: 0;
   border-radius: var(--radius);
   background: transparent;
   cursor: pointer;
-  font-size: 13.5px;
+  font-size: 12.8px;
   font-weight: 700;
   white-space: nowrap;
   transition: background var(--motion-fast) ease, color var(--motion-fast) ease, transform var(--motion-fast) ease;
@@ -8468,6 +8468,340 @@ html {
   font: inherit;
 }
 
+.pathways-page {
+  width: min(100% - 36px, 1180px);
+  margin: 0 auto;
+  padding: 26px 0 56px;
+}
+
+.pathways-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 360px);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.pathways-hero h1 {
+  max-width: 820px;
+}
+
+.pathway-hero-actions,
+.pathway-card-actions,
+.official-link-grid,
+.pathway-course-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.pathway-hero-card {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px;
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 13%, transparent), transparent 44%),
+    var(--surface-strong);
+  box-shadow: 0 18px 40px var(--shadow);
+}
+
+.pathway-hero-card span,
+.pathway-type-tag,
+.pathway-provider,
+.pathway-saved-note {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.pathway-hero-card h2,
+.pathway-hero-card p {
+  margin: 0;
+}
+
+.pathway-saved-note {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.pathway-planner,
+.pathway-route-panel,
+.pathway-course-panel,
+.pathway-checklist,
+.pathway-sources {
+  animation: pageSectionIn var(--motion-slow) var(--ease-out) both;
+}
+
+.pathway-form {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.85fr) minmax(260px, 1.4fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.pathway-form label,
+.pathway-filter-row label {
+  display: grid;
+  gap: 7px;
+}
+
+.pathway-form span,
+.pathway-filter-row span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.pathway-form input,
+.pathway-form select,
+.pathway-filter-row input,
+.pathway-filter-row select {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0 12px;
+  background: var(--surface-strong);
+  color: var(--text);
+  outline: none;
+}
+
+.pathway-form input:focus,
+.pathway-form select:focus,
+.pathway-filter-row input:focus,
+.pathway-filter-row select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
+
+.pathway-recommendation {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(280px, 1.1fr);
+  gap: 14px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-strong));
+}
+
+.pathway-recommendation h3,
+.pathway-recommendation p {
+  margin: 0;
+}
+
+.pathway-recommendation ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.pathway-route-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pathway-route-card,
+.pathway-course-card,
+.pathway-empty {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+}
+
+.pathway-route-card {
+  display: grid;
+  gap: 13px;
+  padding: 16px;
+  transition:
+    transform var(--motion-medium) var(--ease-out),
+    border-color var(--motion-medium) ease,
+    box-shadow var(--motion-medium) ease;
+}
+
+.pathway-route-card:hover,
+.pathway-route-card.is-selected {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  box-shadow: 0 16px 36px var(--shadow);
+}
+
+.pathway-route-card h3,
+.pathway-route-card p,
+.pathway-route-card dl,
+.pathway-route-card dd {
+  margin: 0;
+}
+
+.pathway-route-card dl {
+  display: grid;
+  gap: 8px;
+}
+
+.pathway-route-card dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pathway-route-card dd {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.pathway-type-tag {
+  display: inline-flex;
+  width: fit-content;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.pathway-card-actions a,
+.pathway-card-actions button,
+.official-link-grid a {
+  min-height: 34px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line));
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.pathway-card-actions button {
+  cursor: pointer;
+}
+
+.pathway-filter-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(220px, 0.55fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.pathway-course-list {
+  display: grid;
+  gap: 10px;
+}
+
+.pathway-course-card {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+  animation: fadeUp var(--motion-medium) var(--ease-out) both;
+}
+
+.pathway-course-logo {
+  display: grid;
+  place-items: center;
+  min-height: 76px;
+}
+
+.pathway-course-logo img {
+  max-width: 78px;
+  max-height: 54px;
+  object-fit: contain;
+}
+
+.pathway-logo-fallback {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.pathway-course-card h3,
+.pathway-course-card p {
+  margin: 6px 0 0;
+}
+
+.pathway-course-card h3 {
+  margin-top: 8px;
+}
+
+.pathway-course-meta {
+  margin-top: 10px;
+}
+
+.pathway-course-meta span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.pathway-empty {
+  padding: 18px;
+}
+
+.pathway-empty h3,
+.pathway-empty p {
+  margin: 0;
+}
+
+.pathway-empty p {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.pathway-linear {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pathway-linear li {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.pathway-linear li > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 900;
+}
+
+.pathway-linear strong,
+.pathway-linear p {
+  margin: 0;
+}
+
+.pathway-linear p {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.official-link-grid a {
+  border-radius: var(--radius);
+}
+
 :root[data-theme="dark"] .my-plan-empty,
 :root[data-theme="dark"] .my-plan-status,
 :root[data-theme="dark"] .guide-linear-preview,
@@ -8478,7 +8812,13 @@ html {
 :root[data-theme="dark"] .my-plan-section-card,
 :root[data-theme="dark"] .my-plan-mini-list section,
 :root[data-theme="dark"] .linear-plan-stage article,
-:root[data-theme="dark"] .linear-stage-item {
+:root[data-theme="dark"] .linear-stage-item,
+:root[data-theme="dark"] .pathway-hero-card,
+:root[data-theme="dark"] .pathway-recommendation,
+:root[data-theme="dark"] .pathway-route-card,
+:root[data-theme="dark"] .pathway-course-card,
+:root[data-theme="dark"] .pathway-empty,
+:root[data-theme="dark"] .pathway-linear li {
   background: var(--surface);
   border-color: var(--line);
 }
@@ -8492,7 +8832,9 @@ html {
 @media (max-width: 760px) {
   .my-plan-status,
   .guide-linear-preview,
-  .guide-adjust-head {
+  .guide-adjust-head,
+  .pathways-hero,
+  .pathway-recommendation {
     align-items: stretch;
     grid-template-columns: 1fr;
     flex-direction: column;
@@ -8502,11 +8844,16 @@ html {
   .guide-answer-review-list article,
   .guide-adjust-grid,
   .my-plan-personal-grid,
-  .linear-stage-item.with-logo {
+  .linear-stage-item.with-logo,
+  .pathway-form,
+  .pathway-route-grid,
+  .pathway-filter-row,
+  .pathway-course-card {
     grid-template-columns: 1fr;
   }
 
-  .my-plan-page {
+  .my-plan-page,
+  .pathways-page {
     width: min(100% - 18px, 1160px);
     padding-bottom: 32px;
   }

@@ -53,6 +53,54 @@ test("My Plan has its own page and every nav points to it", () => {
   assert.match(vercel, /"destination":\s*"\/my-plan\.html"/);
 });
 
+test("Pathways has its own page and every nav points to it", () => {
+  const app = read("app.js");
+  const guide = read("guide.js");
+  const subjectHelper = read("subject-helper.js");
+  const calculator = read("atar-calculator.js");
+  const advisor = read("advisor.js");
+  const myPlan = read("my-plan.js");
+  const pathwaysHtml = read("pathways.html");
+  const pathways = read("pathways.js");
+  const server = read("server.js");
+  const vercel = read("vercel.json");
+  const packageJson = read("package.json");
+
+  for (const source of [app, guide, subjectHelper, calculator, advisor, myPlan, pathways]) {
+    assert.match(source, /Pathways/);
+    assert.match(source, /\.\/pathways\.html/);
+  }
+
+  assert.match(pathwaysHtml, /id="pathways-app"/);
+  assert.match(pathwaysHtml, /uac-courses\.js/);
+  assert.match(pathwaysHtml, /pathways\.js/);
+  assert.match(pathways, /providerLogo/);
+  assert.match(server, /pathways/);
+  assert.match(server, /no-atar/);
+  assert.match(vercel, /"source":\s*"\/pathways"/);
+  assert.match(vercel, /"destination":\s*"\/pathways\.html"/);
+  assert.match(vercel, /"source":\s*"\/no-atar"/);
+  assert.match(packageJson, /node --check pathways\.js/);
+});
+
+test("Pathways covers no-ATAR and alternative university entry routes", () => {
+  const source = read("pathways.js");
+
+  assert.match(source, /No ATAR/);
+  assert.match(source, /STAT/);
+  assert.match(source, /Schools Recommendation Scheme/);
+  assert.match(source, /Educational Access Scheme/);
+  assert.match(source, /TAFE\/VET/);
+  assert.match(source, /Open Universities Australia/);
+  assert.match(source, /pathway course/i);
+  assert.match(source, /Undergraduate Certificate/);
+  assert.match(source, /Diploma/);
+  assert.match(source, /foundation/i);
+  assert.match(source, /portfolio/i);
+  assert.match(source, /coursePathwayType/);
+  assert.match(source, /recommendedRoute/);
+});
+
 test("My Plan page reads the saved Guide result as a linear plan", () => {
   const myPlan = read("my-plan.js");
   const guide = read("guide.js");

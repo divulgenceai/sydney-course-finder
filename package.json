@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test tests/*.test.js",
-    "check": "node --check app.js && node --check advisor.js && node --check atar-calculator.js && node --check subject-helper-logic.js && node --check subject-helper.js && node --check guide.js && node --check my-plan.js && node --check atar-data.js && node --check server.js && node --check api/ai.js && node --check tools/import-uac-courses.js && node --check tools/audit-site-data.js",
+    "check": "node --check app.js && node --check advisor.js && node --check atar-calculator.js && node --check subject-helper-logic.js && node --check subject-helper.js && node --check guide.js && node --check my-plan.js && node --check pathways.js && node --check atar-data.js && node --check server.js && node --check api/ai.js && node --check tools/import-uac-courses.js && node --check tools/audit-site-data.js",
     "audit:data": "node tools/audit-site-data.js",
     "import:uac": "node tools/import-uac-courses.js"
   },

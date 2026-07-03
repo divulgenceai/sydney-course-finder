@@ -419,6 +419,7 @@ function renderGuide(options = {}) {
         <a href="./index.html#courses">Courses</a>
         <a href="./guide.html" aria-current="page">Guide</a>
         <a href="./my-plan.html">My Plan</a>
+        <a href="./pathways.html">Pathways</a>
         <a href="./index.html#atar">ATAR match</a>
         <a href="./atar-calculator.html">ATAR calculator</a>
         <a href="./subject-helper.html">Subject helper</a>

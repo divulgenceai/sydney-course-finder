@@ -78,8 +78,10 @@ function resolveFile(pathname) {
         ? "/atar-calculator.html"
         : clean === "/my-plan" || clean === "/plan"
           ? "/my-plan.html"
-        : clean === "/subject-helper" || clean === "/subjects"
-          ? "/subject-helper.html"
+          : clean === "/pathways" || clean === "/no-atar"
+            ? "/pathways.html"
+            : clean === "/subject-helper" || clean === "/subjects"
+              ? "/subject-helper.html"
         : clean;
   const candidate = path.resolve(root, `.${route}`);
   const relative = path.relative(root, candidate);

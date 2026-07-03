@@ -16,6 +16,14 @@
       "destination": "/my-plan.html"
     },
     {
+      "source": "/pathways",
+      "destination": "/pathways.html"
+    },
+    {
+      "source": "/no-atar",
+      "destination": "/pathways.html"
+    },
+    {
       "source": "/subject-helper",
       "destination": "/subject-helper.html"
     },
