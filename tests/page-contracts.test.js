@@ -61,6 +61,7 @@ test("Pathways has its own page and every nav points to it", () => {
   const advisor = read("advisor.js");
   const myPlan = read("my-plan.js");
   const pathwaysHtml = read("pathways.html");
+  const noAtarHtml = read("no-atar.html");
   const pathways = read("pathways.js");
   const server = read("server.js");
   const vercel = read("vercel.json");
@@ -74,6 +75,9 @@ test("Pathways has its own page and every nav points to it", () => {
   assert.match(pathwaysHtml, /id="pathways-app"/);
   assert.match(pathwaysHtml, /uac-courses\.js/);
   assert.match(pathwaysHtml, /pathways\.js/);
+  assert.match(noAtarHtml, /id="pathways-app"/);
+  assert.match(noAtarHtml, /uac-courses\.js/);
+  assert.match(noAtarHtml, /pathways\.js/);
   assert.match(pathways, /providerLogo/);
   assert.match(server, /pathways/);
   assert.match(server, /no-atar/);

@@ -78,8 +78,10 @@ function resolveFile(pathname) {
         ? "/atar-calculator.html"
         : clean === "/my-plan" || clean === "/plan"
           ? "/my-plan.html"
-          : clean === "/pathways" || clean === "/no-atar"
+          : clean === "/pathways"
             ? "/pathways.html"
+            : clean === "/no-atar"
+              ? "/no-atar.html"
             : clean === "/subject-helper" || clean === "/subjects"
               ? "/subject-helper.html"
         : clean;
