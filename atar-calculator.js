@@ -57,6 +57,7 @@ function renderCalculator() {
       <nav class="topnav" aria-label="Main">
         <a href="./index.html#courses">Courses</a>
         <a href="./guide.html">Guide</a>
+        <a href="./my-plan.html">My Plan</a>
         <a href="./index.html#atar">ATAR match</a>
         <a href="./atar-calculator.html" aria-current="page">ATAR calculator</a>
         <a href="./subject-helper.html">Subject helper</a>
@@ -265,7 +266,6 @@ function renderSubjectRow(row, index = 0) {
 
 function renderEstimateSummary(estimate) {
   const atarLabel = estimate.assumedReady ? estimate.assumedAtarLabel : "-";
-  const impact = estimate.totalBreakEvenImpact;
   return `
     <div class="atar-simple-summary">
       <article class="atar-main-card">
@@ -273,15 +273,11 @@ function renderEstimateSummary(estimate) {
         <strong>${escapeHtml(atarLabel)}</strong>
         <p>${estimate.assumedReady ? estimateModeLabel(estimate) : "Add a subject and mark to start."}</p>
       </article>
-      <article class="atar-impact-card ${scaleClass(impact)}">
-        <span>Scaling effect</span>
-        <strong>${estimate.assumedReady ? breakEvenImpactSummary(impact) : "-"}</strong>
-        <p>${estimate.assumedReady ? impactSentence(impact) : "Each subject will show whether it helps or drags from break-even."}</p>
-      </article>
+      ${renderSubjectFocusCard(estimate)}
       <article class="atar-context-card">
         <span>How to read it</span>
         <p><strong>Break-even</strong> is the HSC mark where a subject reaches about 25 scaled marks per unit.</p>
-        <p><strong>Above break-even</strong> means it is helping your ATAR estimate. <strong>Below break-even</strong> means it is dragging.</p>
+        <p><strong>Strong subjects</strong> are furthest above break-even. <strong>Focus subjects</strong> are below break-even or closest to the line.</p>
       </article>
     </div>
     ${estimate.warnings.length ? `<ul class="calc-warnings">${estimate.warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>` : ""}
@@ -289,7 +285,7 @@ function renderEstimateSummary(estimate) {
   `;
 }
 
-function renderSubjectImpactList(estimate) {
+function subjectFocusRows(estimate) {
   const rows = estimate.ready
     ? estimate.subjects
       .filter((entry) => entry.countedUnits > 0)
@@ -311,12 +307,68 @@ function renderSubjectImpactList(estimate) {
       }));
 
   rows.sort((a, b) => b.listImpact - a.listImpact || b.listScaled - a.listScaled);
+  return rows;
+}
+
+function renderSubjectFocusCard(estimate) {
+  const rows = subjectFocusRows(estimate);
+  if (!estimate.assumedReady || !rows.length) {
+    return `
+      <article class="atar-focus-card">
+        <span>Subject focus</span>
+        <strong>Add marks to see focus</strong>
+        <p>Enter subjects and marks to see what is carrying your estimate and what needs the most attention.</p>
+      </article>
+    `;
+  }
+
+  const strongRows = rows.filter((entry) => entry.listImpact >= -0.05).slice(0, 2);
+  const focusRows = [...rows].sort((a, b) => a.listImpact - b.listImpact || a.listScaled - b.listScaled).slice(0, 2);
+  const lead = focusRows.some((entry) => entry.listImpact < -0.05)
+    ? "Work on the focus subjects first; they are pulling the estimate down the most."
+    : "No subject is clearly dragging. Keep lifting the lower-scoring subjects while protecting your strengths.";
+
+  return `
+    <article class="atar-focus-card">
+      <span>Subject focus</span>
+      <div class="focus-groups">
+        <div>
+          <em>Strong</em>
+          ${renderMiniSubjectList(strongRows.length ? strongRows : rows.slice(0, 1), "strong")}
+        </div>
+        <div>
+          <em>Weak / focus</em>
+          ${renderMiniSubjectList(focusRows, "focus")}
+        </div>
+      </div>
+      <p>${escapeHtml(lead)}</p>
+    </article>
+  `;
+}
+
+function renderMiniSubjectList(rows, type = "strong") {
+  if (!rows.length) return `<small>No subjects yet</small>`;
+  return rows.map((entry) => {
+    const status = type === "focus"
+      ? entry.listImpact < -0.05 ? "weak" : "lowest"
+      : entry.listImpact >= -0.05 ? "strong" : "watch";
+    return `
+    <small class="${scaleClass(entry.listImpact)} ${type === "focus" ? "focus-subject" : "strong-subject"}">
+      <b>${escapeHtml(subjectDisplayName(entry.subject))}</b>
+      <span>${status} ${formatSigned(entry.listImpact)}</span>
+    </small>
+  `;
+  }).join("");
+}
+
+function renderSubjectImpactList(estimate) {
+  const rows = subjectFocusRows(estimate);
   if (!rows.length) return "";
 
   return `
     <div class="subject-impact-list">
       <div class="subject-impact-head">
-        <h3>Subject scaling</h3>
+        <h3>Subject strengths and focus areas</h3>
         <p>${estimate.ready ? "Best 10 eligible units are counted." : `Entered ${estimate.previewUnits} unit${estimate.previewUnits === 1 ? "" : "s"}; missing units are held at break-even for the preview.`}</p>
       </div>
       ${rows.map((entry) => `

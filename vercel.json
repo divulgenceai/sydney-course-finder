@@ -12,6 +12,10 @@
       "destination": "/atar-calculator.html"
     },
     {
+      "source": "/my-plan",
+      "destination": "/my-plan.html"
+    },
+    {
       "source": "/subject-helper",
       "destination": "/subject-helper.html"
     },

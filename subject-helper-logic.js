@@ -528,6 +528,400 @@
     }
   }
 
+  function buildPlanMilestones(input = {}, now = new Date()) {
+    const state = createGuideState(input);
+    const year = state.year || "Year 10 or below";
+    const goal = [state.dreamJob, state.dreamCourse].map((item) => String(item || "").trim()).filter(Boolean).join(" / ");
+    const income = state.dreamIncome && state.dreamIncome !== "Any income" ? `, aiming around ${state.dreamIncome}` : "";
+    const status = {
+      label: year,
+      text: goal
+        ? `You are currently planning toward ${goal}${income}.`
+        : `You are currently in ${year.toLowerCase()} planning mode. Add a job, degree or course target to sharpen this.`
+    };
+
+    const items = year === "Year 10 or below"
+      ? year10Milestones()
+      : year === "Year 11"
+        ? year11Milestones()
+        : year12Milestones();
+
+    const datedItems = items.map((item) => ({
+      ...item,
+      status: milestoneStatus(item.date, now)
+    }));
+
+    return {
+      status,
+      items: datedItems
+    };
+  }
+
+  function buildPersonalPlanView(input = {}, snapshot = null, now = new Date()) {
+    const state = createGuideState(input);
+    const milestones = buildPlanMilestones(state, now);
+    const plan = snapshot && typeof snapshot === "object" ? snapshot : null;
+    if (!plan?.primary?.name) {
+      return {
+        ...milestones,
+        source: "guide-progress",
+        sections: []
+      };
+    }
+
+    const primary = plan.primary;
+    const goal = cleanDisplayText(plan.goalLabel)
+      || [state.dreamJob, state.dreamCourse].map(cleanDisplayText).filter(Boolean).join(" / ");
+    const statusText = `${primary.name} at ${primary.university || "your selected provider"} is your current Guide recommendation${goal ? ` for ${goal}` : ""}.`;
+    const sections = [
+      {
+        title: "Current Guide recommendation",
+        intro: "This is the course direction the Guide built from your answers.",
+        items: [{
+          title: primary.name,
+          meta: [primary.university, primary.campus, primary.atar ? `ATAR ${primary.atar}` : ""].filter(Boolean).join(" - "),
+          text: [plan.reach?.text, plan.atarTargetLabel, plan.atarMessage].map(cleanDisplayText).filter(Boolean).join(" ")
+        }]
+      },
+      {
+        title: "Subjects from your Guide",
+        intro: "These are the subject choices or keeps the Guide connected to this pathway.",
+        items: (plan.subjectTargets || []).slice(0, 8).map((item) => ({
+          title: cleanDisplayText(item.name),
+          meta: cleanDisplayText(item.badge),
+          text: [item.reason, item.target].map(cleanDisplayText).filter(Boolean).join(" ")
+        })).filter((item) => item.title)
+      },
+      {
+        title: "UAC preference ladder",
+        intro: "Use the exact order in UAC strategically: dream first, realistic next, pathway backups underneath.",
+        items: (plan.options || []).slice(0, 5).map((item, index) => ({
+          title: `${index + 1}. ${cleanDisplayText(item.name)}`,
+          meta: [item.university, item.campus, item.atar ? `ATAR ${item.atar}` : ""].filter(Boolean).join(" - "),
+          text: cleanDisplayText(item.reason || item.reasons)
+        })).filter((item) => item.title.replace(/^\d+\.\s*/, ""))
+      },
+      {
+        title: "Jobs and income",
+        intro: "These are broad income-linked career directions from the Guide result, not guaranteed salaries.",
+        items: (plan.jobs || []).slice(0, 5).map((item) => ({
+          title: cleanDisplayText(item.title),
+          meta: cleanDisplayText(item.range),
+          text: cleanDisplayText(item.text || "Build projects, placements, internships or experience while studying.")
+        })).filter((item) => item.title)
+      },
+      {
+        title: "Personal next actions",
+        intro: plan.timelineIntro || milestones.status.text,
+        items: (plan.steps || []).slice(0, 6).map((item) => ({
+          title: cleanDisplayText(item.title),
+          meta: "Guide step",
+          text: cleanDisplayText(item.text)
+        })).filter((item) => item.title)
+      }
+    ];
+
+    if (plan.dropAdvice?.name) {
+      sections.splice(2, 0, {
+        title: "Drop check",
+        intro: "If you later need to reduce units, start here before dropping anything important.",
+        items: [{
+          title: cleanDisplayText(plan.dropAdvice.name),
+          meta: "Possible Year 12 drop",
+          text: cleanDisplayText(plan.dropAdvice.reason)
+        }]
+      });
+    }
+
+    return {
+      source: "guide-result",
+      status: {
+        label: plan.profileLabel || milestones.status.label,
+        text: statusText
+      },
+      sections: sections.filter((section) => section.items.length),
+      linearStages: buildLinearMyPlanStages(state, plan, milestones),
+      items: milestones.items
+    };
+  }
+
+  function buildLinearMyPlanStages(state, plan, milestones) {
+    const subjects = advancedSubjectAdvice(plan.subjectTargets || [], state);
+    const subjectNames = subjects.slice(0, 6).map((item) => cleanDisplayText(item.name)).filter(Boolean);
+    const subjectSummary = subjectNames.length
+      ? `Start with ${subjectNames.join(", ")}. Confirm the exact school line choices and any UAC prerequisites before locking it in.`
+      : "Start with English, one realistic maths level if useful, and two to four subjects that support the course or job direction.";
+    const primary = plan.primary || {};
+    const options = (plan.options || []).slice(0, 5);
+    const jobs = (plan.jobs || []).slice(0, 5);
+    const dropTitle = plan.dropAdvice?.name || subjects.find((item) => !/english/i.test(item.name))?.name || "Lowest-fit support subject";
+    const dropText = plan.dropAdvice?.reason || "At the end of Year 11, compare marks, workload, prerequisites and motivation before dropping anything.";
+    const jobTitles = jobs.length ? jobs.map((job) => cleanDisplayText(job.title)).filter(Boolean).join(", ") : "related entry-level roles";
+    const topCourse = primary.name || options[0]?.name || "your target course";
+    const uacItems = options.length ? options : [primary].filter((item) => item?.name);
+
+    const projectedAtar = projectedAtarStageInfo(plan, primary);
+    const subjectSelectionStage = {
+      phase: "Year 10 subject selection",
+      when: "Year 10",
+      title: "Pick Year 11/12 subjects that keep the pathway open",
+      summary: "Begin with subject selection, not university forms. Strong subject choices protect the later course plan.",
+      items: [{
+        title: "Recommended subject set",
+        meta: subjectNames.length ? `${subjectNames.length} subjects` : "Build in Guide",
+        text: subjectSummary
+      }, ...subjects.slice(0, 6).map((item) => ({
+        title: cleanDisplayText(item.name),
+        meta: cleanDisplayText(item.badge || "subject"),
+        text: [item.reason, item.target].map(cleanDisplayText).filter(Boolean).join(" ")
+      }))]
+    };
+    const dropStage = {
+      phase: state.year === "Year 10 or below" ? "End of Year 11 drop check" : "Subject drop",
+      when: state.year === "Year 10 or below" ? "End of Year 11" : "Now / before finalising Year 12 pattern",
+      title: state.year === "Year 12" ? "Check whether your subject pattern is still safe" : "Decide what to drop before Year 12",
+      summary: "Drop only after checking English, prerequisites, assumed knowledge, units and marks.",
+      items: [{
+        title: dropTitle,
+        meta: "First drop-check candidate",
+        text: dropText
+      }]
+    };
+    const projectedAtarStage = {
+      phase: "Projected ATAR",
+      when: state.year === "Year 10 or below" ? "Before finalising course aim" : "Now",
+      title: "Check the projected ATAR before choosing the course ladder",
+      summary: "This sits before the dream course so the plan stays realistic.",
+      items: [{
+        title: projectedAtar.label,
+        meta: projectedAtar.source,
+        text: projectedAtar.text
+      }]
+    };
+    const dreamCourseStage = {
+      phase: "Dream course",
+      when: "Course target",
+      title: "Aim for the dream course",
+      summary: "Use the saved Guide recommendation as the main target, then keep backups around it.",
+      items: [{
+        kind: "course",
+        id: primary.id || "",
+        university: primary.university || "",
+        campus: primary.campus || "",
+        atar: primary.atar || "",
+        title: topCourse,
+        meta: [primary.university, primary.campus, primary.atar ? `ATAR ${primary.atar}` : ""].filter(Boolean).join(" - "),
+        text: [plan.reach?.text, plan.atarTargetLabel, plan.atarMessage].map(cleanDisplayText).filter(Boolean).join(" ")
+      }]
+    };
+    const uacStage = {
+      phase: "UAC list",
+      when: "UAC applications",
+      title: "Build the UAC course list",
+      summary: "Put dream options first, realistic options next, and pathway backups underneath.",
+      items: uacItems.map((item, index) => ({
+        kind: "course",
+        id: item.id || "",
+        university: item.university || "",
+        campus: item.campus || "",
+        atar: item.atar || "",
+        title: `${index + 1}. ${cleanDisplayText(item.name)}`,
+        meta: [item.university, item.campus, item.atar ? `ATAR ${item.atar}` : ""].filter(Boolean).join(" - "),
+        text: cleanDisplayText(item.reason || "Use this as part of the dream, realistic and backup preference ladder.")
+      }))
+    };
+    const jobsStage = {
+      phase: "Jobs to apply to",
+      when: "Uni years and after",
+      title: "Turn the degree into work experience and job applications",
+      summary: "The plan should end with employability, not just an offer letter.",
+      items: [{
+        kind: "jobs",
+        title: jobTitles || "Related careers",
+        meta: jobs[0]?.range || "Job-search stage",
+        text: `Look for casual roles, internships, placements and graduate programs on SEEK, LinkedIn, GradConnection, Prosple, university career portals and employer career pages. Build projects or experience that prove the skills behind ${cleanDisplayText(plan.goalLabel || state.dreamJob || topCourse)}.`
+      }]
+    };
+
+    return state.year === "Year 10 or below"
+      ? [subjectSelectionStage, dropStage, projectedAtarStage, dreamCourseStage, uacStage, jobsStage]
+      : [dropStage, projectedAtarStage, dreamCourseStage, uacStage, jobsStage];
+  }
+
+  function projectedAtarStageInfo(plan, primary) {
+    const projected = plan.projectedAtar && typeof plan.projectedAtar === "object" ? plan.projectedAtar : null;
+    const label = cleanDisplayText(projected?.label)
+      || cleanDisplayText(plan.atarTargetLabel)
+      || (primary?.atar ? `Target ${primary.atar}` : "No projected ATAR yet");
+    const source = cleanDisplayText(projected?.source)
+      || (projected?.label ? "Projected estimate" : "Planning target");
+    const text = cleanDisplayText(projected?.text)
+      || cleanDisplayText(plan.atarMessage)
+      || "Add Year 11/12 marks in Guide to estimate reach before relying on this course ladder.";
+    return { label, source, text };
+  }
+
+  function advancedSubjectAdvice(subjectTargets, state) {
+    const strongSchool = ["Consistently strong", "Above average"].includes(state.schoolPerformance);
+    const seen = new Set();
+    return subjectTargets.map((item) => {
+      const name = cleanDisplayText(item.name);
+      let next = { ...item, name };
+      if (strongSchool && /^English Standard$/i.test(name)) {
+        next = {
+          ...next,
+          name: "English Advanced",
+          badge: "advanced option",
+          reason: "Because you have a strong school tracking signal, consider English Advanced if your teacher agrees it is realistic.",
+          target: next.target || ""
+        };
+      }
+      if (strongSchool && /^Mathematics Standard 2$/i.test(name)) {
+        next = {
+          ...next,
+          name: "Mathematics Advanced",
+          badge: "advanced option",
+          reason: "Because you have a strong school tracking signal, consider Mathematics Advanced if it fits the course and your marks.",
+          target: next.target || ""
+        };
+      }
+      return next;
+    }).filter((item) => {
+      const key = normaliseText(item.name);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function cleanDisplayText(value) {
+    return String(Array.isArray(value) ? value.join(" ") : value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function year10Milestones() {
+    return [
+      {
+        when: "Now",
+        title: "Build the direction first",
+        text: "Use Subject Helper or Guide to connect a career or degree idea to realistic Year 11/12 subjects.",
+        impact: "Changes the subject shortlist, but does not lock the whole plan."
+      },
+      {
+        when: "Term 3-4 Year 10",
+        title: "School subject-selection window",
+        text: "Most NSW schools run their own subject-selection evening, interview or online form around this period.",
+        impact: "This directly affects Year 11 options. Confirm your exact school deadline."
+      },
+      {
+        when: "Before Year 11 starts",
+        title: "Check prerequisites and assumed knowledge",
+        text: "Open UAC and university pages for the dream course and backup courses before finalising subjects.",
+        impact: "Prerequisites can block entry; assumed knowledge usually affects readiness, not automatic entry."
+      },
+      {
+        when: "Year 11 Term 3-4",
+        title: "Review workload before Year 12",
+        text: "Compare marks, workload and motivation before deciding whether to drop a Year 11 subject for Year 12.",
+        impact: "Dropping the wrong subject can close pathways, so protect English and prerequisites first."
+      },
+      {
+        when: "Year 12 application year",
+        title: "Track UAC key dates",
+        text: "UAC undergraduate applications usually open well before final exams, with offer rounds and preference deadlines later.",
+        impact: "Application timing affects offers and fees, but preferences can usually be changed after applying."
+      }
+    ];
+  }
+
+  function year11Milestones() {
+    return [
+      {
+        when: "Now",
+        title: "Keep the Year 12 pattern safe",
+        text: "Aim to carry enough units and the subjects that protect prerequisites, then use marks to decide what to keep.",
+        impact: "Changing subjects now can affect Year 12 eligibility and assumed-knowledge readiness."
+      },
+      {
+        when: "Term 3-4 Year 11",
+        title: "Choose what to continue into Year 12",
+        text: "Use the drop advice, school marks and teacher feedback before reducing units.",
+        impact: "This changes the subject plan. Never drop English or a confirmed prerequisite."
+      },
+      {
+        when: "30 Jun in the HSC year",
+        title: "NESA HSC course-entry checkpoint",
+        text: "Schools must enter students into HSC courses by the published NESA deadline in the HSC course year.",
+        impact: "This affects official exam/course entry, so your school deadline may be earlier."
+      },
+      {
+        when: "April-September Year 12",
+        title: "Prepare UAC and early-entry applications",
+        text: "Use Year 11 results, projects and preference planning before Year 12 exam pressure peaks.",
+        impact: "Early-entry choices can create backups without replacing the main UAC preference plan."
+      },
+      {
+        when: "After trials",
+        title: "Rebuild the preference ladder",
+        text: "Make dream, realistic and pathway bands based on your latest marks and course requirements.",
+        impact: "This changes course order, not your underlying subject history."
+      }
+    ];
+  }
+
+  function year12Milestones() {
+    return [
+      {
+        when: "Now",
+        title: "Check your current plan",
+        text: "Confirm prerequisites, assumed knowledge, ATAR target, course backups and early-entry options.",
+        impact: "This may change UAC preferences, but it does not change your HSC subjects by itself."
+      },
+      {
+        when: "11 Sep 2026",
+        date: "2026-09-11",
+        title: "Schools Recommendation Scheme closes",
+        text: "UAC lists this as the 2026 SRS early-offer application close date for Year 12 students.",
+        impact: "Missing it may remove one early-offer pathway, but normal UAC applications still continue."
+      },
+      {
+        when: "30 Sep 2026",
+        date: "2026-09-30",
+        title: "UAC early-bird processing charge deadline",
+        text: "Apply and pay by the early-bird deadline to avoid the higher standard processing charge.",
+        impact: "This affects cost more than preference order; preferences can usually be changed later."
+      },
+      {
+        when: "13 Oct 2026",
+        date: "2026-10-13",
+        title: "2026 HSC written exams begin",
+        text: "Use your personalised NESA timetable for exact subject sessions.",
+        impact: "This does not change course options directly, but it drives the final ATAR/result timeline."
+      },
+      {
+        when: "16 Dec 2026",
+        date: "2026-12-16",
+        title: "HSC results release",
+        text: "Use the released results and ATAR to adjust preferences before the main offer rounds.",
+        impact: "This can change which preferences are realistic, stretch or pathway options."
+      },
+      {
+        when: "5 Feb 2027",
+        date: "2027-02-05",
+        title: "Semester 1 final application deadline",
+        text: "UAC lists this as the final application deadline for semester 1, 2027 undergraduate admissions.",
+        impact: "Missing it can block semester-one application through UAC for that cycle."
+      }
+    ];
+  }
+
+  function milestoneStatus(dateValue, now) {
+    if (!dateValue) return "check";
+    const milestoneDate = new Date(`${dateValue}T23:59:59+11:00`);
+    const currentDate = now instanceof Date ? now : new Date(now);
+    if (Number.isNaN(milestoneDate.getTime()) || Number.isNaN(currentDate.getTime())) return "check";
+    return milestoneDate < currentDate ? "past" : "upcoming";
+  }
+
   function resolveAvailableSubject(name, available) {
     if (available.has(name)) return available.get(name);
     if (name === "mathematics advanced") {
@@ -612,6 +1006,8 @@
 
   return {
     assessCourseSubjects,
+    buildPlanMilestones,
+    buildPersonalPlanView,
     buildYear10SubjectPlan,
     chooseDirectionProfile,
     choosePossibleDrop,

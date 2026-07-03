@@ -10,3 +10,4 @@ playwright-report/
 test-results/
 logo-options.html
 assets/logo-option-*.svg
+.superpowers/

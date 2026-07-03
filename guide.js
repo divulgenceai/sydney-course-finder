@@ -7,6 +7,7 @@ const atarThresholds = (window.atarAggregateThresholds2025 || []).slice().sort((
 const guideMeta = window.uacImportMeta || {};
 const guidePlanningLogic = window.SubjectHelperLogic;
 const guideStorageKey = "sydneyCourseFinder.guideProgress";
+const guidePlanSnapshotKey = "sydneyCourseFinder.guidePlanSnapshot";
 const storedGuideState = guidePlanningLogic.restoreGuideState(localStorage.getItem(guideStorageKey));
 const guideSubjectLookup = buildSubjectLookup();
 const guideFieldCache = new WeakMap();
@@ -15,6 +16,8 @@ let guidePrewarmStarted = false;
 let guidePrewarmIndex = 0;
 let guidePersistTimer = 0;
 let guideRestoreHandled = false;
+let guideDeckReviewOpen = false;
+let guideDeckReviewEditing = false;
 
 const guideProviderQuality = {
   Technology: {
@@ -415,6 +418,7 @@ function renderGuide(options = {}) {
       <nav class="topnav" aria-label="Main">
         <a href="./index.html#courses">Courses</a>
         <a href="./guide.html" aria-current="page">Guide</a>
+        <a href="./my-plan.html">My Plan</a>
         <a href="./index.html#atar">ATAR match</a>
         <a href="./atar-calculator.html">ATAR calculator</a>
         <a href="./subject-helper.html">Subject helper</a>
@@ -514,6 +518,25 @@ function renderGuideDirectionDeck() {
   const card = directionCards[index];
   const answer = guideState.deckAnswers[index] || "";
   const complete = guidePlanningLogic.isDirectionDeckComplete(guideState.deckAnswers, directionCards.length);
+  if (complete && guideDeckReviewOpen && !guideDeckReviewEditing) return renderGuideDeckReview();
+  if (complete && !guideDeckReviewOpen) {
+    return `
+      <section class="guide-direction-deck is-folded" data-guide-deck>
+        <div class="guide-deck-head">
+          <div>
+            <span>Direction questions complete</span>
+            <h3>Your answer deck is folded away</h3>
+            <p>The Guide is using all ${directionCards.length} direction-card answers to rank subjects, courses, universities and careers.</p>
+          </div>
+          <strong>✓</strong>
+        </div>
+        <div class="guide-deck-fold">
+          <i></i><i></i><i></i>
+          <button type="button" class="clear-btn" data-guide-deck-review>Review answers</button>
+        </div>
+      </section>
+    `;
+  }
   return `
     <section class="guide-direction-deck" data-guide-deck>
       <div class="guide-deck-head">
@@ -537,6 +560,41 @@ function renderGuideDirectionDeck() {
         <button type="button" class="clear-btn" data-guide-deck-back ${index === 0 ? "disabled" : ""}>Back</button>
         <button type="button" class="clear-btn" data-guide-deck-answer="unsure" aria-pressed="${answer === "unsure"}">Not sure yet</button>
         <span>${complete ? "Direction questions complete" : `${directionCards.length - guideState.deckAnswers.filter(Boolean).length} remaining`}</span>
+      </div>
+    </section>
+  `;
+}
+
+function renderGuideDeckReview() {
+  return `
+    <section class="guide-direction-deck guide-deck-review" data-guide-deck>
+      <div class="guide-deck-head">
+        <div>
+          <span>Review answers</span>
+          <h3>Your direction-card answers</h3>
+          <p>Edit any answer below. Changing a card changes the course, subject and career weighting when the plan rebuilds.</p>
+        </div>
+        <strong>${guideState.deckAnswers.filter(Boolean).length} / ${directionCards.length}</strong>
+      </div>
+      <div class="guide-answer-review-list">
+        ${directionCards.map((card, index) => {
+          const answer = guideState.deckAnswers[index] || "unsure";
+          const label = answer === "a" ? card.a.title : answer === "b" ? card.b.title : "Not sure yet";
+          return `
+            <article>
+              <span>${index + 1}</span>
+              <div>
+                <strong>${escapeHtml(card.question)}</strong>
+                <p>${escapeHtml(label)}</p>
+              </div>
+              <button type="button" class="clear-btn" data-guide-deck-edit="${index}">Edit</button>
+            </article>
+          `;
+        }).join("")}
+      </div>
+      <div class="guide-deck-actions">
+        <button type="button" class="clear-btn" data-guide-deck-close>Fold deck away</button>
+        <span>Review does not break your plan until you change an answer.</span>
       </div>
     </section>
   `;
@@ -760,6 +818,7 @@ function renderGuideEmpty() {
 function renderGuideResult(result) {
   const primary = result.primary.course;
   const primaryJobs = result.jobs.slice(0, 3);
+  const guidePlanView = guidePlanningLogic.buildPersonalPlanView(guideState, createGuidePlanSnapshot(result), new Date());
   const providerNote = result.providerNote ? ` ${result.providerNote}` : "";
   const deckNote = guideState.deckAnswers.some(Boolean) ? " Your direction-card choices also influenced this match." : "";
   return `
@@ -776,6 +835,8 @@ function renderGuideResult(result) {
           <small>${escapeHtml(result.reach.text)}</small>
         </div>
       </div>
+
+      ${renderGuideLinearPlanPreview(guidePlanView.linearStages || [])}
 
       <div class="guide-plan-grid">
         <article class="guide-plan-card primary">
@@ -815,11 +876,13 @@ function renderGuideResult(result) {
       ${result.markEstimate?.hasMarks ? renderGuideEstimatePanel(result.markEstimate) : ""}
       ${!result.markEstimate?.hasMarks && result.schoolEstimate?.hasEstimate ? renderGuideSchoolPanel(result.schoolEstimate) : ""}
       ${result.hasTrueReward ? renderTrueRewardCard() : ""}
+      ${renderGuidePlanAdjustments()}
 
       ${renderPlanSection("Subjects to pick / keep", result.subjectIntro, `
         <div class="guide-subject-targets">
           ${result.subjectTargets.map(renderGuideSubjectTarget).join("")}
         </div>
+        ${result.dropAdvice ? renderGuideDropAdvice(result.dropAdvice) : ""}
       `, true)}
 
       ${renderPlanSection("ATAR and entry checks", "Prerequisites can block entry. Assumed knowledge usually does not block entry, but it can make first year harder.", `
@@ -865,6 +928,28 @@ function renderGuideResult(result) {
   `;
 }
 
+function renderGuideLinearPlanPreview(stages) {
+  if (!stages?.length) return "";
+  return `
+    <section class="guide-linear-preview" aria-label="Personal plan order">
+      <div>
+        <span>Plan order for ${escapeHtml(guideState.year)}</span>
+        <h3>What to do first</h3>
+        <p>This summary changes by year group so the next decision is always at the top.</p>
+      </div>
+      <ol>
+        ${stages.map((stage, index) => `
+          <li>
+            <span>${index + 1}</span>
+            <strong>${escapeHtml(stage.phase)}</strong>
+            <small>${escapeHtml(stage.items?.[0]?.title || stage.title || "")}</small>
+          </li>
+        `).join("")}
+      </ol>
+    </section>
+  `;
+}
+
 function renderPlanSection(title, intro, body, open = false) {
   return `
     <details class="guide-plan-section" ${open ? "open" : ""}>
@@ -874,6 +959,50 @@ function renderPlanSection(title, intro, body, open = false) {
       </summary>
       <div class="guide-section-body">${body}</div>
     </details>
+  `;
+}
+
+function renderGuidePlanAdjustments() {
+  return `
+    <section class="guide-adjust-panel" aria-label="Manual plan adjustments">
+      <div class="guide-adjust-head">
+        <div>
+          <span>Manual adjustment</span>
+          <h3>Tune the plan without guessing what it affects</h3>
+          <p>Change a planning signal here and the Guide rebuilds the recommendation. The notes tell you whether it changes the whole plan or only a smaller part.</p>
+        </div>
+        <button type="button" class="clear-btn" data-guide-jump="form">Edit full form</button>
+      </div>
+      <div class="guide-adjust-grid">
+        ${renderGuideAdjustInput("dreamJob", "Career target", "text", guideState.dreamJob, "Changes the recommendation because career words affect courses, subjects, jobs and income.")}
+        ${renderGuideAdjustInput("dreamCourse", "Degree target", "text", guideState.dreamCourse, "Changes the recommendation because exact degree names can override broad career guesses.")}
+        ${renderGuideAdjustSelect("dreamIncome", "Income goal", guideIncomeOptions, guideState.dreamIncome, "Changes ranking toward courses linked to that income band; it does not break prerequisites.")}
+        ${renderGuideAdjustSelect("preference", "Preference", guidePreferences, guideState.preference, "Changes the ranking style, but does not break your saved subjects.")}
+        ${renderGuideAdjustInput("avoid", "Avoid list", "text", guideState.avoid, "Penalises matching providers, fields or workload patterns; it does not erase other options.")}
+      </div>
+    </section>
+  `;
+}
+
+function renderGuideAdjustInput(key, label, type, value, impact) {
+  return `
+    <label class="guide-adjust-field">
+      <span>${escapeHtml(label)}</span>
+      <input data-guide-adjust="${escapeHtml(key)}" type="${escapeHtml(type)}" value="${escapeHtml(value)}" />
+      <small>${escapeHtml(impact)}</small>
+    </label>
+  `;
+}
+
+function renderGuideAdjustSelect(key, label, options, value, impact) {
+  return `
+    <label class="guide-adjust-field">
+      <span>${escapeHtml(label)}</span>
+      <select data-guide-adjust="${escapeHtml(key)}">
+        ${options.map((option) => `<option ${option === value ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}
+      </select>
+      <small>${escapeHtml(impact)}</small>
+    </label>
   `;
 }
 
@@ -946,6 +1075,16 @@ function renderGuideSubjectTarget(item) {
       <p>${escapeHtml(item.reason)}</p>
       <small>${escapeHtml(item.target)}</small>
     </article>
+  `;
+}
+
+function renderGuideDropAdvice(advice) {
+  return `
+    <aside class="guide-drop-advice">
+      <span>Year 12 drop check</span>
+      <strong>If you need to drop one later: ${escapeHtml(advice.name)}</strong>
+      <p>${escapeHtml(advice.reason)}</p>
+    </aside>
   `;
 }
 
@@ -1045,6 +1184,7 @@ function bindGuideEvents() {
   });
   guideApp.querySelector("[data-guide-reset]")?.addEventListener("click", () => {
     localStorage.removeItem(guideStorageKey);
+    localStorage.removeItem(guidePlanSnapshotKey);
     Object.assign(guideState, guidePlanningLogic.createGuideState({
       subjectsWithMarks: [createGuideSubjectRow()]
     }));
@@ -1074,6 +1214,33 @@ function bindGuideEvents() {
       guideApp.querySelector('input[name="dreamJob"]')?.focus();
     });
   });
+  guideApp.querySelectorAll("[data-guide-adjust]").forEach((field) => {
+    field.addEventListener("change", () => applyGuideAdjustment(field));
+    if (field.matches("input, textarea")) {
+      field.addEventListener("blur", () => applyGuideAdjustment(field));
+      field.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        field.blur();
+        applyGuideAdjustment(field);
+      });
+    }
+  });
+  guideApp.querySelector("[data-guide-jump='form']")?.addEventListener("click", () => {
+    guideApp.querySelector("#guide-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
+function applyGuideAdjustment(field) {
+  const key = field?.dataset?.guideAdjust;
+  if (!key) return;
+  const nextValue = String(field.value || "").trim();
+  if (guideState[key] === nextValue && guideState.result) return;
+  guideState[key] = nextValue;
+  if (guideState.year !== "Year 10 or below") guideState.schoolPerformance = "Not sure yet";
+  guideState.result = buildGuidePlan();
+  persistGuideProgress();
+  renderGuide({ preserveScroll: true });
 }
 
 function replaceGuideDeck() {
@@ -1095,6 +1262,8 @@ function bindGuideDeckEvents() {
       );
       guideState.deckAnswers = next.deckAnswers;
       guideState.deckIndex = next.deckIndex;
+      guideDeckReviewOpen = !guidePlanningLogic.isDirectionDeckComplete(guideState.deckAnswers, directionCards.length);
+      guideDeckReviewEditing = false;
       guideState.resultRequested = false;
       guideState.result = null;
       persistGuideProgress();
@@ -1102,8 +1271,29 @@ function bindGuideDeckEvents() {
     });
   });
   guideApp.querySelector("[data-guide-deck-back]")?.addEventListener("click", () => {
+    guideDeckReviewOpen = true;
+    guideDeckReviewEditing = true;
     guideState.deckIndex = Math.max(0, guideState.deckIndex - 1);
     persistGuideProgress();
+    replaceGuideDeck();
+  });
+  guideApp.querySelector("[data-guide-deck-review]")?.addEventListener("click", () => {
+    guideDeckReviewOpen = true;
+    guideDeckReviewEditing = false;
+    guideState.deckIndex = 0;
+    replaceGuideDeck();
+  });
+  guideApp.querySelectorAll("[data-guide-deck-edit]").forEach((button) => {
+    button.addEventListener("click", () => {
+      guideDeckReviewOpen = true;
+      guideDeckReviewEditing = true;
+      guideState.deckIndex = clamp(Number(button.dataset.guideDeckEdit), 0, directionCards.length - 1);
+      replaceGuideDeck();
+    });
+  });
+  guideApp.querySelector("[data-guide-deck-close]")?.addEventListener("click", () => {
+    guideDeckReviewOpen = false;
+    guideDeckReviewEditing = false;
     replaceGuideDeck();
   });
 }
@@ -1113,6 +1303,101 @@ function persistGuideProgress() {
     ...guideState,
     resultRequested: Boolean(guideState.result)
   }));
+  if (guideState.result) {
+    localStorage.setItem(guidePlanSnapshotKey, JSON.stringify(createGuidePlanSnapshot(guideState.result)));
+  } else {
+    localStorage.removeItem(guidePlanSnapshotKey);
+  }
+}
+
+function createGuidePlanSnapshot(result) {
+  const primary = result?.primary?.course || {};
+  return {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    year: guideState.year,
+    goalLabel: [guideState.dreamJob, guideState.dreamCourse].map((item) => String(item || "").trim()).filter(Boolean).join(" / "),
+    profileLabel: result?.profile?.label || "",
+    primary: compactGuideCourse(primary),
+    reach: compactTextPair(result?.reach),
+    projectedAtar: compactProjectedAtar(result),
+    atarTargetLabel: result?.atarTargetLabel || "",
+    atarMessage: result?.atarMessage || "",
+    subjectIntro: result?.subjectIntro || "",
+    timelineIntro: result?.timelineIntro || "",
+    subjectTargets: (result?.subjectTargets || []).slice(0, 8).map(compactSubjectTarget),
+    dropAdvice: result?.dropAdvice ? {
+      name: result.dropAdvice.name || "",
+      reason: result.dropAdvice.reason || ""
+    } : null,
+    options: (result?.options || []).slice(0, 5).map((entry) => ({
+      ...compactGuideCourse(entry.course || {}),
+      reason: (entry.reasons || []).slice(0, 2).join(" ")
+    })),
+    jobs: (result?.jobs || []).slice(0, 5).map((job) => ({
+      title: job.title || "",
+      range: job.range || "",
+      text: job.text || ""
+    })),
+    steps: (result?.steps || []).slice(0, 6).map((step) => ({
+      title: step.title || "",
+      text: step.text || ""
+    }))
+  };
+}
+
+function compactGuideCourse(course) {
+  return {
+    id: course.id || "",
+    name: course.name || "",
+    university: course.university || course.providerId || "",
+    campus: course.campus || "",
+    atar: displayRank(course.atar),
+    duration: course.duration || "",
+    modes: course.modes || [],
+    uacUrl: course.uacUrl || "",
+    officialUrl: course.officialUrl || ""
+  };
+}
+
+function compactSubjectTarget(item) {
+  return {
+    name: item.name || "",
+    badge: item.badge || "",
+    reason: item.reason || "",
+    target: item.target || "",
+    required: Boolean(item.required),
+    current: Boolean(item.current)
+  };
+}
+
+function compactTextPair(value) {
+  return value ? {
+    label: value.label || "",
+    text: value.text || ""
+  } : null;
+}
+
+function compactProjectedAtar(result) {
+  if (result?.markEstimate?.hasMarks) {
+    return {
+      label: result.markEstimate.atarLabel || "Not enough data",
+      source: "Projected from entered marks",
+      text: result.markEstimate.note || "Uses projected subject marks from entered terms."
+    };
+  }
+  if (result?.schoolEstimate?.hasEstimate) {
+    return {
+      label: result.schoolEstimate.atarLabel || "",
+      source: "Projected from school tracking",
+      text: result.schoolEstimate.text || "Uses your school tracking answer before senior marks exist."
+    };
+  }
+  return {
+    label: "No projected ATAR yet",
+    source: "Add marks in Guide",
+    text: "Add Year 11 or Year 12 term marks to estimate reach before relying on the course ladder."
+  };
 }
 
 function scheduleGuideProgressSave() {
@@ -1125,6 +1410,7 @@ function restoreGuideResultIfNeeded() {
   guideRestoreHandled = true;
   if (storedGuideState.resultRequested && hasAnyGuideAnswer()) {
     guideState.result = buildGuidePlan();
+    persistGuideProgress();
     renderGuide({ preserveScroll: true });
   }
 }
@@ -1162,6 +1448,7 @@ function buildGuidePlan() {
   const estimatedAtar = values.planningAtar ?? null;
   const targetAtar = rank || estimatedAtar || fallbackAtarForProfile(profile);
   const subjectTargets = buildSubjectTargets(values, profile, primary.course, targetAtar);
+  const dropAdvice = chooseGuideDropSubject(subjectTargets, values, profile);
   const gap = rank !== null && estimatedAtar !== null ? rank - estimatedAtar : null;
   const pathwayNeeded = gap !== null ? gap > 3 : estimatedAtar !== null && estimatedAtar < 65;
   const providerQuality = guideProviderQuality[profile.label]?.[primary.course.providerId];
@@ -1174,6 +1461,7 @@ function buildGuidePlan() {
     options,
     jobs,
     subjectTargets,
+    dropAdvice,
     markEstimate: values.markEstimate,
     schoolEstimate: values.schoolEstimate,
     reach,
@@ -1584,6 +1872,8 @@ function buildSubjectTargets(values, profile, course, targetAtar) {
       if (subject) subjectNames.push(subject.name);
     }
   }
+  const adjustedSubjectNames = adjustGuideSubjectNamesForSchoolStrength(subjectNames, values);
+  subjectNames.splice(0, subjectNames.length, ...adjustedSubjectNames);
 
   const targetAggregate = aggregateForAtar(targetAtar);
   const targetScaledPerUnit = clamp((targetAggregate || 300) / 10, 25, 45);
@@ -1610,6 +1900,46 @@ function buildSubjectTargets(values, profile, course, targetAtar) {
       target: targetText
     };
   });
+}
+
+function adjustGuideSubjectNamesForSchoolStrength(subjectNames, values) {
+  const strongSchool = ["Consistently strong", "Above average"].includes(values.schoolPerformance);
+  if (!strongSchool) return subjectNames;
+  const seen = new Set();
+  return subjectNames.map((name) => {
+    if (/^English Standard$/i.test(name) && findGuideSubject("English Advanced")) return "English Advanced";
+    if (/^Mathematics Standard 2$/i.test(name) && findGuideSubject("Mathematics Advanced")) return "Mathematics Advanced";
+    return name;
+  }).filter((name) => {
+    const key = cleanSearchText(name);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function chooseGuideDropSubject(subjectTargets, values, profile) {
+  if (!subjectTargets?.length) return null;
+  const profileSource = cleanSearchText([profile.label, ...(profile.subjects || [])].join(" "));
+  const goalSource = cleanSearchText([values.goal, values.passions, values.subjects].join(" "));
+  const scored = subjectTargets.map((item, index) => {
+    const cleanName = cleanSearchText(item.name);
+    const cleanAll = cleanSearchText(`${item.name} ${item.reason}`);
+    let keepScore = Math.max(0, 8 - index);
+    if (item.required) keepScore += 90;
+    if (item.current) keepScore += 12;
+    if (/english/.test(cleanName)) keepScore += 65;
+    if (profileSource.includes(cleanName) || goalSource.includes(cleanName)) keepScore += 22;
+    if (/math|chemistry|physics|biology|software|enterprise|legal/.test(cleanAll) && /(technology|engineering|medicine|health|law|justice|science)/.test(profileSource)) keepScore += 14;
+    if (/visual arts|society|modern history|business|design/.test(cleanAll) && /(technology|engineering|medicine|health|science)/.test(profileSource)) keepScore -= 4;
+    return { item, keepScore };
+  }).sort((a, b) => a.keepScore - b.keepScore);
+  const candidate = scored.find(({ item }) => !item.required && !/english/i.test(item.name)) || scored[0];
+  if (!candidate) return null;
+  const reason = candidate.item.current
+    ? "It is currently the least essential fit in this plan. Only drop it if your marks, workload and school advice agree; never drop a prerequisite."
+    : "It is the lowest-relevance support subject in this six-subject set. Keep it if you enjoy it or score strongly, but protect prerequisites and high-relevance subjects first.";
+  return { name: candidate.item.name, reason };
 }
 
 function subjectReason(profile, subjectName) {

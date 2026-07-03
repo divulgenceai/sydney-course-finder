@@ -18,7 +18,8 @@ const helperState = {
   draft: params.get("q") || savedLookup.query || "",
   query: params.get("q") || savedLookup.query || "",
   processing: "",
-  intent: null
+  intent: null,
+  lastMatches: []
 };
 
 const subjectProfiles = [
@@ -259,15 +260,19 @@ render();
 
 function render() {
   const query = helperState.query.trim();
-  const matches = query ? subjectCourseMatches(query) : [];
-  const intent = query
+  const shouldCompute = Boolean(query && !helperState.processing);
+  const matches = shouldCompute ? subjectCourseMatches(query) : helperState.lastMatches;
+  const intent = shouldCompute
     ? subjectHelperLogic.detectPlanningIntent({
-        query,
-        profiles: planningIntentProfiles(),
-        courses: allCourses
-      })
-    : null;
-  helperState.intent = intent;
+      query,
+      profiles: planningIntentProfiles(),
+      courses: allCourses
+    })
+    : helperState.intent;
+  if (shouldCompute) {
+    helperState.intent = intent;
+    helperState.lastMatches = matches;
+  }
 
   subjectHelperApp.innerHTML = `
     ${renderSubjectHeader()}
@@ -323,6 +328,7 @@ function renderSubjectHeader() {
       <nav class="topnav" aria-label="Main">
         <a href="./index.html#courses">Courses</a>
         <a href="./guide.html">Guide</a>
+        <a href="./my-plan.html">My Plan</a>
         <a href="./index.html#atar">ATAR match</a>
         <a href="./atar-calculator.html">ATAR calculator</a>
         <a href="./subject-helper.html" aria-current="page">Subject helper</a>
@@ -347,7 +353,7 @@ function renderSubjectHelperProcessStrip() {
       <span>${icon("search")}</span>
       <div>
         <h2>Finding the best subject pathway</h2>
-        <p>Checking courses, prerequisites, assumed knowledge, careers and income clues.</p>
+        <p>Checking course evidence, prerequisites, assumed knowledge, careers and income clues. This should only take a moment.</p>
       </div>
     </section>
   `;
@@ -355,6 +361,10 @@ function renderSubjectHelperProcessStrip() {
 
 function renderSmartLookupResult(query, intent, matches) {
   if (!query) return renderEmptyState();
+  const creativeFallback = fictionalIntentFallback(query);
+  if ((!intent || intent.kind === "none" || !matches.length) && creativeFallback) {
+    return renderCreativeFallbackResult(query, creativeFallback);
+  }
   if (!intent || intent.kind === "none" || !matches.length) return renderNoMatch(query);
 
   const profile = detectedProfile(query, matches, intent);
@@ -376,16 +386,115 @@ function renderSmartLookupResult(query, intent, matches) {
 
   return `
     <section class="panel subject-detection" role="status">
-      <span>${intent.kind === "ambiguous" ? "Possible interpretations" : `Detected as a ${intent.kind}`}</span>
-      <h2>${escapeHtml(intent.label)}</h2>
-      <p>${intent.kind === "ambiguous"
-        ? "This phrase can describe both work and study. The results combine the strongest related evidence."
-        : "The result below uses matching Sydney UAC courses, entry text, careers and subject evidence."}</p>
+      <div>
+        <span>${intent.kind === "ambiguous" ? "Possible interpretations" : `Detected as a ${intent.kind}`}</span>
+        <h2>${escapeHtml(intent.label)}</h2>
+        <p>${intent.kind === "ambiguous"
+          ? "This phrase can describe both work and study. The results combine the strongest related evidence."
+          : "The result below uses matching Sydney UAC courses, entry text, careers and subject evidence."}</p>
+      </div>
+      ${renderConfidenceMeter(intent.confidence ?? 78, "Match confidence")}
     </section>
-    ${renderSubjectResults(profile, plan, matches)}
+    ${renderSubjectResults(query, profile, plan, matches)}
     ${intent.kind === "career" || intent.kind === "ambiguous" ? renderDegreePathways(degrees) : ""}
     ${renderCareerOutcomes(careers)}
     ${renderFocusedGuideLink(query)}
+  `;
+}
+
+function renderConfidenceMeter(value, label) {
+  const numeric = Number(value);
+  const percentValue = Number.isFinite(numeric) && numeric <= 1 ? numeric * 100 : numeric;
+  const confidence = Math.max(10, Math.min(100, percentValue || 60));
+  return `
+    <aside class="subject-confidence">
+      <strong>${Math.round(confidence)}%</strong>
+      <span>${escapeHtml(label)}</span>
+      <i aria-hidden="true"><b style="width:${confidence}%"></b></i>
+    </aside>
+  `;
+}
+
+function fictionalIntentFallback(query) {
+  const clean = cleanSearchText(query);
+  const fallbackMap = [
+    {
+      test: /\b(spider[\s-]?man|spiderman|batman|superhero|hero|vigilante)\b/,
+      label: "public safety, justice and emergency response",
+      search: "criminology police justice paramedic security",
+      confidence: 46,
+      copy: "That sounds fictional, so I am reading it as protecting people, handling pressure and responding to risk.",
+      subjects: [
+        ["English Advanced", "priority", "Strong writing, evidence and communication help in justice, policing and public safety pathways."],
+        ["Legal Studies", "priority", "Best fit for criminology, law enforcement, policy and justice systems."],
+        ["Health and Movement Science (HMS)", "useful", "Useful for fitness, public safety, emergency response and people-focused work."],
+        ["Biology", "useful", "Helpful if the path shifts toward paramedicine, health science or forensic science."],
+        ["Mathematics Standard 2", "useful", "Keeps entry flexible and supports statistics, evidence and operational decision-making."]
+      ]
+    },
+    {
+      test: /\b(iron man|tony stark|inventor|robot hero|robotics hero)\b/,
+      label: "engineering, robotics and advanced technology",
+      search: "engineering robotics software mechatronics computer science",
+      confidence: 52,
+      copy: "I am reading this as building technology, robotics and high-pressure problem solving.",
+      subjects: [
+        ["Mathematics Advanced", "priority", "Important for engineering, robotics and technical degrees."],
+        ["Physics", "priority", "Strong preparation for mechanical, electrical and mechatronic systems."],
+        ["Engineering Studies", "useful", "Directly relevant to design, prototyping and applied engineering."],
+        ["Software Engineering", "useful", "Useful for robotics, automation and technical product work."],
+        ["English Advanced", "useful", "Helps with reports, presentations and project communication."]
+      ]
+    },
+    {
+      test: /\b(hulk|bruce banner|mutant scientist)\b/,
+      label: "science, medicine and sport performance",
+      search: "biomedical science medicine sport exercise physiology",
+      confidence: 48,
+      copy: "I am reading this as biology, health science, strength, research and lab work.",
+      subjects: [
+        ["Biology", "priority", "Strong fit for health, physiology and biomedical pathways."],
+        ["Chemistry", "priority", "Commonly useful for medicine, pharmacy and biomedical science."],
+        ["Health and Movement Science (HMS)", "useful", "Relevant for exercise science, sport and human performance."],
+        ["Mathematics Advanced", "useful", "Supports science, statistics and competitive health pathways."],
+        ["English Advanced", "useful", "Useful for essays, professional communication and applications."]
+      ]
+    }
+  ];
+  return fallbackMap.find((item) => item.test.test(clean)) || null;
+}
+
+function renderCreativeFallbackResult(query, fallback) {
+  const matches = subjectCourseMatches(fallback.search).slice(0, 10);
+  const profile = {
+    label: fallback.label,
+    subjects: fallback.subjects
+  };
+  const evidence = subjectRequirementSignals(matches);
+  const merged = subjectHelperLogic.mergeSubjectRecommendations({
+    profileSubjects: profile.subjects.map(([name, tier, reason]) => ({ name, tier, reason })),
+    evidence
+  });
+  const plan = subjectPlanFromMerged(merged);
+  const careers = subjectHelperLogic.relatedCareerOutcomes(matches.map((match) => ({
+    ...match,
+    course: {
+      ...match.course,
+      incomeOutcomes: careerIncomeOutcomesForCourse(match.course, profile)
+    }
+  })));
+  return `
+    <section class="panel subject-detection creative" role="status">
+      <div>
+        <span>Creative interpretation</span>
+        <h2>${escapeHtml(query)} → ${escapeHtml(fallback.label)}</h2>
+        <p>${escapeHtml(fallback.copy)} Confidence is lower because it is not a real job title, but the subjects below are still useful.</p>
+      </div>
+      ${renderConfidenceMeter(fallback.confidence, "Interpretation confidence")}
+    </section>
+    ${renderSubjectResults(query, profile, plan, matches)}
+    ${renderCareerOutcomes(careers)}
+    ${renderFocusedGuideLink(fallback.search)}
   `;
 }
 
@@ -412,50 +521,153 @@ function renderNoMatch(query) {
   `;
 }
 
-function renderSubjectResults(profile, plan, matches) {
-  const groups = [
-    ["required", "Required or strongly detected", "These appeared in matching course prerequisites or repeated course evidence."],
-    ["priority", "Best subjects to prioritise", "Strong preparation for this career or degree direction."],
-    ["useful", "Useful support subjects", "Good options if they fit your strengths or school timetable."],
-    ["stretch", "Stretch subjects", "Helpful for selective or maths/science-heavy versions of this pathway."]
-  ];
+function renderSubjectResults(query, profile, plan, matches) {
+  const summary = subjectPlanSummary(plan, matches);
+  const strongSubjects = uniqueSubjectItems([...summary.requiredSubjects, ...plan.priority]).slice(0, 6);
+  const usefulSubjects = uniqueSubjectItems([...plan.useful, ...plan.stretch]).slice(0, 6);
   return `
-    <section class="panel subject-plan-summary">
-      <div class="panel-head">
+    <section class="panel subject-plan-summary subject-plan-redesign">
+      <div class="subject-plan-hero">
         <div>
+          <span class="eyebrow">${escapeHtml(profile.label)} subject plan</span>
           <h2>Recommended Year 11 and 12 subjects</h2>
-          <p>Best match: ${escapeHtml(profile.label)}. Pick English plus the strongest subjects below, then confirm exact prerequisites.</p>
+          <p>Search: <strong>${escapeHtml(query || profile.label)}</strong>. This separates hard entry requirements from assumed knowledge and useful preparation.</p>
         </div>
-        <span>${matches.length} course matches</span>
+        <aside class="subject-evidence-badge ${summary.evidenceTone}">
+          <strong>${escapeHtml(summary.evidenceLabel)}</strong>
+          <span>${matches.length} course matches</span>
+        </aside>
       </div>
-      <div class="subject-plan-grid">
-        ${groups.map(([key, title, copy]) => renderSubjectGroup(title, copy, plan[key])).join("")}
+
+      <div class="subject-check-grid">
+        ${renderSubjectCheckCard("Entry blocker check", summary.requiredTitle, summary.requiredCopy, summary.requiredSubjects.length ? "warning" : "safe")}
+        ${renderSubjectCheckCard("Assumed knowledge", summary.assumedTitle, summary.assumedCopy)}
+        ${renderSubjectCheckCard("Best move", "Choose for fit and strength", "Confirm the exact UAC or university page, then pick subjects you can score well in and actually use at uni.")}
+      </div>
+
+      <div class="subject-prereq-strip ${summary.requiredSubjects.length ? "has-required" : "no-required"}">
+        <strong>${escapeHtml(summary.stripTitle)}</strong>
+        <span>${escapeHtml(summary.stripCopy)}</span>
+      </div>
+
+      <div class="subject-pick-layout">
+        <section>
+          <div class="subject-pick-head">
+            <h3>Strong preparation</h3>
+            <p>Best Year 11/12 picks for this direction.</p>
+          </div>
+          <div class="subject-pick-list">
+            ${strongSubjects.length
+              ? strongSubjects.map((item) => renderSubjectPick(item, item.evidence?.required ? "required" : "strong")).join("")
+              : `<p class="empty-note">No strong subject signals found. Start with English, then use the course evidence below.</p>`}
+          </div>
+        </section>
+        <section>
+          <div class="subject-pick-head">
+            <h3>Useful extras</h3>
+            <p>Good backups or specialist options depending on your school.</p>
+          </div>
+          <div class="subject-pick-list">
+            ${usefulSubjects.length
+              ? usefulSubjects.map((item) => renderSubjectPick(item, "useful")).join("")
+              : `<p class="empty-note">No extra subjects found. Keep the strong preparation list as the main plan.</p>`}
+          </div>
+        </section>
       </div>
     </section>
     <section class="panel subject-course-evidence">
       <div class="panel-head">
         <div>
-          <h2>Sydney course evidence</h2>
-          <p>These records influenced the subject recommendation.</p>
+          <h2>Course evidence</h2>
+          <p>Expand a course to see whether UAC lists a subject as required, assumed knowledge or useful preparation.</p>
         </div>
+        <span>${Math.min(8, matches.length)} shown</span>
       </div>
       <div class="subject-course-list">
         ${matches.slice(0, 8).map(renderCourseEvidence).join("")}
       </div>
     </section>
+    ${renderSubjectSignals(summary.signals)}
+    ${renderSubjectHowToUse()}
   `;
 }
 
-function renderSubjectGroup(title, copy, items) {
+function subjectPlanSummary(plan, matches) {
+  const allItems = uniqueSubjectItems([...plan.required, ...plan.priority, ...plan.useful, ...plan.stretch]);
+  const requiredSubjects = allItems.filter((item) => Number(item.evidence?.required || 0) > 0);
+  const assumedSubjects = allItems.filter((item) => Number(item.evidence?.assumed || 0) > 0);
+  const signals = allItems.filter((item) => Number(item.evidence?.required || 0) || Number(item.evidence?.assumed || 0));
+  const assumedNames = assumedSubjects.slice(0, 3).map((item) => item.name);
+  const evidenceLabel = matches.length >= 8 || signals.length >= 3 ? "Good evidence" : matches.length ? "Some evidence" : "Light evidence";
+  return {
+    requiredSubjects,
+    assumedSubjects,
+    signals,
+    evidenceLabel,
+    evidenceTone: evidenceLabel === "Good evidence" ? "good" : "some",
+    requiredTitle: requiredSubjects.length
+      ? requiredSubjects.slice(0, 3).map((item) => item.name).join(", ")
+      : "No blocking HSC subject found",
+    requiredCopy: requiredSubjects.length
+      ? "These subjects appeared in prerequisite fields. Treat them as must-confirm before choosing."
+      : "The matched UAC records do not show a subject you must have for entry. Assumed knowledge still affects readiness.",
+    assumedTitle: assumedSubjects.length
+      ? `${assumedNames.join(", ")}${assumedSubjects.length > 3 ? ` + ${assumedSubjects.length - 3} more` : ""}`
+      : "No assumed knowledge detected",
+    assumedCopy: assumedSubjects.length
+      ? "Assumed knowledge is preparation. Missing it usually means extra work or a bridging course, not automatic rejection."
+      : "The matched records did not repeat a clear assumed-knowledge subject. Still check the official course page.",
+    stripTitle: requiredSubjects.length
+      ? "Potential hard HSC prerequisite found in the matched records."
+      : "No hard HSC subject prerequisite found in the matched records.",
+    stripCopy: requiredSubjects.length
+      ? "Confirm the exact wording on UAC and the university page before relying on this plan."
+      : "That means the subjects below are about preparation and fit, not automatic entry blocking. Always confirm the exact course page before choosing."
+  };
+}
+
+function uniqueSubjectItems(items) {
+  const seen = new Set();
+  return (items || []).filter((item) => {
+    const key = cleanSearchText(item?.name);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function renderSubjectCheckCard(label, title, copy, tone = "") {
   return `
-    <article class="subject-plan-card">
-      <h3>${escapeHtml(title)}</h3>
+    <article class="subject-check-card ${escapeHtml(tone)}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(title)}</strong>
       <p>${escapeHtml(copy)}</p>
-      ${(items || []).length
-        ? `<ul>${items.slice(0, 6).map((item) => `<li><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.reason || evidenceReason(item))}</span></li>`).join("")}</ul>`
-        : `<span class="empty-note">No extra subject found in this group.</span>`}
     </article>
   `;
+}
+
+function renderSubjectPick(item, tone) {
+  const evidenceLine = subjectEvidenceLine(item);
+  const badge = tone === "required" ? "Must confirm" : tone === "strong" ? "Strong pick" : "Useful";
+  return `
+    <article class="subject-pick-card ${escapeHtml(tone)}">
+      <div>
+        <h4>${escapeHtml(item.name)}</h4>
+        <span>${escapeHtml(badge)}</span>
+      </div>
+      <p>${escapeHtml(item.reason || evidenceReason(item))}</p>
+      ${evidenceLine ? `<small>${escapeHtml(evidenceLine)}</small>` : ""}
+    </article>
+  `;
+}
+
+function subjectEvidenceLine(item) {
+  const required = Number(item?.evidence?.required || 0);
+  const assumed = Number(item?.evidence?.assumed || 0);
+  const parts = [];
+  if (required) parts.push(`${required} course${required === 1 ? "" : "s"} list it as required`);
+  if (assumed) parts.push(`${assumed} course${assumed === 1 ? "" : "s"} list it as assumed knowledge`);
+  return parts.join(". ");
 }
 
 function evidenceReason(item) {
@@ -466,21 +678,77 @@ function evidenceReason(item) {
 
 function renderCourseEvidence(match) {
   const course = match.course || {};
+  const summary = truncateText(course.summary || course.area || "Check the official page for full details.", 280);
+  const requiredSubjects = extractSubjectNames(course.prerequisites || "");
+  const assumedSubjects = extractSubjectNames(course.assumed || "");
   return `
-    <article class="subject-course-card">
-      <div>
-        <span>${escapeHtml(course.university || course.providerId || "Sydney provider")}</span>
-        <h3>${escapeHtml(course.name || "Unnamed course")}</h3>
-        <p>${escapeHtml(course.summary || course.area || "Check the official page for full details.")}</p>
+    <details class="subject-course-row">
+      <summary>
+        <span>
+          <strong>${escapeHtml(course.name || "Unnamed course")}</strong>
+          <small>${escapeHtml(course.university || course.providerId || "Sydney provider")} - ${escapeHtml(course.campus || "Check campus")} - ATAR ${escapeHtml(displayRank(course.atar))}</small>
+        </span>
+        <em class="${requiredSubjects.length ? "required" : "safe"}">${requiredSubjects.length ? "Required subject listed" : "No required subject"}</em>
+        <b>Expand</b>
+      </summary>
+      <div class="subject-course-detail">
+        <p>${escapeHtml(summary)}</p>
+        <dl>
+          <div><dt>Prerequisites</dt><dd>${escapeHtml(normaliseSubjectDisplay(course.prerequisites || "Not listed by UAC"))}</dd></div>
+          <div><dt>Assumed knowledge</dt><dd>${escapeHtml(normaliseSubjectDisplay(course.assumed || "Not listed by UAC"))}</dd></div>
+          <div><dt>Subject signals</dt><dd>${escapeHtml(subjectSignalText(requiredSubjects, assumedSubjects))}</dd></div>
+        </dl>
+        ${course.url ? `<a class="help-link" href="${escapeHtml(course.url)}" target="_blank" rel="noreferrer">Official page ${icon("external")}</a>` : ""}
       </div>
-      <dl>
-        <div><dt>ATAR/profile</dt><dd>${escapeHtml(displayRank(course.atar))}</dd></div>
-        <div><dt>Campus</dt><dd>${escapeHtml(course.campus || "Check provider")}</dd></div>
-        <div><dt>Prerequisites</dt><dd>${escapeHtml(normaliseSubjectDisplay(course.prerequisites || "Not listed by UAC"))}</dd></div>
-        <div><dt>Assumed knowledge</dt><dd>${escapeHtml(normaliseSubjectDisplay(course.assumed || "Not listed by UAC"))}</dd></div>
-      </dl>
-      ${course.url ? `<a class="help-link" href="${escapeHtml(course.url)}" target="_blank" rel="noreferrer">Official page ${icon("external")}</a>` : ""}
-    </article>
+    </details>
+  `;
+}
+
+function subjectSignalText(requiredSubjects, assumedSubjects) {
+  const parts = [];
+  if (requiredSubjects.length) parts.push(`Required: ${requiredSubjects.join(", ")}`);
+  if (assumedSubjects.length) parts.push(`Assumed: ${assumedSubjects.join(", ")}`);
+  return parts.join(". ") || "No specific HSC subject signal detected in this record.";
+}
+
+function renderSubjectSignals(signals) {
+  if (!signals.length) return "";
+  return `
+    <section class="panel subject-signals-panel">
+      <div class="panel-head">
+        <div>
+          <h2>Subject signals found</h2>
+          <p>Required means it appears in a prerequisite field. Assumed means it helps, but usually does not block entry.</p>
+        </div>
+      </div>
+      <div class="subject-signal-grid">
+        ${signals.slice(0, 9).map((item) => `
+          <article>
+            <strong>${escapeHtml(item.name)}</strong>
+            <span>${Number(item.evidence?.required || 0)} required-entry mention${Number(item.evidence?.required || 0) === 1 ? "" : "s"}</span>
+            <span>${Number(item.evidence?.assumed || 0)} assumed-knowledge mention${Number(item.evidence?.assumed || 0) === 1 ? "" : "s"}</span>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderSubjectHowToUse() {
+  return `
+    <section class="panel subject-how-panel">
+      <div class="panel-head">
+        <div>
+          <h2>How to use this</h2>
+          <p>Pick subjects that keep doors open, but do not choose a subject only because it scales well if you hate it or cannot perform in it.</p>
+        </div>
+      </div>
+      <div class="subject-how-grid">
+        <article><strong>Start with requirements</strong><p>Prerequisites can block entry. Assumed knowledge usually does not block entry, but it can make first year harder.</p></article>
+        <article><strong>Keep English in mind</strong><p>ATAR eligibility needs English units. Choose the English level that gives you the strongest realistic result.</p></article>
+        <article><strong>Balance fit and options</strong><p>A strong plan usually has one English course, one maths level that suits your path, and two to four subjects linked to the degree or job.</p></article>
+      </div>
+    </section>
   `;
 }
 
@@ -889,6 +1157,12 @@ function decodeHtmlEntities(value) {
   const textarea = document.createElement("textarea");
   textarea.innerHTML = String(value || "");
   return textarea.value;
+}
+
+function truncateText(value, limit = 220) {
+  const text = decodeHtmlEntities(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= limit) return text;
+  return `${text.slice(0, Math.max(0, limit - 1)).trim()}…`;
 }
 
 function icon(name) {

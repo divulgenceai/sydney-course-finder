@@ -151,7 +151,9 @@ const providerQuality = {
 const providerAliases = [
   { id: "WS", label: "Western Sydney University", aliases: ["wsu", "western sydney university", "western sydney uni", "western sydney"] },
   { id: "UTS", label: "University of Technology Sydney", aliases: ["uts", "university of technology sydney", "technology sydney"] },
+  { id: "UTSC", label: "UTS College", aliases: ["uts college", "uts insearch", "insearch"] },
   { id: "UNSW", label: "UNSW", aliases: ["unsw", "university of new south wales", "new south wales uni"] },
+  { id: "UNSWC", label: "UNSW College", aliases: ["unsw college", "unsw global"] },
   { id: "USYD", label: "University of Sydney", aliases: ["usyd", "sydney uni", "sydney university", "university of sydney"] },
   { id: "MQ", label: "Macquarie University", aliases: ["mq", "macquarie", "macquarie university"] },
   { id: "ACU", label: "Australian Catholic University", aliases: ["acu", "australian catholic university"] },
@@ -293,6 +295,110 @@ const incomeMinimums = {
   "$100k+": 100000,
   "$120k+": 120000
 };
+const courseTypeOptions = [
+  "All course types",
+  "Bachelor",
+  "Double degree",
+  "Honours",
+  "Diploma",
+  "Advanced Diploma",
+  "Associate Degree",
+  "Undergraduate Certificate",
+  "Other"
+];
+const studyAreaOptions = ["All study areas", ...topicOptions.filter((topic) => topic.label !== "All interests").map((topic) => topic.label)];
+const searchSortOptions = ["Relevance", "Closest campus", "Study area fit", "Lowest ATAR", "Highest ATAR", "Income potential"];
+const knownLocations = [
+  { names: ["sydney", "sydney cbd", "cbd", "city", "2000"], lat: -33.8688, lng: 151.2093 },
+  { names: ["ultimo", "broadway", "haymarket", "uts", "2007"], lat: -33.8832, lng: 151.2006 },
+  { names: ["chippendale", "2008"], lat: -33.8875, lng: 151.2009 },
+  { names: ["redfern", "2016"], lat: -33.8928, lng: 151.2041 },
+  { names: ["waterloo", "zetland", "2017"], lat: -33.9037, lng: 151.2086 },
+  { names: ["alexandria", "2015"], lat: -33.9022, lng: 151.2004 },
+  { names: ["mascot", "2020"], lat: -33.9258, lng: 151.1934 },
+  { names: ["botany", "2019"], lat: -33.9456, lng: 151.1966 },
+  { names: ["surry hills", "2010"], lat: -33.8846, lng: 151.2124 },
+  { names: ["darlinghurst", "2010 nas"], lat: -33.8790, lng: 151.2190 },
+  { names: ["newtown", "2042"], lat: -33.8985, lng: 151.1770 },
+  { names: ["marrickville", "2204"], lat: -33.9116, lng: 151.1556 },
+  { names: ["leichhardt", "2040"], lat: -33.8844, lng: 151.1565 },
+  { names: ["five dock", "2046"], lat: -33.8674, lng: 151.1297 },
+  { names: ["burwood", "2134"], lat: -33.8774, lng: 151.1035 },
+  { names: ["ashfield", "2131"], lat: -33.8883, lng: 151.1236 },
+  { names: ["camperdown", "darlington", "university of sydney", "usyd", "2050"], lat: -33.8886, lng: 151.1873 },
+  { names: ["kensington", "unsw", "nida", "2033"], lat: -33.9173, lng: 151.2313 },
+  { names: ["randwick", "2031"], lat: -33.9166, lng: 151.2411 },
+  { names: ["bondi junction", "2022"], lat: -33.8910, lng: 151.2488 },
+  { names: ["bondi", "bondi beach", "2026"], lat: -33.8915, lng: 151.2767 },
+  { names: ["coogee", "2034"], lat: -33.9205, lng: 151.2552 },
+  { names: ["maroubra", "2035"], lat: -33.9465, lng: 151.2551 },
+  { names: ["north sydney", "2060"], lat: -33.8399, lng: 151.2073 },
+  { names: ["neutral bay", "2089"], lat: -33.8310, lng: 151.2195 },
+  { names: ["mosman", "2088"], lat: -33.8282, lng: 151.2441 },
+  { names: ["lane cove", "2066"], lat: -33.8150, lng: 151.1667 },
+  { names: ["st leonards", "2065"], lat: -33.8230, lng: 151.1930 },
+  { names: ["chatswood", "2067"], lat: -33.7969, lng: 151.1835 },
+  { names: ["gordon", "2072"], lat: -33.7553, lng: 151.1511 },
+  { names: ["pymble", "2073"], lat: -33.7444, lng: 151.1410 },
+  { names: ["hornsby", "2077"], lat: -33.7032, lng: 151.0993 },
+  { names: ["dee why", "2099"], lat: -33.7511, lng: 151.2889 },
+  { names: ["brookvale", "2100"], lat: -33.7611, lng: 151.2740 },
+  { names: ["strathfield", "2135"], lat: -33.8736, lng: 151.0947 },
+  { names: ["epping", "2121"], lat: -33.7727, lng: 151.0818 },
+  { names: ["eastwood", "2122"], lat: -33.7918, lng: 151.0805 },
+  { names: ["ryde", "2112"], lat: -33.8136, lng: 151.1050 },
+  { names: ["macquarie park", "macquarie", "north ryde", "mq", "2113"], lat: -33.7756, lng: 151.1127 },
+  { names: ["manly", "2095"], lat: -33.7970, lng: 151.2888 },
+  { names: ["the rocks", "2000 rocks"], lat: -33.8599, lng: 151.2090 },
+  { names: ["sydney olympic park", "olympic park", "2127"], lat: -33.8487, lng: 151.0682 },
+  { names: ["lidcombe", "2141"], lat: -33.8644, lng: 151.0432 },
+  { names: ["auburn", "2144"], lat: -33.8493, lng: 151.0328 },
+  { names: ["granville", "2142"], lat: -33.8348, lng: 151.0107 },
+  { names: ["parramatta", "2150"], lat: -33.8136, lng: 151.0034 },
+  { names: ["merrylands", "2160"], lat: -33.8362, lng: 150.9889 },
+  { names: ["castle hill", "2154"], lat: -33.7312, lng: 151.0076 },
+  { names: ["baulkham hills", "2153"], lat: -33.7588, lng: 150.9929 },
+  { names: ["rouse hill", "2155"], lat: -33.6821, lng: 150.9154 },
+  { names: ["bankstown", "2200"], lat: -33.9173, lng: 151.0359 },
+  { names: ["canterbury", "2193"], lat: -33.9119, lng: 151.1181 },
+  { names: ["lakemba", "2195"], lat: -33.9199, lng: 151.0764 },
+  { names: ["fairfield", "2165"], lat: -33.8674, lng: 150.9561 },
+  { names: ["cabramatta", "2166"], lat: -33.8958, lng: 150.9341 },
+  { names: ["liverpool", "2170"], lat: -33.9209, lng: 150.9231 },
+  { names: ["blacktown", "2148"], lat: -33.7710, lng: 150.9063 },
+  { names: ["mount druitt", "mt druitt", "2770"], lat: -33.7666, lng: 150.8179 },
+  { names: ["st marys", "saint marys", "2760"], lat: -33.7652, lng: 150.7740 },
+  { names: ["campbelltown", "2560"], lat: -34.0667, lng: 150.8140 },
+  { names: ["ingleburn", "2565"], lat: -34.0002, lng: 150.8670 },
+  { names: ["narellan", "2567"], lat: -34.0433, lng: 150.7359 },
+  { names: ["camden", "2570"], lat: -34.0545, lng: 150.6958 },
+  { names: ["penrith", "2750"], lat: -33.7511, lng: 150.6942 },
+  { names: ["windsor", "2756"], lat: -33.6167, lng: 150.8170 },
+  { names: ["hawkesbury", "richmond", "2753"], lat: -33.5995, lng: 150.7534 }
+].map((item) => ({
+  ...item,
+  cleanNames: item.names.map(cleanSearchText)
+}));
+const providerLocationHints = {
+  UTS: "ultimo",
+  UTSC: "haymarket",
+  UNSW: "kensington",
+  UNSWC: "kensington",
+  USYD: "camperdown",
+  MQ: "macquarie park",
+  WS: "parramatta",
+  ACU: "north sydney",
+  ACPE: "sydney olympic park",
+  AIT: "ultimo",
+  AIM: "the rocks",
+  NAS: "darlinghurst",
+  NIDA: "kensington",
+  JMC: "ultimo",
+  ICMS: "manly",
+  MIT: "sydney cbd",
+  SAE: "chippendale",
+  ACAP: "sydney cbd"
+};
 
 const jobIncomeProfiles = [
   { title: "Software developer", keywords: ["software", "programmer", "developer", "coding", "computer science", "information technology", "web developer", "application"], min: 80000, max: 130000, range: "$80k-$130k" },
@@ -407,15 +513,20 @@ const state = {
   draft: "",
   query: "",
   level: "All levels",
+  courseType: "All course types",
+  area: "All study areas",
   provider: "All providers",
   mode: "All modes",
   campus: "All campuses",
   income: "Any income",
+  sort: "Relevance",
+  locationQuery: "",
   visible: 24,
   atar: 75,
   matcherProvider: "All providers",
   matcherSubjects: [],
   matcherTopic: "All interests",
+  matcherIncome: "Any income",
   matcherRun: false,
   providerTopic: "Technology",
   savedIds: readIdList(storageKeys.saved),
@@ -443,9 +554,7 @@ const showLevelFilter = levels.length > 2;
 const modes = ["All modes", ...new Set(allCourses.flatMap((course) => course.modes || []))].sort((a, b) =>
   a.startsWith("All") ? -1 : b.startsWith("All") ? 1 : a.localeCompare(b)
 );
-const campuses = ["All campuses", ...new Set(allCourses.map((course) => course.campus).filter(Boolean))].sort((a, b) =>
-  a.startsWith("All") ? -1 : b.startsWith("All") ? 1 : a.localeCompare(b)
-);
+const allCampuses = sortedCampusOptions(allCourses);
 
 const infoSummary = {
   atar: allCourses.filter((course) => numericRank(course.atar) !== null).length,
@@ -454,8 +563,27 @@ const infoSummary = {
   fees: allCourses.filter((course) => hasSpecificInfo(course.fees)).length
 };
 
+function sortedCampusOptions(courses) {
+  return ["All campuses", ...new Set(courses.map((course) => course.campus).filter(Boolean))].sort((a, b) =>
+    a.startsWith("All") ? -1 : b.startsWith("All") ? 1 : a.localeCompare(b)
+  );
+}
+
+function campusOptionsForProvider(providerName = state.provider) {
+  if (!providerName || providerName === "All providers") return allCampuses;
+  return sortedCampusOptions(allCourses.filter((course) => course.university === providerName));
+}
+
+function syncCampusWithProvider() {
+  if (campusOptionsForProvider(state.provider).includes(state.campus)) return;
+  state.campus = "All campuses";
+}
+
 function render() {
+  syncCampusWithProvider();
   const results = filteredCourses();
+  const searchActive = Boolean(state.query) || hasIncomeOnlySearch();
+  const campusOptions = campusOptionsForProvider(state.provider);
   const savedCourses = savedCourseList();
   const compareCourses = compareCourseList();
   app.innerHTML = `
@@ -467,6 +595,7 @@ function render() {
       <nav class="topnav" aria-label="Main">
         <a href="#courses" ${navCurrent("#courses")}>Courses</a>
         <a href="./guide.html">Guide</a>
+        <a href="./my-plan.html">My Plan</a>
         <a href="#atar" ${navCurrent("#atar")}>ATAR match</a>
         <a href="./atar-calculator.html">ATAR calculator</a>
         <a href="./subject-helper.html">Subject helper</a>
@@ -501,9 +630,9 @@ function render() {
         <div class="panel-head">
           <div>
             <h2>Course Search</h2>
-            <p>Search by course, career, field, provider or campus. Results only update when you press Search.</p>
+            <p>Search by course, career, field, provider, campus or income. Results only update when you press Search or choose an income chip.</p>
           </div>
-          <span>${state.query ? `${number(results.length)} results` : "Search first"}</span>
+          <span>${searchActive ? `${number(results.length)} results` : "Search first"}</span>
         </div>
         <form class="search-form" data-form="search">
           <label>${icon("search")}<input name="search" type="search" autocomplete="off" value="${escapeHtml(state.draft)}" placeholder="Example: Artificial Intelligence, Medicine, Law, Nursing" /></label>
@@ -511,12 +640,17 @@ function render() {
         </form>
         <div class="filters">
           ${showLevelFilter ? select("level", "Level", levels, state.level) : ""}
+          ${select("courseType", "Course type", courseTypeOptions, state.courseType)}
+          ${select("area", "Study area", studyAreaOptions, state.area)}
           ${select("provider", "Provider", providers, state.provider)}
-          ${select("campus", "Campus", campuses, state.campus)}
+          ${select("campus", "Campus", campusOptions, state.campus)}
           ${select("mode", "Mode", modes, state.mode)}
           ${select("income", "Income goal", incomeOptions, state.income)}
+          ${select("sort", "Sort by", searchSortOptions, state.sort)}
+          ${textControl("locationQuery", "Distance from", state.locationQuery, "Suburb or postcode")}
           <button class="clear-btn" type="button" data-action="clear">Clear</button>
         </div>
+        ${renderDistanceNote()}
         <div class="income-filter-bar" aria-label="Income goal quick filter">
           <span>Search by income</span>
           ${incomeOptions.map((option) => `
@@ -528,8 +662,8 @@ function render() {
         </div>
         <div class="course-list">
           ${renderProcessStrip("search", "Searching courses")}
-          ${state.query ? results.slice(0, state.visible).map((course, index) => renderCourse(course, "", index)).join("") : `<p class="empty-note">Search a course, career, field or university to see results.</p>`}
-          ${state.query && !results.length ? `<p class="empty-note">No courses found. Try a broader keyword like technology, health, business, law or design.</p>` : ""}
+          ${searchActive ? results.slice(0, state.visible).map((course, index) => renderCourse(course, "", index)).join("") : `<p class="empty-note">Search a course, career, field or university, or use Search by income only.</p>`}
+          ${searchActive && !results.length ? `<p class="empty-note">No courses found. Try a broader keyword like technology, health, business, law or design, or lower the income band.</p>` : ""}
           ${results.length > state.visible ? `<button class="load-more" type="button" data-action="more">Show more</button>` : ""}
         </div>
       </section>
@@ -557,6 +691,7 @@ function render() {
           </label>
           ${select("matcherProvider", "Provider", providers, state.matcherProvider)}
           ${select("matcherTopic", "Interest topic", topicOptions.map((topic) => topic.label), state.matcherTopic)}
+          ${select("matcherIncome", "Income goal", incomeOptions, state.matcherIncome)}
           <label>
             <span>Subjects</span>
             <div class="subject-box">
@@ -568,6 +703,15 @@ function render() {
             </div>
           </label>
           <button type="button" class="match-btn" data-action="run-atar">Find matches</button>
+        </div>
+        <div class="income-filter-bar atar-income-filter" aria-label="ATAR income filter">
+          <span>Search by income only</span>
+          ${incomeOptions.map((option) => `
+            <button type="button" data-atar-income-filter="${escapeHtml(option)}" aria-pressed="${state.matcherIncome === option}">
+              ${escapeHtml(option)}
+            </button>
+          `).join("")}
+          <small>Use this even if you have not chosen subjects yet. It ranks ATAR-matched courses that can lead to the selected broad income band.</small>
         </div>
         <div class="course-list compact">
           ${renderProcessStrip("atar", "Matching courses")}
@@ -675,40 +819,201 @@ function renderPreservingViewport() {
   requestAnimationFrame(() => window.scrollTo(x, y));
 }
 
+function hasIncomeOnlySearch() {
+  return !normalise(state.query) && state.income !== "Any income";
+}
+
 function filteredCourses() {
   const query = normalise(state.query);
-  if (!query) return [];
+  const incomeOnly = hasIncomeOnlySearch();
+  if (!query && !incomeOnly) return [];
+  const origin = resolveKnownLocation(state.locationQuery);
   const cacheKey = [
     query,
     state.level,
+    state.courseType,
+    state.area,
     state.provider,
     state.campus,
     state.mode,
-    state.income
+    state.income,
+    state.sort,
+    origin ? origin.label : cleanSearchText(state.locationQuery)
   ].join("|");
   if (filteredCourseCache.key === cacheKey) return filteredCourseCache.results;
   const results = allCourses
     .filter((course) => {
       const queryMatch = !query || courseSearchMatch(course, query);
       const levelMatch = state.level === "All levels" || courseLevels(course).some((level) => levelLabels[level] === state.level);
+      const typeMatch = state.courseType === "All course types" || courseTypeLabel(course) === state.courseType;
+      const areaMatch = courseMatchesStudyArea(course, state.area);
       const providerMatch = state.provider === "All providers" || course.university === state.provider;
       const campusMatch = state.campus === "All campuses" || course.campus === state.campus;
       const modeMatch = state.mode === "All modes" || (course.modes || []).includes(state.mode);
       const incomeMatch = courseMeetsIncome(course, state.income);
-      return queryMatch && levelMatch && providerMatch && campusMatch && modeMatch && incomeMatch;
+      return queryMatch && levelMatch && typeMatch && areaMatch && providerMatch && campusMatch && modeMatch && incomeMatch;
     })
-    .map((course) => ({ course, score: searchScore(course, query) }))
-    .sort((a, b) => b.score - a.score || a.course.name.localeCompare(b.course.name))
+    .map((course) => ({
+      course,
+      score: searchScore(course, query),
+      areaScore: studyAreaSortScore(course),
+      distance: origin ? courseDistanceKm(course, origin) : null,
+      incomeScore: courseIncomeOutcomes(course)[0]?.max || 0
+    }))
+    .sort((a, b) => compareSearchEntries(a, b))
     .map((entry) => entry.course);
   filteredCourseCache.key = cacheKey;
   filteredCourseCache.results = results;
   return results;
 }
 
+function compareSearchEntries(a, b) {
+  if (hasIncomeOnlySearch() && state.sort === "Relevance") {
+    if (b.incomeScore !== a.incomeScore) return b.incomeScore - a.incomeScore;
+  }
+  if (state.sort === "Closest campus") {
+    const distanceA = Number.isFinite(a.distance) ? a.distance : Infinity;
+    const distanceB = Number.isFinite(b.distance) ? b.distance : Infinity;
+    if (distanceA !== distanceB) return distanceA - distanceB;
+  }
+  if (state.sort === "Study area fit") {
+    if (b.areaScore !== a.areaScore) return b.areaScore - a.areaScore;
+  }
+  if (state.sort === "Lowest ATAR") {
+    const rankA = numericRank(a.course.atar);
+    const rankB = numericRank(b.course.atar);
+    if ((rankA ?? Infinity) !== (rankB ?? Infinity)) return (rankA ?? Infinity) - (rankB ?? Infinity);
+  }
+  if (state.sort === "Highest ATAR") {
+    const rankA = numericRank(a.course.atar);
+    const rankB = numericRank(b.course.atar);
+    if ((rankB ?? -Infinity) !== (rankA ?? -Infinity)) return (rankB ?? -Infinity) - (rankA ?? -Infinity);
+  }
+  if (state.sort === "Income potential") {
+    if (b.incomeScore !== a.incomeScore) return b.incomeScore - a.incomeScore;
+  }
+  return b.score - a.score || a.course.name.localeCompare(b.course.name);
+}
+
+function courseMatchesStudyArea(course, areaLabel) {
+  if (!areaLabel || areaLabel === "All study areas") return true;
+  const topic = topicOptions.find((item) => item.label === areaLabel);
+  if (!topic) return true;
+  return topicWeightedScore(course, topic) > 0 || phraseMatch(course.area, areaLabel);
+}
+
+function studyAreaSortScore(course) {
+  const selected = state.area !== "All study areas"
+    ? topicOptions.find((topic) => topic.label === state.area)
+    : topicForQuery(state.query);
+  return selected ? topicWeightedScore(course, selected) : 0;
+}
+
+function courseTypeLabel(course) {
+  const title = cleanSearchText(course.name);
+  if (title.startsWith("advanced diploma")) return "Advanced Diploma";
+  if (title.startsWith("diploma")) return "Diploma";
+  if (title.startsWith("associate degree") || title.startsWith("assocdeg")) return "Associate Degree";
+  if (title.startsWith("undergraduate certificate")) return "Undergraduate Certificate";
+  if (/bachelor/.test(title) && (/\/.*bachelor|bachelor of .+ and bachelor|double degree/.test(title))) return "Double degree";
+  if (title.startsWith("bachelor") && /\bhonours\b/.test(title)) return "Honours";
+  if (title.startsWith("bachelor")) return "Bachelor";
+  return "Other";
+}
+
+function courseDistanceKm(course, origin) {
+  if (!origin) return null;
+  const campusPoint = courseCampusLocation(course);
+  if (!campusPoint) return null;
+  return haversineKm(origin, campusPoint);
+}
+
+function courseCampusLocation(course) {
+  const campusText = cleanSearchText(course.campus || "");
+  if (!campusText || campusText === "online") return null;
+  const directCampus = resolveKnownLocation(campusText);
+  const genericCampus = /^(city|city campus|sydney|sydney campus|campus)$/.test(campusText);
+  if (directCampus && !genericCampus) return directCampus;
+  const providerHint = providerLocationHints[course.providerId];
+  if (providerHint) return resolveKnownLocation(providerHint);
+  if (directCampus) return directCampus;
+  return resolveKnownLocation(`${course.campus || ""} ${course.university || ""}`);
+}
+
+function resolveKnownLocation(value) {
+  const clean = cleanSearchText(value);
+  if (!clean) return null;
+  const postcodeFallback = resolveSydneyPostcode(clean);
+  if (postcodeFallback) return postcodeFallback;
+  let best = null;
+  for (const location of knownLocations) {
+    for (const name of location.cleanNames) {
+      if (!name) continue;
+      const exact = clean === name;
+      const contained = clean.includes(name) || name.includes(clean);
+      if (!exact && !contained) continue;
+      const score = exact ? 1000 + name.length : name.length;
+      if (!best || score > best.score) best = { ...location, score, label: location.names[0] };
+    }
+  }
+  return best ? { label: best.label, lat: best.lat, lng: best.lng } : null;
+}
+
+function resolveSydneyPostcode(clean) {
+  const match = clean.match(/\b(2\d{3})\b/);
+  if (!match) return null;
+  const postcode = Number(match[1]);
+  const exact = {
+    2190: ["Greenacre / Chullora 2190", -33.9055, 151.0555],
+    2191: ["Belfield / Belmore 2191", -33.9037, 151.0880],
+    2192: ["Belmore 2192", -33.9172, 151.0898],
+    2194: ["Campsie 2194", -33.9125, 151.1026],
+    2196: ["Punchbowl / Roselands 2196", -33.9289, 151.0552],
+    2197: ["Bass Hill / Yagoona 2197", -33.9027, 151.0002],
+    2198: ["Georges Hall 2198", -33.9085, 150.9884],
+    2199: ["Yagoona 2199", -33.9048, 151.0204],
+    2200: ["Bankstown 2200", -33.9173, 151.0359]
+  };
+  if (exact[postcode]) {
+    const [label, lat, lng] = exact[postcode];
+    return { label, lat, lng };
+  }
+  const ranges = [
+    [2000, 2009, "Sydney CBD / inner city", -33.8688, 151.2093],
+    [2010, 2020, "Inner Sydney / eastern city", -33.8890, 151.2195],
+    [2021, 2036, "Eastern Suburbs", -33.9200, 151.2440],
+    [2037, 2050, "Inner West", -33.8880, 151.1650],
+    [2060, 2077, "Lower North Shore", -33.8050, 151.1800],
+    [2084, 2107, "Northern Beaches", -33.7450, 151.2850],
+    [2110, 2128, "Ryde / inner north-west", -33.8100, 151.0950],
+    [2130, 2147, "Inner west / central west", -33.8450, 151.0450],
+    [2148, 2164, "Parramatta / Blacktown / Cumberland", -33.8050, 150.9600],
+    [2165, 2179, "Fairfield / Liverpool / south-west Sydney", -33.9050, 150.9200],
+    [2190, 2234, "Canterbury-Bankstown / St George / Sutherland", -33.9250, 151.0700],
+    [2555, 2570, "Macarthur / Camden", -34.0350, 150.8000],
+    [2745, 2770, "Penrith / Hawkesbury / Mount Druitt", -33.7350, 150.7400]
+  ];
+  const range = ranges.find(([from, to]) => postcode >= from && postcode <= to);
+  if (!range) return null;
+  return { label: `${range[2]} ${postcode}`, lat: range[3], lng: range[4] };
+}
+
+function haversineKm(a, b) {
+  const earthRadiusKm = 6371;
+  const toRad = (degrees) => degrees * Math.PI / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const value = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+}
+
 function renderCourse(course, matchLine = "", index = 0) {
   const saved = state.savedIds.includes(course.id);
   const comparing = state.compareIds.includes(course.id);
   const open = state.openCourseIds.has(course.id);
+  const distanceLine = distanceSummaryLine(course);
   return `
     <details class="course-item" style="--item-delay:${Math.min(index, 8) * 26}ms" data-course-id="${escapeHtml(course.id)}" ${open ? "open" : ""}>
       <summary>
@@ -718,6 +1023,7 @@ function renderCourse(course, matchLine = "", index = 0) {
           <small>${escapeHtml(course.university)} - ${escapeHtml(course.campus)} - Code ${escapeHtml(course.courseCode)}</small>
           <em>${escapeHtml(levelDisplay(course))} - ${term("ATAR")}: ${escapeHtml(displayRank(course.atar))}${matchLine ? ` - ${escapeHtml(matchLine)}` : ""}</em>
           <em class="income-preview">${escapeHtml(incomeSummaryLine(course))}</em>
+          ${distanceLine ? `<em class="distance-preview">${escapeHtml(distanceLine)}</em>` : ""}
         </span>
         <span class="quick-actions">
           <button type="button" data-save-course="${escapeHtml(course.id)}" aria-pressed="${saved}">${saved ? "Saved" : "Save"}</button>
@@ -727,6 +1033,14 @@ function renderCourse(course, matchLine = "", index = 0) {
       ${open ? renderCourseDetail(course, saved, comparing) : ""}
     </details>
   `;
+}
+
+function distanceSummaryLine(course) {
+  const origin = resolveKnownLocation(state.locationQuery);
+  if (!origin) return "";
+  const distance = courseDistanceKm(course, origin);
+  if (!Number.isFinite(distance)) return "";
+  return `Approx. ${distance.toFixed(distance < 10 ? 1 : 0)} km from ${origin.label}`;
 }
 
 function renderCourseDetail(course, saved, comparing) {
@@ -749,7 +1063,7 @@ function renderCourseDetail(course, saved, comparing) {
       ${renderIncomeOutlook(course)}
       <p>${highlight(course.summary)}</p>
       <div class="actions">
-        <a href="${escapeHtml(course.uacUrl)}" target="_blank" rel="noreferrer">View on UAC ${icon("external")}</a>
+        <a href="${escapeHtml(course.uacUrl)}" target="_blank" rel="noreferrer">${escapeHtml(primaryCourseLinkLabel(course))} ${icon("external")}</a>
         ${course.officialUrl ? `<a href="${escapeHtml(course.officialUrl)}" target="_blank" rel="noreferrer">Course website ${icon("external")}</a>` : ""}
         <button type="button" data-save-course="${escapeHtml(course.id)}">${saved ? "Remove from saved" : "Save course"}</button>
         <button type="button" data-compare-course="${escapeHtml(course.id)}">${comparing ? "Remove from compare" : "Add to compare"}</button>
@@ -758,18 +1072,26 @@ function renderCourseDetail(course, saved, comparing) {
   `;
 }
 
+function primaryCourseLinkLabel(course) {
+  const url = String(course.uacUrl || "");
+  if (url.includes("uac.edu.au/course-search")) return "View on UAC";
+  return course.sourceLabel ? `View ${course.sourceLabel}` : "View source";
+}
+
 function renderAtarResults() {
   const matches = allCourses
     .filter((course) => numericRank(course.atar) !== null)
     .filter((course) => course.level === "undergraduate")
     .filter((course) => state.matcherProvider === "All providers" || course.university === state.matcherProvider)
+    .filter((course) => courseMeetsIncome(course, state.matcherIncome))
     .map((course) => {
       const rank = numericRank(course.atar);
       const gap = Number(state.atar) - rank;
       const preference = preferenceScore(course);
+      const incomeScore = state.matcherIncome === "Any income" ? 0 : (courseIncomeOutcomes(course)[0]?.max || 0) / 2500;
       const quality = providerQuality[state.matcherTopic]?.[course.providerId]?.score || 60;
       const atarScore = gap >= 0 ? 70 - Math.min(gap, 20) : 70 - Math.abs(gap) * 2.5;
-      return { course, gap, score: atarScore + preference + quality * 0.25 + qualificationScore(course) };
+      return { course, gap, score: atarScore + preference + incomeScore + quality * 0.25 + qualificationScore(course) };
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, 20);
@@ -978,7 +1300,7 @@ function renderCompareLibrary(compareCourses) {
               <th>Links</th>
               ${compareCourses.map((course) => `
                 <td>
-                  <a href="${escapeHtml(course.uacUrl)}" target="_blank" rel="noreferrer">UAC ${icon("external")}</a>
+                  <a href="${escapeHtml(course.uacUrl)}" target="_blank" rel="noreferrer">${escapeHtml(primaryCourseLinkLabel(course))} ${icon("external")}</a>
                   ${course.officialUrl ? `<a href="${escapeHtml(course.officialUrl)}" target="_blank" rel="noreferrer">Course page ${icon("external")}</a>` : ""}
                 </td>
               `).join("")}
@@ -1713,7 +2035,7 @@ function bindEvents() {
     state.draft = event.target.value;
   });
 
-  ["level", "provider", "mode", "campus", "income"].forEach((key) => {
+  ["level", "courseType", "area", "provider", "mode", "campus", "income", "sort"].forEach((key) => {
     app.querySelector(`[data-action="${key}"]`)?.addEventListener("change", (event) => {
       const value = event.target.value;
       state[key] = value;
@@ -1729,10 +2051,40 @@ function bindEvents() {
     });
   });
 
+  const locationInput = app.querySelector('[data-action="locationQuery"]');
+  const commitLocationInput = (value) => {
+    state.locationQuery = String(value || "").trim();
+    const update = () => {
+      state.visible = 24;
+      state.openCourseIds.clear();
+    };
+    if (state.query) runProcessing("search", update, null, 220);
+    else {
+      update();
+      render();
+    }
+  };
+  locationInput?.addEventListener("input", (event) => {
+    state.locationQuery = event.target.value;
+  });
+  locationInput?.addEventListener("change", (event) => {
+    commitLocationInput(event.target.value);
+  });
+  locationInput?.addEventListener("blur", (event) => {
+    commitLocationInput(event.target.value);
+  });
+  locationInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitLocationInput(event.target.value);
+    }
+  });
+
   app.querySelectorAll("[data-income-filter]").forEach((button) => {
     button.addEventListener("click", () => {
       const value = button.dataset.incomeFilter || "Any income";
       state.income = value;
+      if (!state.query && value !== "Any income") state.sort = "Income potential";
       const update = () => {
         state.visible = 24;
         state.openCourseIds.clear();
@@ -1749,10 +2101,14 @@ function bindEvents() {
     state.draft = "";
     state.query = "";
     state.level = "All levels";
+    state.courseType = "All course types";
+    state.area = "All study areas";
     state.provider = "All providers";
     state.mode = "All modes";
     state.campus = "All campuses";
     state.income = "Any income";
+    state.sort = "Relevance";
+    state.locationQuery = "";
     state.visible = 24;
     state.openCourseIds.clear();
     render();
@@ -1815,6 +2171,20 @@ function bindEvents() {
     state.matcherTopic = event.target.value;
   });
 
+  app.querySelector('[data-action="matcherIncome"]')?.addEventListener("change", (event) => {
+    state.matcherIncome = event.target.value;
+  });
+
+  app.querySelectorAll("[data-atar-income-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.matcherIncome = button.dataset.atarIncomeFilter || "Any income";
+      runProcessing("atar", () => {
+        state.matcherRun = true;
+        state.openCourseIds.clear();
+      }, null, 220);
+    });
+  });
+
   app.querySelector('[data-action="providerTopic"]')?.addEventListener("change", (event) => {
     state.providerTopic = event.target.value;
     render();
@@ -1850,8 +2220,10 @@ function bindEvents() {
   app.querySelector('[data-action="run-atar"]')?.addEventListener("click", () => {
     const providerValue = app.querySelector('[data-action="matcherProvider"]').value;
     const topicValue = app.querySelector('[data-action="matcherTopic"]').value;
+    const incomeValue = app.querySelector('[data-action="matcherIncome"]').value;
     state.matcherProvider = providerValue;
     state.matcherTopic = topicValue;
+    state.matcherIncome = incomeValue;
     runProcessing("atar", () => {
       state.matcherRun = true;
       state.openCourseIds.clear();
@@ -1977,6 +2349,25 @@ function select(key, label, options, value) {
       </select>
     </label>
   `;
+}
+
+function textControl(key, label, value, placeholder) {
+  return `
+    <label>
+      <span>${escapeHtml(label)}</span>
+      <input data-action="${escapeHtml(key)}" type="text" autocomplete="off" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" />
+    </label>
+  `;
+}
+
+function renderDistanceNote() {
+  const text = String(state.locationQuery || "").trim();
+  if (!text) return "";
+  const origin = resolveKnownLocation(text);
+  if (!origin) {
+    return `<p class="distance-note">Could not match "${escapeHtml(text)}" yet. Try a Sydney suburb or postcode such as Sydney, Chatswood, Bondi Junction, Parramatta, Blacktown, Liverpool, Bankstown, Greenacre, Campbelltown, Penrith, North Sydney, Macquarie Park, Kensington, Camperdown, 2190 or 2150.</p>`;
+  }
+  return `<p class="distance-note">Distance sorting uses approximate straight-line distance from ${escapeHtml(origin.label)} to the listed campus suburb. Use it as a commute shortcut, then check transport time.</p>`;
 }
 
 function row(label, value) {

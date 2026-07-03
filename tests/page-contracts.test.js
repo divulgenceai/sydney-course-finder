@@ -16,6 +16,79 @@ test("Subject Helper presents one automatic job-or-degree search", () => {
   assert.doesNotMatch(source, /Check my subjects/);
 });
 
+test("ATAR Match supports income filtering and income-only course search", () => {
+  const source = read("app.js");
+  assert.match(source, /matcherIncome/);
+  assert.match(source, /data-action="matcherIncome"/);
+  assert.match(source, /data-atar-income-filter/);
+  assert.match(source, /courseMeetsIncome\(course,\s*state\.matcherIncome\)/);
+  assert.match(source, /hasIncomeOnlySearch/);
+  assert.match(source, /Search by income only/i);
+});
+
+test("My Plan has its own page and every nav points to it", () => {
+  const app = read("app.js");
+  const guide = read("guide.js");
+  const subjectHelper = read("subject-helper.js");
+  const calculator = read("atar-calculator.js");
+  const advisor = read("advisor.js");
+  const myPlanHtml = read("my-plan.html");
+  const myPlan = read("my-plan.js");
+  const vercel = read("vercel.json");
+
+  for (const source of [app, guide, subjectHelper, calculator, advisor, myPlan]) {
+    assert.match(source, /My Plan/);
+    assert.match(source, /\.\/my-plan\.html/);
+  }
+  assert.doesNotMatch(app, /#my-plan/);
+  assert.doesNotMatch(app, /renderMyPlan/);
+  assert.doesNotMatch(app, /renderLegacyPlanPanel/);
+  assert.doesNotMatch(app, /id="my-plan"/);
+  assert.doesNotMatch(app, /my-plan-panel/);
+  assert.doesNotMatch([app, guide, subjectHelper, calculator, advisor].join("\n"), /index\.html#my-plan/);
+  assert.match(myPlanHtml, /id="my-plan-app"/);
+  assert.match(myPlanHtml, /my-plan\.js/);
+  assert.match(myPlanHtml, /subject-helper-logic\.js/);
+  assert.match(vercel, /"source":\s*"\/my-plan"/);
+  assert.match(vercel, /"destination":\s*"\/my-plan\.html"/);
+});
+
+test("My Plan page reads the saved Guide result as a linear plan", () => {
+  const myPlan = read("my-plan.js");
+  const guide = read("guide.js");
+
+  assert.match(guide, /guidePlanSnapshotKey/);
+  assert.match(guide, /createGuidePlanSnapshot/);
+  assert.match(guide, /goalLabel/);
+  assert.match(guide, /projectedAtar/);
+  assert.match(guide, /renderGuideLinearPlanPreview/);
+  assert.match(guide, /sydneyCourseFinder\.guidePlanSnapshot/);
+  assert.match(myPlan, /loadGuidePlanSnapshot/);
+  assert.match(myPlan, /buildPersonalPlanView/);
+  assert.match(myPlan, /renderLinearPlanStage/);
+  assert.match(myPlan, /providerLogoForOption/);
+  assert.match(myPlan, /Year 10 subject selection/);
+  assert.match(myPlan, /Projected ATAR/);
+  assert.match(myPlan, /UAC list/);
+  assert.match(myPlan, /SEEK|LinkedIn|GradConnection|Prosple/);
+});
+
+test("Guide exposes manual adjustment controls with impact warnings", () => {
+  const source = read("guide.js");
+  assert.match(source, /renderGuidePlanAdjustments/);
+  assert.match(source, /data-guide-adjust/);
+  assert.match(source, /applyGuideAdjustment/);
+  assert.match(source, /addEventListener\("blur"/);
+  assert.match(source, /changes the recommendation/i);
+  assert.match(source, /does not break/i);
+});
+
+test("Page entrance animation keeps panels readable on first paint", () => {
+  const styles = read("styles.css");
+  assert.doesNotMatch(styles, /@keyframes pageSectionIn\s*{\s*from\s*{\s*opacity:\s*0[;\s]/);
+  assert.match(styles, /@keyframes pageSectionIn\s*{\s*from\s*{\s*opacity:\s*0\.[7-9]/);
+});
+
 test("Subject Helper keeps its own route and navigation entry", () => {
   const server = read("server.js");
   const app = read("app.js");

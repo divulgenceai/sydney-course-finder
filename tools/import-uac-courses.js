@@ -47,6 +47,94 @@ const PROVIDER_SLUG_FIX = {
   UND: "UNDA"
 };
 
+const UTS_COLLEGE_LOGO = "https://utscollege.edu.au/hubfs/raw_assets/uts-college-theme-new/1532/js_client_assets/assets/www_UTSInsearch-BlOn8dNI.svg";
+const UTS_COLLEGE_DURATIONS = "8 months accelerated / 12 months standard";
+const UTS_COLLEGE_ENTRY = "Check UTS College official entry requirements. Diploma entry, pace and articulation conditions vary by applicant background and destination UTS degree.";
+const UTS_COLLEGE_FEES = "Check UTS College official program fees. Eligible domestic students may be able to use FEE-HELP; confirm current details with UTS College.";
+const UTS_COLLEGE_PATHWAY_TEXT = "UTS College diploma pathway in central Sydney. Most diplomas are designed as first-year-equivalent study with the opportunity to progress to a related UTS degree after meeting progression requirements.";
+
+const MANUAL_PATHWAY_COURSES = [
+  {
+    code: "UTSC-DIP-ANIM",
+    name: "Diploma of Animation Production",
+    area: "Animation, 2D production, 3D production, creative technology and screen production.",
+    careers: "Animation assistant, junior animator, 3D artist, motion graphics assistant, digital content production roles, or pathway to related UTS animation and creative production study.",
+    url: "https://utscollege.edu.au/programs/diplomas/diploma-of-animation-production"
+  },
+  {
+    code: "UTSC-DIP-BUS",
+    name: "Diploma of Business",
+    area: "Accounting, economics, finance, marketing, management and business foundations.",
+    careers: "Business analyst, marketing assistant, finance or accounting support roles, administration, operations, or pathway to a related UTS business degree.",
+    url: "https://utscollege.edu.au/programs/diplomas/diploma-of-business"
+  },
+  {
+    code: "UTSC-DIP-COMM",
+    name: "Diploma of Communication",
+    area: "Media, digital and social media, public communication, journalism, writing, culture and communication practice.",
+    careers: "Communications assistant, media assistant, content producer, public relations support, digital marketing support, or pathway to related UTS communication study.",
+    url: "https://utscollege.edu.au/programs/diplomas/diploma-of-communication"
+  },
+  {
+    code: "UTSC-DIP-DESARCH",
+    name: "Diploma of Design & Architecture",
+    area: "Architecture, design, built environment, visual communication and creative design practice.",
+    careers: "Design assistant, architecture pathway roles, visual communication support, built-environment study pathway, or pathway to related UTS design and architecture degrees.",
+    url: "https://utscollege.edu.au/programs/diplomas/diploma-of-design-architecture"
+  },
+  {
+    code: "UTSC-DIP-ENG",
+    name: "Diploma of Engineering",
+    area: "Engineering foundations, mathematics, physics, design, systems thinking and engineering practice.",
+    careers: "Engineering pathway roles, technical assistant roles, project support, or pathway to a related UTS engineering degree after meeting progression requirements.",
+    url: "https://utscollege.edu.au/programs/diplomas/diploma-of-engineering"
+  },
+  {
+    code: "UTSC-DIP-IT",
+    name: "Diploma of Information Technology",
+    area: "Programming, databases, cyber security foundations, systems, web technologies and information technology practice.",
+    careers: "Junior developer, IT support, systems support, web support, cyber or data pathway roles, or pathway to a related UTS information technology degree.",
+    url: "https://utscollege.edu.au/programs/diplomas/diploma-of-information-technology"
+  },
+  {
+    code: "UTSC-DIP-SCI",
+    name: "Diploma of Science",
+    area: "Science foundations, laboratory skills, mathematics, chemistry, biology, physics and analytical thinking.",
+    careers: "Laboratory assistant, science support roles, environmental or health science pathway roles, or pathway to a related UTS science degree.",
+    url: "https://utscollege.edu.au/programs/diplomas/diploma-of-science"
+  }
+].map((course) => ({
+  id: `manual-${course.code}-SYD`,
+  level: "undergraduate",
+  courseCode: course.code,
+  name: course.name,
+  providerId: "UTSC",
+  university: "UTS College",
+  providerWebsite: "https://utscollege.edu.au/",
+  providerLogo: UTS_COLLEGE_LOGO,
+  campus: "UTS College Sydney campus",
+  campusCode: "SYD",
+  campusPostcode: "2000",
+  area: course.area,
+  courseLevel: "Diploma",
+  atar: "Not listed by UAC.",
+  atarYear: "",
+  duration: UTS_COLLEGE_DURATIONS,
+  modes: ["On campus", "Full-time"],
+  intake: "Check official UTS College intake dates.",
+  prerequisites: UTS_COLLEGE_ENTRY,
+  assumed: "Not listed by UAC. Check the official UTS College course page for recommended preparation.",
+  additionalCriteria: "Progression to UTS depends on successfully completing the diploma and meeting the stated progression requirements for the destination degree.",
+  fees: UTS_COLLEGE_FEES,
+  summary: `${UTS_COLLEGE_PATHWAY_TEXT} This entry is included from UTS College's official diploma pages because it is a Sydney pathway offering not exposed as a normal UAC course row.`,
+  careers: course.careers,
+  practicalExperience: "",
+  uacUrl: course.url,
+  officialUrl: course.url,
+  sourceLabel: "UTS College",
+  source: "UTS College official diploma pages, manually added 2026-06-17"
+}));
+
 function isSydneyPostcode(code) {
   const value = Number(String(code || "").replace(/^A/, ""));
   return SYDNEY_POSTCODE_RANGES.some(([start, end]) => value >= start && value <= end);
@@ -262,8 +350,8 @@ async function main() {
     }
   });
 
-  const rawCourses = imported
-    .map((course) => {
+  const rawCourses = [
+    ...imported.map((course) => {
       const providerId = course.providerId.replace("_AD", "");
       const campus = campusByKey.get(`${providerId}-${course.campusCode}`) || campusByKey.get(`${course.providerId}-${course.campusCode}`) || {};
       const detail = details.get(`${course.importLevel}:${course.courseUrl}`) || {};
@@ -299,7 +387,9 @@ async function main() {
         officialUrl: detail.officialUrl || websites[providerId] || "",
         source: `UAC Course Search ${course.importLevel} API, imported ${new Date().toISOString().slice(0, 10)}`
       };
-    })
+    }),
+    ...MANUAL_PATHWAY_COURSES
+  ]
     .sort((a, b) => a.university.localeCompare(b.university) || a.name.localeCompare(b.name) || a.campus.localeCompare(b.campus));
 
   const courses = collapseDuplicateCourses(rawCourses)
@@ -321,6 +411,7 @@ async function main() {
       apiSource: "https://coursehub.uac.edu.au/backend/course-search/api/search/undergraduate",
       levels: totals,
       rawSydneyCourseVariants: rawCourses.length,
+      manualPathwayRows: MANUAL_PATHWAY_COURSES.length,
       duplicateRowsRemoved: rawCourses.length - courses.length,
       sydneyCourseVariants: courses.length,
       uniqueProviders: providers.length

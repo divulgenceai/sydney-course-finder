@@ -76,6 +76,8 @@ function resolveFile(pathname) {
       ? "/advisor.html"
       : clean === "/atar-calculator" || clean === "/calculator"
         ? "/atar-calculator.html"
+        : clean === "/my-plan" || clean === "/plan"
+          ? "/my-plan.html"
         : clean === "/subject-helper" || clean === "/subjects"
           ? "/subject-helper.html"
         : clean;

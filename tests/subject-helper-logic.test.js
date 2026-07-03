@@ -3,6 +3,8 @@ const assert = require("node:assert/strict");
 
 const {
   assessCourseSubjects,
+  buildPlanMilestones,
+  buildPersonalPlanView,
   buildYear10SubjectPlan,
   chooseDirectionProfile,
   createGuideState,
@@ -438,4 +440,176 @@ test("Year 10 core six do not let a 1-unit extension replace a full Year 11 cour
   assert.equal(plan.subjects.length, 6);
   assert.equal(plan.subjects.reduce((sum, item) => sum + item.subject.units, 0), 12);
   assert.ok(!plan.subjects.some((item) => item.subject.name === "Mathematics Extension 1"));
+});
+
+test("My Plan milestones explain current position and upcoming NSW/UAC dates", () => {
+  const milestones = buildPlanMilestones(
+    {
+      year: "Year 12",
+      dreamJob: "Software engineer",
+      dreamCourse: "Computer Science",
+      dreamIncome: "$100k+",
+      resultRequested: true
+    },
+    new Date("2026-07-02T00:00:00+10:00")
+  );
+
+  assert.equal(milestones.status.label, "Year 12");
+  assert.match(milestones.status.text, /Software engineer/i);
+  assert.ok(milestones.items.length >= 6);
+  assert.ok(milestones.items.some((item) => /Schools Recommendation Scheme/i.test(item.title)));
+  assert.ok(milestones.items.some((item) => /30 Sep 2026/.test(item.when)));
+  assert.ok(milestones.items.some((item) => /5 Feb 2027/.test(item.when)));
+  assert.ok(milestones.items.every((item) => item.impact));
+});
+
+test("personal My Plan view uses the built Guide result before generic milestones", () => {
+  const view = buildPersonalPlanView(
+    {
+      year: "Year 12",
+      dreamJob: "Primary teacher",
+      dreamIncome: "$100k+"
+    },
+    {
+      goalLabel: "Software engineer",
+      profileLabel: "Technology",
+      primary: {
+        name: "Bachelor of Software Engineering",
+        university: "UTS",
+        campus: "City campus",
+        atar: "82.10"
+      },
+      subjectTargets: [
+        { name: "Mathematics Advanced", badge: "recommended", reason: "Keeps software pathways open.", target: "Aim around 80/100." },
+        { name: "Enterprise Computing", badge: "recommended", reason: "Directly useful for coding.", target: "Aim around 82/100." }
+      ],
+      dropAdvice: { name: "Business Studies", reason: "Lowest-relevance support subject for this software plan." },
+      options: [
+        { name: "Bachelor of Software Engineering", university: "UTS", campus: "City campus", atar: "82.10" },
+        { name: "Bachelor of Computer Science", university: "Western Sydney University", campus: "Parramatta campus", atar: "70.00" }
+      ],
+      jobs: [
+        { title: "Software engineer", range: "$85k-$150k" }
+      ],
+      steps: [
+        { title: "Confirm prerequisites", text: "Check UAC and the university page." }
+      ],
+      reach: { label: "Target", text: "Use 82.10 as your planning target." },
+      atarTargetLabel: "Aim for 82.10+",
+      atarMessage: "This is the imported ATAR profile for the course."
+    },
+    new Date("2026-07-02T00:00:00+10:00")
+  );
+
+  assert.equal(view.source, "guide-result");
+  assert.match(view.status.text, /Bachelor of Software Engineering/);
+  assert.match(view.status.text, /software engineer/i);
+  assert.doesNotMatch(view.status.text, /primary teacher/i);
+  assert.equal(view.sections[0].title, "Current Guide recommendation");
+  assert.ok(view.sections.some((section) => section.title === "Subjects from your Guide" && section.items.some((item) => item.title === "Mathematics Advanced")));
+  assert.ok(view.sections.some((section) => section.title === "Drop check" && /Business Studies/.test(section.items[0].title)));
+  assert.ok(view.sections.some((section) => section.title === "UAC preference ladder" && section.items.length === 2));
+  assert.ok(view.sections.some((section) => section.title === "Jobs and income" && /\$85k-\$150k/.test(section.items[0].meta)));
+  assert.ok(view.items.some((item) => /Schools Recommendation Scheme/i.test(item.title)));
+});
+
+test("personal My Plan view exposes a linear Year 10 to jobs timeline", () => {
+  const view = buildPersonalPlanView(
+    { year: "Year 10 or below", dreamJob: "Software engineer", schoolPerformance: "Around average" },
+    {
+      goalLabel: "Software engineer",
+      profileLabel: "Technology",
+      primary: { name: "Bachelor of Software Engineering", university: "UTS", campus: "City campus", atar: "82.10" },
+      projectedAtar: { label: "68.00", text: "Projected from school tracking." },
+      subjectTargets: [
+        { name: "Mathematics Advanced", badge: "recommended", reason: "Keeps software pathways open.", target: "Aim around 80/100." },
+        { name: "Enterprise Computing", badge: "recommended", reason: "Directly useful for coding.", target: "Aim around 82/100." },
+        { name: "Software Engineering", badge: "recommended", reason: "Directly useful for coding.", target: "Aim around 81/100." }
+      ],
+      dropAdvice: { name: "Physics", reason: "Lowest-relevance support subject for this software plan." },
+      options: [
+        { name: "Bachelor of Software Engineering", university: "UTS", campus: "City campus", atar: "82.10" }
+      ],
+      jobs: [
+        { title: "Software engineer", range: "$85k-$150k" }
+      ],
+      steps: []
+    },
+    new Date("2026-07-02T00:00:00+10:00")
+  );
+
+  assert.ok(Array.isArray(view.linearStages));
+  assert.deepEqual(view.linearStages.map((stage) => stage.phase), [
+    "Year 10 subject selection",
+    "End of Year 11 drop check",
+    "Projected ATAR",
+    "Dream course",
+    "UAC list",
+    "Jobs to apply to"
+  ]);
+  assert.match(view.linearStages[0].items[0].text, /Mathematics Advanced/i);
+  assert.match(view.linearStages[1].items[0].title, /Physics/i);
+  assert.match(view.linearStages[2].items[0].title, /68\.00/i);
+  assert.match(view.linearStages[3].items[0].title, /Bachelor of Software Engineering/i);
+  assert.match(view.linearStages[4].items[0].title, /Bachelor of Software Engineering/i);
+  assert.match(view.linearStages[5].items[0].text, /SEEK|LinkedIn|GradConnection|Prosple/i);
+});
+
+test("Year 11 and Year 12 My Plan stages start at subject drop then projected ATAR", () => {
+  const snapshot = {
+    goalLabel: "Software engineer",
+    profileLabel: "Technology",
+    primary: { name: "Bachelor of Software Engineering", university: "UTS", campus: "City campus", atar: "82.10" },
+    projectedAtar: { label: "74.70", text: "Projected from entered marks." },
+    subjectTargets: [
+      { name: "Mathematics Advanced", badge: "recommended", reason: "Keeps software pathways open.", target: "Aim around 80/100." },
+      { name: "Physics", badge: "recommended", reason: "Support subject.", target: "Aim around 75/100." }
+    ],
+    dropAdvice: { name: "Physics", reason: "Lowest-relevance support subject." },
+    options: [{ name: "Bachelor of Software Engineering", university: "UTS", campus: "City campus", atar: "82.10" }],
+    jobs: [{ title: "Software engineer", range: "$85k-$150k" }],
+    steps: []
+  };
+
+  for (const year of ["Year 11", "Year 12"]) {
+    const view = buildPersonalPlanView(
+      { year, dreamJob: "Software engineer" },
+      snapshot,
+      new Date("2026-07-02T00:00:00+10:00")
+    );
+    assert.deepEqual(view.linearStages.map((stage) => stage.phase), [
+      "Subject drop",
+      "Projected ATAR",
+      "Dream course",
+      "UAC list",
+      "Jobs to apply to"
+    ]);
+    assert.match(view.linearStages[0].items[0].title, /Physics/i);
+    assert.match(view.linearStages[1].items[0].title, /74\.70/i);
+  }
+});
+
+test("strong school performance upgrades My Plan subject advice toward advanced subjects", () => {
+  const view = buildPersonalPlanView(
+    { year: "Year 10 or below", dreamJob: "primary teacher", schoolPerformance: "Consistently strong" },
+    {
+      goalLabel: "Primary teacher",
+      profileLabel: "Education",
+      primary: { name: "Bachelor of Education (Primary)", university: "Macquarie University", campus: "North Ryde campus", atar: "75.00" },
+      subjectTargets: [
+        { name: "English Standard", badge: "recommended", reason: "Communication helps teaching.", target: "Aim around 80/100." },
+        { name: "Mathematics Standard 2", badge: "recommended", reason: "Useful for numeracy.", target: "Aim around 78/100." },
+        { name: "Biology", badge: "recommended", reason: "Useful support subject.", target: "Aim around 75/100." }
+      ],
+      options: [],
+      jobs: [{ title: "Primary teacher", range: "$75k-$115k" }],
+      steps: []
+    },
+    new Date("2026-07-02T00:00:00+10:00")
+  );
+
+  const subjectStageText = view.linearStages[0].items.map((item) => `${item.title} ${item.text}`).join(" ");
+  assert.match(subjectStageText, /English Advanced/i);
+  assert.match(subjectStageText, /Mathematics Advanced/i);
+  assert.match(subjectStageText, /strong school/i);
 });
