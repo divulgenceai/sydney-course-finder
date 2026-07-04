@@ -74,11 +74,12 @@ test("Pathways has its own page and every nav points to it", () => {
 
   assert.match(pathwaysHtml, /id="pathways-app"/);
   assert.match(pathwaysHtml, /uac-courses\.js/);
+  assert.match(pathwaysHtml, /pathways-logic\.js/);
   assert.match(pathwaysHtml, /pathways\.js/);
   assert.match(noAtarHtml, /id="pathways-app"/);
   assert.match(noAtarHtml, /uac-courses\.js/);
+  assert.match(noAtarHtml, /pathways-logic\.js/);
   assert.match(noAtarHtml, /pathways\.js/);
-  assert.match(pathways, /providerLogo/);
   assert.match(server, /pathways/);
   assert.match(server, /no-atar/);
   assert.match(vercel, /"source":\s*"\/pathways"/);
@@ -89,20 +90,46 @@ test("Pathways has its own page and every nav points to it", () => {
 
 test("Pathways covers no-ATAR and alternative university entry routes", () => {
   const source = read("pathways.js");
+  const logic = read("pathways-logic.js");
 
-  assert.match(source, /No ATAR/);
-  assert.match(source, /STAT/);
-  assert.match(source, /Schools Recommendation Scheme/);
-  assert.match(source, /Educational Access Scheme/);
-  assert.match(source, /TAFE\/VET/);
-  assert.match(source, /Open Universities Australia/);
-  assert.match(source, /pathway course/i);
-  assert.match(source, /Undergraduate Certificate/);
-  assert.match(source, /Diploma/);
-  assert.match(source, /foundation/i);
-  assert.match(source, /portfolio/i);
-  assert.match(source, /coursePathwayType/);
-  assert.match(source, /recommendedRoute/);
+  assert.match(logic, /Year 12 but no ATAR/);
+  assert.match(logic, /Left school in Year 11/);
+  assert.match(logic, /Finished Year 12 without an ATAR/);
+  assert.doesNotMatch(logic, /No ATAR \/ left school/);
+  assert.match(logic, /STAT/);
+  assert.match(logic, /Schools Recommendation Scheme/);
+  assert.match(logic, /Educational Access Scheme/);
+  assert.match(logic, /TAFE\/VET/);
+  assert.match(logic, /Open Universities Australia/);
+  assert.match(logic, /Undergraduate Certificate/);
+  assert.match(logic, /Diploma/);
+  assert.match(logic, /foundation/i);
+  assert.match(logic, /portfolio/i);
+  assert.match(source, /renderWaysToGetThere/);
+  assert.match(source, /What do you want to study/i);
+  assert.match(source, /Ways to get there/i);
+  assert.doesNotMatch(source, /Pathway-style courses in the imported UAC data/);
+  assert.doesNotMatch(source, /imported UAC data/);
+  assert.doesNotMatch(source, /renderPathwayCourseCard/);
+});
+
+test("Header navigation stays compact after adding Pathways", () => {
+  const sources = [
+    read("app.js"),
+    read("guide.js"),
+    read("my-plan.js"),
+    read("pathways.js"),
+    read("subject-helper.js"),
+    read("atar-calculator.js"),
+    read("advisor.js")
+  ].join("\n");
+  const topnavs = (sources.match(/<nav class="topnav"[\s\S]*?<\/nav>/g) || []).join("\n");
+
+  assert.match(topnavs, /href="\.\/index\.html#atar">ATAR</);
+  assert.match(topnavs, /href="\.\/atar-calculator\.html"[^>]*>Calculator</);
+  assert.match(topnavs, /href="\.\/subject-helper\.html"[^>]*>Subjects</);
+  assert.match(topnavs, /href="\.\/advisor\.html"[^>]*>Course help</);
+  assert.doesNotMatch(topnavs, /href="\.\/atar-calculator\.html"[^>]*>ATAR calculator</);
 });
 
 test("My Plan page reads the saved Guide result as a linear plan", () => {
@@ -145,7 +172,7 @@ test("Subject Helper keeps its own route and navigation entry", () => {
   const server = read("server.js");
   const app = read("app.js");
   assert.match(server, /subject-helper/);
-  assert.match(app, /Subject helper/);
+  assert.match(app, /Subjects/);
 });
 
 test("both planning pages load the shared planning logic", () => {

@@ -420,10 +420,10 @@ function renderGuide(options = {}) {
         <a href="./guide.html" aria-current="page">Guide</a>
         <a href="./my-plan.html">My Plan</a>
         <a href="./pathways.html">Pathways</a>
-        <a href="./index.html#atar">ATAR match</a>
-        <a href="./atar-calculator.html">ATAR calculator</a>
-        <a href="./subject-helper.html">Subject helper</a>
-        <a href="./advisor.html">Course helper</a>
+        <a href="./index.html#atar">ATAR</a>
+        <a href="./atar-calculator.html">Calculator</a>
+        <a href="./subject-helper.html">Subjects</a>
+        <a href="./advisor.html">Course help</a>
         <a href="./index.html#saved">Saved</a>
         <a href="./index.html#providers">Universities</a>
         <a href="./index.html#faq">FAQ</a>

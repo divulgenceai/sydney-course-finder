@@ -597,10 +597,10 @@ function render() {
         <a href="./guide.html">Guide</a>
         <a href="./my-plan.html">My Plan</a>
         <a href="./pathways.html">Pathways</a>
-        <a href="#atar" ${navCurrent("#atar")}>ATAR match</a>
-        <a href="./atar-calculator.html">ATAR calculator</a>
-        <a href="./subject-helper.html">Subject helper</a>
-        <a href="./advisor.html">Course helper</a>
+        <a href="#atar" ${navCurrent("#atar")}>ATAR</a>
+        <a href="./atar-calculator.html">Calculator</a>
+        <a href="./subject-helper.html">Subjects</a>
+        <a href="./advisor.html">Course help</a>
         <a href="#saved" ${navCurrent("#saved")}>Saved ${state.savedIds.length ? `(${state.savedIds.length})` : ""}</a>
         <a href="#providers" ${navCurrent("#providers")}>Universities</a>
         <a href="#faq" ${navCurrent("#faq")}>FAQ</a>

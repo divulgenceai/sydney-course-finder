@@ -8802,6 +8802,147 @@ html {
   border-radius: var(--radius);
 }
 
+.simple-pathways-page {
+  display: grid;
+  gap: 18px;
+}
+
+.simple-pathways-hero {
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 340px);
+}
+
+.simple-pathways-hero h1 {
+  max-width: 780px;
+}
+
+.simple-pathway-finder {
+  display: grid;
+  gap: 14px;
+}
+
+.simple-pathway-form {
+  grid-template-columns: minmax(260px, 0.9fr) minmax(300px, 1.3fr) auto;
+}
+
+.pathway-finder-note,
+.pathway-data-note {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.simple-route-list {
+  display: grid;
+  gap: 12px;
+}
+
+.simple-route-card {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+  box-shadow: 0 12px 30px var(--shadow);
+  animation: fadeUp var(--motion-medium) var(--ease-out) both;
+  animation-delay: var(--item-delay, 0ms);
+}
+
+.simple-route-rank {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 950;
+}
+
+.simple-route-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.simple-route-head h3,
+.simple-route-head p,
+.simple-route-body h4,
+.simple-route-body p,
+.simple-route-body ol {
+  margin: 0;
+}
+
+.simple-route-head h3 {
+  margin-top: 8px;
+}
+
+.simple-route-head a {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line));
+  border-radius: 999px;
+  padding: 7px 10px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.simple-year12-rule {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-soft));
+  color: var(--muted);
+  font-weight: 760;
+}
+
+.simple-route-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(220px, 0.85fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.simple-route-body > div {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.simple-route-body h4 {
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+.simple-route-body ol {
+  padding-left: 20px;
+}
+
+.simple-route-body li + li {
+  margin-top: 6px;
+}
+
+.simple-route-body p + p {
+  margin-top: 8px;
+}
+
+.simple-checklist .pathway-linear {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.simple-checklist .pathway-linear li {
+  grid-template-columns: 38px minmax(0, 1fr);
+}
+
 :root[data-theme="dark"] .my-plan-empty,
 :root[data-theme="dark"] .my-plan-status,
 :root[data-theme="dark"] .guide-linear-preview,
@@ -8818,7 +8959,11 @@ html {
 :root[data-theme="dark"] .pathway-route-card,
 :root[data-theme="dark"] .pathway-course-card,
 :root[data-theme="dark"] .pathway-empty,
-:root[data-theme="dark"] .pathway-linear li {
+:root[data-theme="dark"] .pathway-linear li,
+:root[data-theme="dark"] .simple-route-card,
+:root[data-theme="dark"] .simple-route-body > div,
+:root[data-theme="dark"] .pathway-finder-note,
+:root[data-theme="dark"] .pathway-data-note {
   background: var(--surface);
   border-color: var(--line);
 }
@@ -8834,7 +8979,8 @@ html {
   .guide-linear-preview,
   .guide-adjust-head,
   .pathways-hero,
-  .pathway-recommendation {
+  .pathway-recommendation,
+  .simple-route-head {
     align-items: stretch;
     grid-template-columns: 1fr;
     flex-direction: column;
@@ -8848,7 +8994,11 @@ html {
   .pathway-form,
   .pathway-route-grid,
   .pathway-filter-row,
-  .pathway-course-card {
+  .pathway-course-card,
+  .simple-pathway-form,
+  .simple-route-card,
+  .simple-route-body,
+  .simple-checklist .pathway-linear {
     grid-template-columns: 1fr;
   }
 
