@@ -55,6 +55,15 @@
       portfolio: "business case study, customer research, project evidence or work experience"
     },
     {
+      id: "defence",
+      label: "Defence / ADFA",
+      tokens: ["adfa", "defence", "defense", "military", "army", "navy", "air force", "airforce", "officer", "aerospace", "aeronautical", "aviation", "pilot"],
+      target: "UNSW Canberra degree through ADFA or another defence-related university pathway",
+      vet: "fitness, leadership, maths/English readiness and any related VET or cadet/community leadership evidence",
+      diploma: "defence-adjacent enabling, computing, engineering, business, arts or science pathway before applying",
+      portfolio: "leadership, teamwork, fitness, service, STEM projects or aviation/defence interest evidence"
+    },
+    {
       id: "technology",
       label: "Technology / IT",
       tokens: ["software", "computer", "it", "information technology", "cyber", "data", "coding", "programming", "developer", "ai", "game"],
@@ -175,6 +184,26 @@
       }
     },
     {
+      id: "wsu-college",
+      baseTitle: "Western Sydney University The College pathway",
+      shortTitle: "WSU College",
+      year12Rule: "Western Sydney University The College offers University Foundation Studies and Diploma Programs as WSU's official pathway provider. Entry, length and progression still depend on the exact program.",
+      bestFor: "Sydney students who want a local diploma or foundation bridge into Western Sydney University before trying a direct bachelor entry.",
+      officialLabel: "Western Sydney University The College",
+      officialUrl: "https://www.westernsydney.edu.au/future/study/application-pathways/the-college/courses",
+      excludedProfiles: ["defence"],
+      scores: { "year12-no-atar": 44, "finished-y12-no-atar": 42, "left-y11": 32, vet: 30, mature: 28, year10: 24, creative: 24 },
+      profileBoosts: { business: 12, technology: 12, health: 10, education: 10, creative: 8, law: 6, engineering: 10, general: 5 },
+      steps(profile) {
+        const diploma = wsuDiplomaForProfile(profile);
+        return [
+          `Check WSU The College for ${diploma}.`,
+          "Confirm whether it is a diploma, extended diploma or foundation/preparation option and what bachelor it can lead into.",
+          "Ask whether completion gives guaranteed progression, competitive entry, credit, or just stronger preparation."
+        ];
+      }
+    },
+    {
       id: "portfolio",
       baseTitle: "Portfolio / interview route",
       shortTitle: "Show evidence",
@@ -189,6 +218,25 @@
           `Build ${profile.portfolio}.`,
           "Check the exact file format, due date, interview or audition requirement.",
           "Pair the portfolio with a VET/diploma/prep backup so the plan is not one-shot."
+        ];
+      }
+    },
+    {
+      id: "adfa",
+      baseTitle: "ADFA / UNSW Canberra officer pathway",
+      shortTitle: "ADFA",
+      year12Rule: "ADFA is not a generic no-ATAR shortcut. It is a defence officer pathway where ADF Careers selection and UNSW Canberra degree entry both matter.",
+      bestFor: "Students aiming for Navy, Army or Air Force officer roles who also want a UNSW degree and military leadership training.",
+      officialLabel: "ADF Careers ADFA",
+      officialUrl: "https://www.adfcareers.gov.au/students-and-education/australian-defence-force-academy",
+      profiles: ["defence"],
+      scores: { year10: 46, "year12-no-atar": 38, "finished-y12-no-atar": 30, mature: 24, "left-y11": 18, vet: 16, creative: 0 },
+      profileBoosts: { defence: 36 },
+      steps(profile) {
+        return [
+          "Check ADFA through ADF Careers and UNSW Canberra, not just ordinary UAC course search.",
+          `Match the degree area to your target: ${adfaStudyAreasForProfile(profile)}.`,
+          "Prepare for officer selection, medical/fitness requirements and service commitment alongside academic entry."
         ];
       }
     },
@@ -299,13 +347,23 @@
   }
 
   function hydrateRoute(route, profile, situation) {
+    if (route.profiles && !route.profiles.includes(profile.id)) {
+      return { id: route.id, score: 0 };
+    }
+    if (route.excludedProfiles?.includes(profile.id)) {
+      return { id: route.id, score: 0 };
+    }
     const profileBoost = route.profileBoosts?.[profile.id] ?? route.profileBoosts?.general ?? 0;
     const situationScore = route.scores?.[situation.id] ?? 0;
     const title = route.id === "tafe-vet"
       ? `${profile.label} via TAFE/VET`
       : route.id === "diploma"
-        ? `${profile.label} diploma bridge`
-        : route.baseTitle;
+        ? profile.id === "defence"
+          ? "Defence-adjacent study bridge"
+          : `${profile.label} diploma bridge`
+        : route.id === "wsu-college"
+          ? `Western Sydney University The College ${profile.label} pathway`
+          : route.baseTitle;
     return {
       id: route.id,
       title,
@@ -342,11 +400,32 @@
   function checkText(routeId, profile) {
     if (routeId === "tafe-vet") return `Ask: does this ${profile.vet} give entry, credit, both, or just useful preparation?`;
     if (routeId === "diploma") return "Ask: is progression guaranteed, competitive, or just possible after completion?";
+    if (routeId === "wsu-college") return "Ask: which Western bachelor does this exact The College program lead into, and is progression guaranteed or competitive?";
     if (routeId === "portfolio") return "Ask: what evidence format, deadline and interview/audition rules apply?";
+    if (routeId === "adfa") return "Ask: am I applying for a defence officer role, and what ADF selection plus UNSW entry checks apply?";
     if (routeId === "srs-eas") return "Ask: am I eligible, and does the target course still have prerequisites?";
     if (routeId === "stat") return "Ask: does this institution accept STAT for this exact course?";
     if (routeId === "open-access") return "Ask: can these units count as credit later?";
     return "Ask: what result do I need before I can transfer?";
+  }
+
+  function wsuDiplomaForProfile(profile) {
+    const options = {
+      business: "Diploma in Business",
+      technology: "Diploma in Information and Communications Technology",
+      health: "Diploma in Health Science",
+      education: "Diploma in Education Studies",
+      creative: "Diploma in Creative Industries and Communication",
+      law: "Diploma in Social Sciences or Arts as a possible bridge",
+      engineering: "Diploma in Engineering Studies",
+      general: "a diploma, foundation studies or preparation program linked to your target degree"
+    };
+    return options[profile.id] || options.general;
+  }
+
+  function adfaStudyAreasForProfile(profile) {
+    if (profile.id === "defence") return "arts, business, computing/cyber security, engineering, science or technology depending on the service role";
+    return profile.target;
   }
 
   function cleanSearchText(value) {

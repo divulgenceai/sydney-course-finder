@@ -27,6 +27,42 @@ test("Business search returns ways to get there rather than unrelated university
   assert.ok(result.routes.some((route) => route.year12Rule.includes("does not usually need Year 12")));
 });
 
+test("changing the situation changes the route order for the same goal", () => {
+  const stillAtSchool = buildPathwayResults({ goal: "Business", situation: "year12-no-atar" });
+  const leftInYear11 = buildPathwayResults({ goal: "Business", situation: "left-y11" });
+  const matureAge = buildPathwayResults({ goal: "Business", situation: "mature" });
+
+  assert.equal(leftInYear11.routes[0].id, "tafe-vet");
+  assert.equal(matureAge.routes[0].id, "stat");
+  assert.notDeepEqual(
+    stillAtSchool.routes.map((route) => route.id).slice(0, 3),
+    leftInYear11.routes.map((route) => route.id).slice(0, 3)
+  );
+});
+
+test("business no-ATAR pathways include Western Sydney University The College when relevant", () => {
+  const result = buildPathwayResults({ goal: "Business", situation: "year12-no-atar" });
+  const wsuRoute = result.routes.find((route) => route.id === "wsu-college");
+
+  assert.ok(wsuRoute);
+  assert.match(wsuRoute.title, /Western Sydney University The College/i);
+  assert.match(wsuRoute.steps.join(" "), /Diploma in Business|The College/i);
+  assert.match(wsuRoute.officialLabel, /Western Sydney/i);
+});
+
+test("defence goals surface ADFA but unrelated pathways do not", () => {
+  const defence = buildPathwayResults({ goal: "ADFA army officer cyber security", situation: "year10" });
+  const nursing = buildPathwayResults({ goal: "nursing", situation: "left-y11" });
+
+  assert.equal(classifyPathwayGoal("ADFA army officer").id, "defence");
+  assert.ok(defence.routes.some((route) => route.id === "adfa"));
+  assert.ok(defence.routes.some((route) => /ADFA|Australian Defence Force Academy/i.test(route.title)));
+  assert.ok(!defence.routes.some((route) => route.id === "wsu-college"));
+  assert.ok(!defence.routes.some((route) => route.title === "Defence / ADFA diploma bridge"));
+  assert.ok(defence.routes.some((route) => route.title === "Defence-adjacent study bridge"));
+  assert.ok(!nursing.routes.some((route) => route.id === "adfa"));
+});
+
 test("Creative searches prioritise portfolio routes", () => {
   const result = buildPathwayResults({ goal: "animation", situation: "year12-no-atar" });
 

@@ -108,6 +108,8 @@ test("Pathways covers no-ATAR and alternative university entry routes", () => {
   assert.match(source, /renderWaysToGetThere/);
   assert.match(source, /What do you want to study/i);
   assert.match(source, /Ways to get there/i);
+  assert.match(source, /Western Sydney University The College/i);
+  assert.match(source, /ADFA/i);
   assert.doesNotMatch(source, /Pathway-style courses in the imported UAC data/);
   assert.doesNotMatch(source, /imported UAC data/);
   assert.doesNotMatch(source, /renderPathwayCourseCard/);

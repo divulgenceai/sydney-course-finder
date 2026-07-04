@@ -21,6 +21,14 @@ const officialPathwayLinks = [
     url: "https://www.tafensw.edu.au/study/pathways"
   },
   {
+    label: "Western Sydney University The College",
+    url: "https://www.westernsydney.edu.au/future/study/application-pathways/the-college/courses"
+  },
+  {
+    label: "ADFA",
+    url: "https://www.adfcareers.gov.au/students-and-education/australian-defence-force-academy"
+  },
+  {
     label: "Open Universities Australia",
     url: "https://www.open.edu.au/study-online/pathways-pre-university/oua-pathways"
   }
