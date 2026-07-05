@@ -207,10 +207,10 @@ svg {
   z-index: 20;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: clamp(12px, 1.5vw, 20px);
   width: 100%;
   min-height: 68px;
-  padding: 0 16px;
+  padding: 0 clamp(14px, 2vw, 28px);
   border-bottom: 1px solid var(--line);
   background: var(--topbar-bg);
   box-shadow: 0 1px 22px var(--shadow);
@@ -229,8 +229,8 @@ svg {
   display: inline-flex;
   align-items: center;
   gap: 11px;
-  min-width: 214px;
-  font-size: 17px;
+  min-width: 190px;
+  font-size: 16.5px;
   font-weight: 700;
 }
 
@@ -243,9 +243,11 @@ svg {
 .topnav {
   display: flex;
   flex: 1 1 auto;
-  gap: 3px;
+  justify-content: center;
+  gap: clamp(6px, 0.7vw, 9px);
   min-width: 0;
   max-width: 100%;
+  padding-inline: 4px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -264,12 +266,12 @@ svg {
 
 .topnav a,
 .topnav button {
-  padding: 9px 8px;
+  padding: 10px 8px;
   border: 0;
   border-radius: var(--radius);
   background: transparent;
   cursor: pointer;
-  font-size: 12.8px;
+  font-size: 13.2px;
   font-weight: 700;
   white-space: nowrap;
   transition: background var(--motion-fast) ease, color var(--motion-fast) ease, transform var(--motion-fast) ease;
@@ -8935,6 +8937,41 @@ html {
   margin-top: 8px;
 }
 
+.useful-route-links {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface-soft));
+}
+
+.useful-route-links h4 {
+  margin: 0;
+  color: var(--text);
+}
+
+.useful-route-links > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.useful-route-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+  border-radius: 999px;
+  padding: 7px 10px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
 .simple-checklist .pathway-linear {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -8962,6 +8999,7 @@ html {
 :root[data-theme="dark"] .pathway-linear li,
 :root[data-theme="dark"] .simple-route-card,
 :root[data-theme="dark"] .simple-route-body > div,
+:root[data-theme="dark"] .useful-route-links,
 :root[data-theme="dark"] .pathway-finder-note,
 :root[data-theme="dark"] .pathway-data-note {
   background: var(--surface);

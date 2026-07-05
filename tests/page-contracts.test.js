@@ -106,6 +106,8 @@ test("Pathways covers no-ATAR and alternative university entry routes", () => {
   assert.match(logic, /foundation/i);
   assert.match(logic, /portfolio/i);
   assert.match(source, /renderWaysToGetThere/);
+  assert.match(source, /renderRouteLinks/);
+  assert.match(source, /useful-route-links/);
   assert.match(source, /What do you want to study/i);
   assert.match(source, /Ways to get there/i);
   assert.match(source, /Western Sydney University The College/i);
@@ -132,6 +134,11 @@ test("Header navigation stays compact after adding Pathways", () => {
   assert.match(topnavs, /href="\.\/subject-helper\.html"[^>]*>Subjects</);
   assert.match(topnavs, /href="\.\/advisor\.html"[^>]*>Course help</);
   assert.doesNotMatch(topnavs, /href="\.\/atar-calculator\.html"[^>]*>ATAR calculator</);
+
+  const css = read("styles.css");
+  assert.match(css, /\.topnav\s*{[\s\S]*justify-content:\s*center/);
+  assert.match(css, /\.topnav\s*{[\s\S]*gap:\s*(?:clamp\([^;]+|[8-9]px|1[0-9]px)/);
+  assert.match(css, /\.topnav a,\s*\n\.topnav button\s*{[\s\S]*font-size:\s*13\.[0-9]px/);
 });
 
 test("My Plan page reads the saved Guide result as a linear plan", () => {

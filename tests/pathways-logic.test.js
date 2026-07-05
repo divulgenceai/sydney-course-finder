@@ -50,6 +50,22 @@ test("business no-ATAR pathways include Western Sydney University The College wh
   assert.match(wsuRoute.officialLabel, /Western Sydney/i);
 });
 
+test("default pathways avoid duplicate wording and include useful links on every route", () => {
+  const result = buildPathwayResults({ goal: "", situation: "year12-no-atar" });
+  const combinedTitles = result.routes.map((route) => route.title).join(" ");
+
+  assert.doesNotMatch(combinedTitles, /pathway pathway/i);
+  assert.ok(result.routes.length >= 3);
+  for (const route of result.routes) {
+    assert.ok(Array.isArray(route.links), `${route.id} should expose route links`);
+    assert.ok(route.links.length >= 2, `${route.id} should have more than one useful link`);
+    for (const link of route.links) {
+      assert.match(link.label, /\S/);
+      assert.match(link.url, /^https:\/\//);
+    }
+  }
+});
+
 test("defence goals surface ADFA but unrelated pathways do not", () => {
   const defence = buildPathwayResults({ goal: "ADFA army officer cyber security", situation: "year10" });
   const nursing = buildPathwayResults({ goal: "nursing", situation: "left-y11" });

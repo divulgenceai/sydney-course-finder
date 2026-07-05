@@ -177,8 +177,25 @@ function renderSimpleRouteCard(route, index) {
             <p>${escapeHtml(route.bestFor)}</p>
           </div>
         </div>
+        ${renderRouteLinks(route)}
       </div>
     </article>
+  `;
+}
+
+function renderRouteLinks(route) {
+  const links = Array.isArray(route.links) ? route.links : [];
+  if (!links.length) return "";
+
+  return `
+    <div class="useful-route-links" aria-label="Useful links for ${escapeHtml(route.title)}">
+      <h4>Useful links</h4>
+      <div>
+        ${links.map((link) => `
+          <a href="${escapeHtml(link.url)}" target="_blank" rel="noopener">${escapeHtml(link.label)}</a>
+        `).join("")}
+      </div>
+    </div>
   `;
 }
 

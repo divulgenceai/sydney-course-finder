@@ -362,7 +362,7 @@
           ? "Defence-adjacent study bridge"
           : `${profile.label} diploma bridge`
         : route.id === "wsu-college"
-          ? `Western Sydney University The College ${profile.label} pathway`
+          ? wsuRouteTitle(profile)
           : route.baseTitle;
     return {
       id: route.id,
@@ -372,6 +372,7 @@
       year12Rule: route.year12Rule,
       officialLabel: route.officialLabel,
       officialUrl: route.officialUrl,
+      links: routeLinks(route, profile),
       steps: route.steps(profile),
       score: situationScore + profileBoost,
       check: checkText(route.id, profile)
@@ -423,9 +424,83 @@
     return options[profile.id] || options.general;
   }
 
+  function wsuRouteTitle(profile) {
+    if (profile.id === "general") return "Western Sydney University The College pathway";
+    return `Western Sydney University The College ${profile.label} pathway`;
+  }
+
   function adfaStudyAreasForProfile(profile) {
     if (profile.id === "defence") return "arts, business, computing/cyber security, engineering, science or technology depending on the service role";
     return profile.target;
+  }
+
+  function routeLinks(route, profile) {
+    const links = [
+      { label: route.officialLabel, url: route.officialUrl }
+    ];
+
+    if (route.id === "tafe-vet") {
+      links.push(
+        { label: "TAFE NSW course areas", url: "https://www.tafensw.edu.au/course-areas" },
+        { label: "UAC pathways", url: "https://uac.edu.au/future-applicants/admission-criteria/pathways-to-university" }
+      );
+    } else if (route.id === "uni-prep") {
+      links.push(
+        { label: "UAC course search", url: "https://uac.edu.au/course-search/search" },
+        { label: "Admission criteria", url: "https://uac.edu.au/future-applicants/admission-criteria" }
+      );
+    } else if (route.id === "diploma") {
+      links.push(
+        { label: `${profile.label} course search`, url: "https://uac.edu.au/course-search/search" },
+        { label: "UAC pathways", url: "https://uac.edu.au/future-applicants/admission-criteria/pathways-to-university" }
+      );
+    } else if (route.id === "wsu-college") {
+      links.push(
+        { label: "WSU pathways overview", url: "https://www.westernsydney.edu.au/future/study/application-pathways" },
+        { label: "UAC pathways", url: "https://uac.edu.au/future-applicants/admission-criteria/pathways-to-university" }
+      );
+    } else if (route.id === "portfolio") {
+      links.push(
+        { label: "UAC course search", url: "https://uac.edu.au/course-search/search" },
+        { label: "Admission criteria", url: "https://uac.edu.au/future-applicants/admission-criteria" }
+      );
+    } else if (route.id === "adfa") {
+      links.push(
+        { label: "UNSW Canberra ADFA", url: "https://www.unsw.edu.au/canberra/about-us/our-campuses/unsw-adfa" },
+        { label: "ADF Careers", url: "https://www.adfcareers.gov.au/" }
+      );
+    } else if (route.id === "srs-eas") {
+      links.push(
+        { label: "UAC EAS", url: "https://uac.edu.au/future-applicants/scholarships-and-schemes/educational-access-schemes" },
+        { label: "How to apply for SRS", url: "https://uac.edu.au/future-applicants/scholarships-and-schemes/schools-recommendation-schemes/how-to-apply" }
+      );
+    } else if (route.id === "stat") {
+      links.push(
+        { label: "Admission criteria", url: "https://uac.edu.au/future-applicants/admission-criteria" },
+        { label: "UAC course search", url: "https://uac.edu.au/course-search/search" }
+      );
+    } else if (route.id === "open-access") {
+      links.push(
+        { label: "OUA pathways and pre-uni", url: "https://www.open.edu.au/study-online/pathways-pre-university" },
+        { label: "How OUA works", url: "https://www.open.edu.au/about-us/how-oua-works" }
+      );
+    } else if (route.id === "transfer") {
+      links.push(
+        { label: "UAC course search", url: "https://uac.edu.au/course-search/search" },
+        { label: "Admission criteria", url: "https://uac.edu.au/future-applicants/admission-criteria" }
+      );
+    }
+
+    return uniqueLinks(links);
+  }
+
+  function uniqueLinks(links) {
+    const seen = new Set();
+    return links.filter((link) => {
+      if (!link?.label || !link?.url || seen.has(link.url)) return false;
+      seen.add(link.url);
+      return true;
+    });
   }
 
   function cleanSearchText(value) {
