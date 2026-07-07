@@ -26,20 +26,27 @@ test("ATAR Match supports income filtering and income-only course search", () =>
   assert.match(source, /Search by income only/i);
 });
 
-test("My Plan has its own page and every nav points to it", () => {
+test("My Plan has its own page and only appears in nav after Guide saves a plan", () => {
   const app = read("app.js");
   const guide = read("guide.js");
   const subjectHelper = read("subject-helper.js");
   const calculator = read("atar-calculator.js");
   const advisor = read("advisor.js");
+  const pathways = read("pathways.js");
+  const theme = read("theme.js");
   const myPlanHtml = read("my-plan.html");
   const myPlan = read("my-plan.js");
   const vercel = read("vercel.json");
 
-  for (const source of [app, guide, subjectHelper, calculator, advisor, myPlan]) {
-    assert.match(source, /My Plan/);
-    assert.match(source, /\.\/my-plan\.html/);
+  assert.match(theme, /guidePlanSnapshotKey/);
+  assert.match(theme, /hasGuidePlanSnapshot/);
+  assert.match(theme, /myPlanNavMarkup/);
+  assert.match(theme, /\.\/my-plan\.html/);
+
+  for (const source of [app, guide, subjectHelper, calculator, advisor, myPlan, pathways]) {
+    assert.match(source, /myPlanNavMarkup/);
   }
+  assert.doesNotMatch([app, guide, subjectHelper, calculator, advisor, pathways].join("\n"), /<a href="\.\/my-plan\.html">My Plan<\/a>/);
   assert.doesNotMatch(app, /#my-plan/);
   assert.doesNotMatch(app, /renderMyPlan/);
   assert.doesNotMatch(app, /renderLegacyPlanPanel/);
@@ -137,8 +144,52 @@ test("Header navigation stays compact after adding Pathways", () => {
 
   const css = read("styles.css");
   assert.match(css, /\.topnav\s*{[\s\S]*justify-content:\s*center/);
-  assert.match(css, /\.topnav\s*{[\s\S]*gap:\s*(?:clamp\([^;]+|[8-9]px|1[0-9]px)/);
-  assert.match(css, /\.topnav a,\s*\n\.topnav button\s*{[\s\S]*font-size:\s*13\.[0-9]px/);
+  assert.match(css, /\.topnav\s*{[\s\S]*gap:\s*clamp\(10px,\s*1vw,\s*16px\)/);
+  assert.match(css, /\.topnav a,\s*\n\.topnav button\s*{[\s\S]*font-size:\s*14\.[0-9]px/);
+});
+
+test("Dark mode uses a true black page background with stronger contrast", () => {
+  const css = read("styles.css");
+
+  assert.match(css, /:root\[data-theme="dark"\]\s*{[\s\S]*--bg:\s*#000000/);
+  assert.match(css, /:root\[data-theme="dark"\]\s*{[\s\S]*--page-top:\s*#000000/);
+  assert.match(css, /:root\[data-theme="dark"\]\s*{[\s\S]*--page-bottom:\s*#000000/);
+  assert.match(css, /:root\[data-theme="dark"\]\s+body\s*{[\s\S]*background:\s*#000000/);
+  const darkBodyBlocks = css.match(/:root\[data-theme="dark"\]\s+body\s*{[^}]*}/g) || [];
+  assert.ok(darkBodyBlocks.length >= 1);
+  for (const block of darkBodyBlocks) {
+    assert.doesNotMatch(block, /linear-gradient\(135deg/);
+  }
+  assert.match(css, /--accent:\s*#60a5fa/);
+});
+
+test("Pathways hero and route cards expose clear pathway info without mojibake", () => {
+  const source = read("pathways.js");
+  const logic = read("pathways-logic.js");
+
+  assert.doesNotMatch(source + logic, /â/);
+  assert.match(source, /renderBestStartCard/);
+  assert.match(source, /Important details/);
+  assert.match(source, /Requirements to check/);
+  assert.match(source, /Pathway to university/);
+  assert.match(source, /route\.details/);
+  assert.match(source, /route\.requirements/);
+  assert.match(source, /route\.universityPathway/);
+  assert.match(logic, /details:/);
+  assert.match(logic, /requirements:/);
+  assert.match(logic, /universityPathway:/);
+});
+
+test("Page and result transitions use smooth non-refresh animations", () => {
+  const css = read("styles.css");
+  const pathways = read("pathways.js");
+
+  assert.match(css, /@keyframes pageSwitchIn/);
+  assert.match(css, /@keyframes resultsRefreshIn/);
+  assert.match(css, /main\s*{[\s\S]*animation:\s*pageSwitchIn/);
+  assert.match(css, /\.is-refreshing-results/);
+  assert.match(pathways, /refreshPathwaysPage/);
+  assert.match(pathways, /is-refreshing-results/);
 });
 
 test("My Plan page reads the saved Guide result as a linear plan", () => {

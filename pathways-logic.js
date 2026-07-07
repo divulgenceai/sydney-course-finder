@@ -373,6 +373,9 @@
       officialLabel: route.officialLabel,
       officialUrl: route.officialUrl,
       links: routeLinks(route, profile),
+      details: routeDetails(route.id, profile),
+      requirements: routeRequirements(route.id, profile, situation),
+      universityPathway: routeUniversityPathway(route.id, profile),
       steps: route.steps(profile),
       score: situationScore + profileBoost,
       check: checkText(route.id, profile)
@@ -408,6 +411,46 @@
     if (routeId === "stat") return "Ask: does this institution accept STAT for this exact course?";
     if (routeId === "open-access") return "Ask: can these units count as credit later?";
     return "Ask: what result do I need before I can transfer?";
+  }
+
+  function routeDetails(routeId, profile) {
+    const diploma = wsuDiplomaForProfile(profile);
+    if (routeId === "tafe-vet") return `Start with a field-matched VET qualification such as ${profile.vet}. This is strongest when the TAFE course clearly connects to the university degree you want.`;
+    if (routeId === "uni-prep") return "A preparation, foundation or enabling program is made to build university study skills before a diploma or bachelor application.";
+    if (routeId === "diploma") return `A ${profile.diploma} can be a structured bridge when direct bachelor entry is too risky or does not use your situation well.`;
+    if (routeId === "wsu-college") return `Western Sydney University The College offers University Foundation Studies and Diploma Programs. For this direction, start by checking ${diploma}.`;
+    if (routeId === "portfolio") return `Some ${profile.label.toLowerCase()} courses care heavily about ${profile.portfolio}, not just an ATAR.`;
+    if (routeId === "adfa") return "ADFA combines ADF officer selection with UNSW Canberra undergraduate study, so it is both a defence application and a university application.";
+    if (routeId === "srs-eas") return "SRS and EAS can support current Year 12 applicants through early-offer or educational-access consideration, but they do not remove course rules.";
+    if (routeId === "stat") return "STAT can be useful for some non-school-leaver or mature-age applications when the institution accepts it for the exact course.";
+    if (routeId === "open-access") return "Open-access or single-unit study can prove you are ready for tertiary work before applying for a full degree.";
+    return "A transfer plan starts in a related course first, then uses strong tertiary results to apply for the target degree.";
+  }
+
+  function routeRequirements(routeId, profile, situation) {
+    if (routeId === "tafe-vet") return "Check age, literacy/numeracy, licences, placement checks, course fees, and whether the university recognises the exact Certificate IV, Diploma or Advanced Diploma.";
+    if (routeId === "uni-prep") return "Check whether Year 12 completion is required, whether the program uses ATAR, English/maths readiness, fees, length and the minimum result needed after completion.";
+    if (routeId === "diploma") return "Check exact program entry criteria, whether Year 12 or ATAR is required, whether VET/work evidence is accepted, and whether progression is guaranteed or competitive.";
+    if (routeId === "wsu-college") return "Check exact program entry criteria, whether the option is foundation, diploma or preparation, the linked bachelor, duration, fees and progression rules.";
+    if (routeId === "portfolio") return "Check portfolio, audition or interview due dates, file format, assumed skills, equipment/software expectations and whether a backup diploma is recommended.";
+    if (routeId === "adfa") return "Check Australian citizenship/eligibility, ADF officer selection, medical and fitness checks, service commitment, UNSW entry and any UAC step.";
+    if (routeId === "srs-eas") return "Check SRS/EAS eligibility, school recommendation timing, evidence, UAC deadlines, prerequisites and whether the course participates.";
+    if (routeId === "stat") return "Check minimum age/non-school-leaver rules, accepted STAT version, booking deadline, score requirement and whether the course accepts STAT.";
+    if (routeId === "open-access") return "Check unit prerequisites, fees, census dates, pass/mark requirement, credit transfer and whether the target degree will count the study.";
+    return `Check entry into the first course, required marks after first year, credit transfer, deadlines and whether this route still suits someone ${situation.short.toLowerCase()}.`;
+  }
+
+  function routeUniversityPathway(routeId, profile) {
+    if (routeId === "tafe-vet") return `Complete the VET course, then apply to a related ${profile.target}; eligible students may receive admission consideration or credit depending on the provider.`;
+    if (routeId === "uni-prep") return `Finish the preparation/foundation program with the required result, then apply for a ${profile.target} or a linked diploma.`;
+    if (routeId === "diploma") return `Complete the diploma or undergraduate certificate strongly, then use the result for entry, credit or progression into the related bachelor degree.`;
+    if (routeId === "wsu-college") return "Complete the approved WSU The College foundation, diploma or preparation program, then apply or progress to the linked Western Sydney University bachelor degree.";
+    if (routeId === "portfolio") return `Submit strong creative/practical evidence, then combine that with any academic/pathway requirement for the target ${profile.target}.`;
+    if (routeId === "adfa") return "Apply through ADF Careers and the required university process; if selected, you study a UNSW Canberra degree while training as an ADF officer.";
+    if (routeId === "srs-eas") return "Apply through UAC, add SRS/EAS if eligible, then keep pathway preferences underneath in case direct/early offers do not land.";
+    if (routeId === "stat") return "Use an accepted STAT result plus any work/study evidence to apply directly or to a pathway program, depending on the institution.";
+    if (routeId === "open-access") return "Pass recognised tertiary units, then use those results to apply for admission and possible credit toward the target degree.";
+    return "Enter a related first course, earn strong tertiary marks, then apply for internal or external transfer into the dream degree.";
   }
 
   function wsuDiplomaForProfile(profile) {

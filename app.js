@@ -595,7 +595,7 @@ function render() {
       <nav class="topnav" aria-label="Main">
         <a href="#courses" ${navCurrent("#courses")}>Courses</a>
         <a href="./guide.html">Guide</a>
-        <a href="./my-plan.html">My Plan</a>
+        ${window.courseFinderTheme?.myPlanNavMarkup?.() || ""}
         <a href="./pathways.html">Pathways</a>
         <a href="#atar" ${navCurrent("#atar")}>ATAR</a>
         <a href="./atar-calculator.html">Calculator</a>

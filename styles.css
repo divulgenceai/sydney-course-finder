@@ -24,23 +24,23 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #05070c;
-  --surface: #080d16;
-  --surface-strong: #03050a;
-  --surface-soft: #0b111c;
-  --surface-tint: #0d1828;
-  --line: #1c2a3e;
-  --text: #f4f7fb;
-  --muted: #9aa8bb;
-  --accent: #1e3a8a;
-  --accent-soft: #081a35;
-  --accent-dark: #0f2f70;
-  --cool: #071526;
-  --topbar-bg: rgba(3, 5, 10, 0.96);
-  --page-top: #02040a;
-  --page-bottom: #05070c;
+  --bg: #000000;
+  --surface: #050914;
+  --surface-strong: #02040a;
+  --surface-soft: #070d19;
+  --surface-tint: #0b1c38;
+  --line: #26374f;
+  --text: #f8fbff;
+  --muted: #b8c4d6;
+  --accent: #60a5fa;
+  --accent-soft: #0b1f47;
+  --accent-dark: #93c5fd;
+  --cool: #08172d;
+  --topbar-bg: rgba(0, 0, 0, 0.92);
+  --page-top: #000000;
+  --page-bottom: #000000;
   --shadow: rgba(0, 0, 0, 0.55);
-  --focus-ring: rgba(30, 58, 138, 0.38);
+  --focus-ring: rgba(96, 165, 250, 0.36);
 }
 
 * {
@@ -58,6 +58,10 @@ body {
   line-height: 1.5;
   letter-spacing: 0;
   text-rendering: optimizeLegibility;
+}
+
+:root[data-theme="dark"] body {
+  background: #000000;
 }
 
 html {
@@ -122,6 +126,30 @@ svg {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes pageSwitchIn {
+  from {
+    opacity: 0.82;
+    transform: translateY(5px) scale(0.998);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes resultsRefreshIn {
+  from {
+    opacity: 0.78;
+    transform: translateY(5px);
+    filter: saturate(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: saturate(1);
   }
 }
 
@@ -205,9 +233,10 @@ svg {
   position: sticky;
   top: 0;
   z-index: 20;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(56px, 1fr);
   align-items: center;
-  gap: clamp(12px, 1.5vw, 20px);
+  gap: clamp(14px, 2vw, 28px);
   width: 100%;
   min-height: 68px;
   padding: 0 clamp(14px, 2vw, 28px);
@@ -229,7 +258,7 @@ svg {
   display: inline-flex;
   align-items: center;
   gap: 11px;
-  min-width: 190px;
+  min-width: 184px;
   font-size: 16.5px;
   font-weight: 700;
 }
@@ -242,12 +271,12 @@ svg {
 
 .topnav {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   justify-content: center;
-  gap: clamp(6px, 0.7vw, 9px);
+  gap: clamp(10px, 1vw, 16px);
   min-width: 0;
   max-width: 100%;
-  padding-inline: 4px;
+  padding-inline: 8px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -257,7 +286,8 @@ svg {
   align-items: center;
   flex: 0 0 auto;
   gap: 8px;
-  margin-left: auto;
+  justify-content: flex-end;
+  margin-left: 0;
 }
 
 .topnav::-webkit-scrollbar {
@@ -271,7 +301,7 @@ svg {
   border-radius: var(--radius);
   background: transparent;
   cursor: pointer;
-  font-size: 13.2px;
+  font-size: 14.2px;
   font-weight: 700;
   white-space: nowrap;
   transition: background var(--motion-fast) ease, color var(--motion-fast) ease, transform var(--motion-fast) ease;
@@ -291,6 +321,7 @@ svg {
 main {
   width: min(1120px, calc(100% - 32px));
   margin: 0 auto 56px;
+  animation: pageSwitchIn 260ms var(--ease-out) both;
 }
 
 .app-progress {
@@ -3171,9 +3202,7 @@ input[type="range"] {
 }
 
 :root[data-theme="dark"] body {
-  background:
-    linear-gradient(135deg, rgba(30, 58, 138, 0.12) 0 25%, transparent 25% 50%, rgba(15, 47, 112, 0.08) 50% 75%, transparent 75%) 0 0 / 56px 56px,
-    linear-gradient(180deg, var(--page-top) 0, var(--page-bottom) 340px);
+  background: #000000;
 }
 
 :root[data-theme="dark"] img {
@@ -3369,8 +3398,8 @@ input[type="range"] {
 :root[data-theme="dark"] .rank-chip,
 :root[data-theme="dark"] .data-chip,
 :root[data-theme="dark"] .subject-tag {
-  border-color: #1e3a8a;
-  background: #071526;
+  border-color: rgba(96, 165, 250, 0.58);
+  background: #0b1f47;
   color: #dbeafe;
 }
 
@@ -3397,8 +3426,8 @@ input[type="range"] {
 :root[data-theme="dark"] .chat-form button,
 :root[data-theme="dark"] .ask-form button,
 :root[data-theme="dark"] .help-link {
-  border-color: #1e3a8a;
-  background: linear-gradient(115deg, #0b1f47, #1e3a8a, #0b1f47);
+  border-color: rgba(96, 165, 250, 0.62);
+  background: linear-gradient(115deg, #0b1f47, #2563eb, #0f3a7a);
   color: #f8fbff;
 }
 
@@ -3419,7 +3448,7 @@ input[type="range"] {
 
 :root[data-theme="dark"] .app-progress-track,
 :root[data-theme="dark"] .process-strip {
-  border-color: #1e3a8a;
+  border-color: rgba(96, 165, 250, 0.58);
   background: rgba(7, 21, 38, 0.92);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
 }
@@ -5906,6 +5935,7 @@ html {
 
   .topbar {
     position: sticky;
+    display: flex;
     align-items: flex-start;
     flex-direction: column;
     gap: 9px;
@@ -6371,6 +6401,7 @@ html {
 .topnav a,
 .topnav button,
 .match-btn,
+.secondary-btn,
 .clear-btn,
 .load-more,
 .actions a,
@@ -8496,6 +8527,34 @@ html {
   gap: 9px;
 }
 
+.pathway-hero-actions {
+  align-items: center;
+  margin-top: 16px;
+  gap: 12px;
+}
+
+.secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+  border-radius: 999px;
+  padding: 0 18px;
+  background: var(--surface-strong);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 900;
+  text-decoration: none;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
+}
+
+.secondary-btn:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  background: var(--accent-soft);
+}
+
 .pathway-hero-card {
   display: grid;
   align-content: center;
@@ -8521,6 +8580,51 @@ html {
 .pathway-hero-card h2,
 .pathway-hero-card p {
   margin: 0;
+}
+
+.pathway-hero-card > a {
+  width: fit-content;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+  border-radius: 999px;
+  padding: 8px 11px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.pathway-hero-details,
+.simple-route-info {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 0;
+}
+
+.pathway-hero-details div,
+.simple-route-info div {
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface-soft));
+}
+
+.pathway-hero-details dt,
+.simple-route-info dt {
+  margin: 0 0 3px;
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 950;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.pathway-hero-details dd,
+.simple-route-info dd {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13.2px;
+  line-height: 1.45;
 }
 
 .pathway-saved-note {
@@ -8855,6 +8959,13 @@ html {
   animation-delay: var(--item-delay, 0ms);
 }
 
+.is-refreshing-results .simple-ways-panel,
+.is-refreshing-results .simple-route-card,
+.is-refreshing-results .pathway-hero-card,
+.is-refreshing-results .simple-pathway-finder {
+  animation: resultsRefreshIn 230ms var(--ease-out) both;
+}
+
 .simple-route-rank {
   display: grid;
   place-items: center;
@@ -8937,6 +9048,11 @@ html {
   margin-top: 8px;
 }
 
+.simple-route-info {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
 .useful-route-links {
   display: grid;
   gap: 8px;
@@ -8999,11 +9115,28 @@ html {
 :root[data-theme="dark"] .pathway-linear li,
 :root[data-theme="dark"] .simple-route-card,
 :root[data-theme="dark"] .simple-route-body > div,
+:root[data-theme="dark"] .simple-route-info div,
+:root[data-theme="dark"] .pathway-hero-details div,
 :root[data-theme="dark"] .useful-route-links,
 :root[data-theme="dark"] .pathway-finder-note,
 :root[data-theme="dark"] .pathway-data-note {
   background: var(--surface);
   border-color: var(--line);
+}
+
+:root[data-theme="dark"] .pathway-hero-card {
+  background:
+    radial-gradient(circle at top right, rgba(96, 165, 250, 0.18), transparent 44%),
+    var(--surface-strong);
+}
+
+:root[data-theme="dark"] .secondary-btn,
+:root[data-theme="dark"] .pathway-hero-card > a,
+:root[data-theme="dark"] .simple-route-head a,
+:root[data-theme="dark"] .useful-route-links a {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: rgba(96, 165, 250, 0.1);
+  color: #bfdbfe;
 }
 
 @media (min-width: 980px) {
@@ -9036,6 +9169,7 @@ html {
   .simple-pathway-form,
   .simple-route-card,
   .simple-route-body,
+  .simple-route-info,
   .simple-checklist .pathway-linear {
     grid-template-columns: 1fr;
   }

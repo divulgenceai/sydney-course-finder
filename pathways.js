@@ -69,7 +69,7 @@ function renderPathwaysTopbar() {
       <nav class="topnav" aria-label="Main">
         <a href="./index.html#courses">Courses</a>
         <a href="./guide.html">Guide</a>
-        <a href="./my-plan.html">My Plan</a>
+        ${window.courseFinderTheme?.myPlanNavMarkup?.() || ""}
         <a href="./pathways.html" aria-current="page">Pathways</a>
         <a href="./index.html#atar">ATAR</a>
         <a href="./atar-calculator.html">Calculator</a>
@@ -92,15 +92,47 @@ function renderPathwaysHero(result) {
         <p>Choose where you are now, type the field you want, and this shows the actual routes to check: TAFE/VET, prep, diploma, portfolio, STAT, SRS/EAS or transfer.</p>
         <div class="pathway-hero-actions">
           <a class="match-btn" href="#pathway-finder">Start pathway check</a>
-          <a class="help-link" href="./guide.html">Build full Guide plan</a>
+          <a class="secondary-btn" href="./guide.html">Build Guide plan</a>
         </div>
       </div>
+      ${renderBestStartCard(result)}
+    </section>
+  `;
+}
+
+function renderBestStartCard(result) {
+  const route = result.routes[0];
+  if (!route) {
+    return `
       <aside class="pathway-hero-card">
         <span>Your current best start</span>
-        <h2>${escapeHtml(result.routes[0]?.title || "Choose a route")}</h2>
-        <p>${escapeHtml(result.summary)}</p>
+        <h2>Choose a route</h2>
+        <p>Pick your situation and field to see the clearest first pathway.</p>
       </aside>
-    </section>
+    `;
+  }
+
+  return `
+    <aside class="pathway-hero-card">
+      <span>Your current best start</span>
+      <h2>${escapeHtml(route.title)}</h2>
+      <p>${escapeHtml(result.summary)}</p>
+      <dl class="pathway-hero-details">
+        <div>
+          <dt>Important details</dt>
+          <dd>${escapeHtml(route.details)}</dd>
+        </div>
+        <div>
+          <dt>Requirements to check</dt>
+          <dd>${escapeHtml(route.requirements)}</dd>
+        </div>
+        <div>
+          <dt>Pathway to university</dt>
+          <dd>${escapeHtml(route.universityPathway)}</dd>
+        </div>
+      </dl>
+      <a href="${escapeHtml(route.officialUrl)}" target="_blank" rel="noopener">Open official info</a>
+    </aside>
   `;
 }
 
@@ -110,7 +142,7 @@ function renderPathwayFinder(result) {
       <div class="panel-head">
         <div>
           <h2>Pathway finder</h2>
-          <p>Less “random courses”, more “what do I do next?” Pick the closest situation and field.</p>
+          <p>Less random courses, more "what do I do next?" Pick the closest situation and field.</p>
         </div>
         <span class="status-pill">${escapeHtml(result.profile.label)}</span>
       </div>
@@ -177,6 +209,20 @@ function renderSimpleRouteCard(route, index) {
             <p>${escapeHtml(route.bestFor)}</p>
           </div>
         </div>
+        <dl class="simple-route-info">
+          <div>
+            <dt>Important details</dt>
+            <dd>${escapeHtml(route.details)}</dd>
+          </div>
+          <div>
+            <dt>Requirements to check</dt>
+            <dd>${escapeHtml(route.requirements)}</dd>
+          </div>
+          <div>
+            <dt>Pathway to university</dt>
+            <dd>${escapeHtml(route.universityPathway)}</dd>
+          </div>
+        </dl>
         ${renderRouteLinks(route)}
       </div>
     </article>
@@ -250,13 +296,23 @@ function bindPathwayEvents() {
     const formData = new FormData(event.currentTarget);
     pathwayState.situation = String(formData.get("situation") || pathwayState.situation);
     pathwayState.goal = String(formData.get("goal") || "").trim();
-    renderPathwaysPage();
-    pathwaysApp.querySelector("#pathway-routes")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    refreshPathwaysPage({ scrollToRoutes: true });
   });
 
   pathwaysApp.querySelector('select[name="situation"]')?.addEventListener("change", (event) => {
     pathwayState.situation = event.currentTarget.value;
+    refreshPathwaysPage();
+  });
+}
+
+function refreshPathwaysPage({ scrollToRoutes = false } = {}) {
+  pathwaysApp.classList.add("is-refreshing-results");
+  window.requestAnimationFrame(() => {
     renderPathwaysPage();
+    if (scrollToRoutes) {
+      pathwaysApp.querySelector("#pathway-routes")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    window.setTimeout(() => pathwaysApp.classList.remove("is-refreshing-results"), 260);
   });
 }
 

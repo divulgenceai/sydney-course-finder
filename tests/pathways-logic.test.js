@@ -66,6 +66,22 @@ test("default pathways avoid duplicate wording and include useful links on every
   }
 });
 
+test("pathway routes explain requirements and the route into university", () => {
+  const result = buildPathwayResults({ goal: "business", situation: "year12-no-atar" });
+  const wsuRoute = result.routes.find((route) => route.id === "wsu-college");
+
+  assert.ok(wsuRoute, "WSU College should be included for business no-ATAR planning");
+  assert.match(wsuRoute.details, /foundation|diploma/i);
+  assert.match(wsuRoute.requirements, /entry criteria|program|Year 12|ATAR/i);
+  assert.match(wsuRoute.universityPathway, /Western Sydney University|bachelor|degree/i);
+
+  for (const route of result.routes) {
+    assert.match(route.details, /\S/);
+    assert.match(route.requirements, /\S/);
+    assert.match(route.universityPathway, /\S/);
+  }
+});
+
 test("defence goals surface ADFA but unrelated pathways do not", () => {
   const defence = buildPathwayResults({ goal: "ADFA army officer cyber security", situation: "year10" });
   const nursing = buildPathwayResults({ goal: "nursing", situation: "left-y11" });

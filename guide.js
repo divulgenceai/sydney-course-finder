@@ -418,7 +418,7 @@ function renderGuide(options = {}) {
       <nav class="topnav" aria-label="Main">
         <a href="./index.html#courses">Courses</a>
         <a href="./guide.html" aria-current="page">Guide</a>
-        <a href="./my-plan.html">My Plan</a>
+        ${window.courseFinderTheme?.myPlanNavMarkup?.() || ""}
         <a href="./pathways.html">Pathways</a>
         <a href="./index.html#atar">ATAR</a>
         <a href="./atar-calculator.html">Calculator</a>

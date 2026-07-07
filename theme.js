@@ -1,5 +1,6 @@
 (function () {
   const storageKey = "sydneyCourseFinder.theme";
+  const guidePlanSnapshotKey = "sydneyCourseFinder.guidePlanSnapshot";
   const root = document.documentElement;
   const logoSources = {
     light: "./assets/logo-light.svg",
@@ -61,6 +62,22 @@
     return `<button class="theme-toggle" type="button" data-action="toggle-theme" aria-label="${buttonLabel(theme)}" title="${buttonLabel(theme)}" aria-pressed="${theme === "dark"}">${iconMarkup(theme)}</button>`;
   }
 
+  function hasGuidePlanSnapshot() {
+    try {
+      const raw = localStorage.getItem(guidePlanSnapshotKey);
+      if (!raw) return false;
+      const snapshot = JSON.parse(raw);
+      return Boolean(snapshot && snapshot.version && (snapshot.primary?.name || snapshot.goalLabel || snapshot.savedAt));
+    } catch {
+      return false;
+    }
+  }
+
+  function myPlanNavMarkup({ current = false } = {}) {
+    if (!hasGuidePlanSnapshot()) return "";
+    return `<a href="./my-plan.html"${current ? ' aria-current="page"' : ""}>My Plan</a>`;
+  }
+
   function logoSrc(theme = currentTheme()) {
     return logoSources[theme === "dark" ? "dark" : "light"];
   }
@@ -88,6 +105,14 @@
     });
   }
 
+  function bind(scope = document) {
+    syncButtons();
+    syncBrandAssets(currentTheme());
+    scope.querySelectorAll("[data-plan-nav-slot]").forEach((slot) => {
+      slot.innerHTML = myPlanNavMarkup({ current: slot.dataset.planNavSlot === "current" });
+    });
+  }
+
   applyTheme(currentTheme());
 
   document.addEventListener("click", (event) => {
@@ -97,10 +122,10 @@
     toggleTheme();
   });
 
-  document.addEventListener("DOMContentLoaded", syncButtons);
-  document.addEventListener("DOMContentLoaded", () => syncBrandAssets(currentTheme()));
+  document.addEventListener("DOMContentLoaded", () => bind(document));
   window.addEventListener("storage", (event) => {
     if (event.key === storageKey) applyTheme(currentTheme());
+    if (event.key === guidePlanSnapshotKey) bind(document);
   });
 
   window.courseFinderTheme = {
@@ -108,6 +133,9 @@
     apply: applyTheme,
     toggle: toggleTheme,
     buttonMarkup,
+    hasGuidePlanSnapshot,
+    myPlanNavMarkup,
+    bind,
     logoSrc,
     faviconSrc
   };

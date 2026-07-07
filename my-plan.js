@@ -38,7 +38,7 @@ function renderMyPlanTopbar() {
       <nav class="topnav" aria-label="Main">
         <a href="./index.html#courses">Courses</a>
         <a href="./guide.html">Guide</a>
-        <a href="./my-plan.html" aria-current="page">My Plan</a>
+        ${window.courseFinderTheme?.myPlanNavMarkup?.({ current: true }) || ""}
         <a href="./pathways.html">Pathways</a>
         <a href="./index.html#atar">ATAR</a>
         <a href="./atar-calculator.html">Calculator</a>
