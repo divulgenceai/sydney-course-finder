@@ -1,0 +1,68 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/advisor",
+      "destination": "/advisor.html"
+    },
+    {
+      "source": "/atar-calculator",
+      "destination": "/atar-calculator.html"
+    },
+    {
+      "source": "/my-plan",
+      "destination": "/my-plan.html"
+    },
+    {
+      "source": "/pathways",
+      "destination": "/pathways.html"
+    },
+    {
+      "source": "/no-atar",
+      "destination": "/pathways.html"
+    },
+    {
+      "source": "/subject-helper",
+      "destination": "/subject-helper.html"
+    },
+    {
+      "source": "/subjects",
+      "destination": "/subject-helper.html"
+    },
+    {
+      "source": "/calculator",
+      "destination": "/atar-calculator.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/uac-courses-lite.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, stale-while-revalidate=604800"
+        }
+      ]
+    },
+    {
+      "source": "/course-data/details/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, stale-while-revalidate=604800"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ]
+}

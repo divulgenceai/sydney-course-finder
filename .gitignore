@@ -1,0 +1,23 @@
+node_modules/
+.vercel/
+.env
+.env.*
+!.env.example
+dist/
+coverage/
+*.log
+playwright-report/
+test-results/
+logo-options.html
+assets/logo-option-*.svg
+.superpowers/
+
+.env*
+
+# Local tooling and generated Android outputs
+.codex-server/
+android/.gradle/
+android/**/build/
+android/local.properties
+*.apk
+*.aab
