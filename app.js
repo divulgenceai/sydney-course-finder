@@ -168,9 +168,9 @@ const providerCurrentStanding = {
   }
 };
 
-const providerAliases = [
+const providerAliases = buildProviderAliasGroups([
   { id: "WS", label: "Western Sydney University", aliases: ["wsu", "western sydney university", "western sydney uni", "western sydney"] },
-  { id: "UTS", label: "University of Technology Sydney", aliases: ["uts", "university of technology sydney", "technology sydney"] },
+  { id: "UTS", label: "University of Technology Sydney", aliases: ["uts", "university of technology sydney", "uts university", "technology sydney"] },
   { id: "UTSC", label: "UTS College", aliases: ["uts college", "uts insearch", "insearch"] },
   { id: "UNSW", label: "UNSW", aliases: ["unsw", "university of new south wales", "new south wales uni"] },
   { id: "UNSWC", label: "UNSW College", aliases: ["unsw college", "unsw global"] },
@@ -181,7 +181,38 @@ const providerAliases = [
   { id: "CQU", label: "CQUniversity", aliases: ["cqu", "cquniversity", "central queensland university"] },
   { id: "ICMS", label: "International College of Management, Sydney", aliases: ["icms", "international college of management"] },
   { id: "AIT", label: "Academy of Interactive Technology", aliases: ["ait", "academy of interactive technology"] }
-];
+]);
+
+function buildProviderAliasGroups(curatedGroups) {
+  const ignoredShortNames = new Set(["sydney", "australia", "university", "college", "technology sydney"]);
+  const groups = new Map(curatedGroups.map((group) => [group.id, {
+    ...group,
+    aliases: [...group.aliases]
+  }]));
+
+  allProviders.forEach((provider) => {
+    const name = String(provider.name || "").trim();
+    const current = groups.get(provider.id) || { id: provider.id, label: name, aliases: [] };
+    const shortened = name
+      .replace(/^university of\s+/i, "")
+      .replace(/\s+university(?:\s+college)?$/i, "")
+      .trim();
+    const localShortened = shortened.replace(/\s+australia$/i, "").trim();
+    const generated = [
+      name,
+      name.replace(/\buniversity\b/gi, "uni"),
+      provider.id.length >= 3 ? provider.id.toLowerCase() : "",
+      shortened && !ignoredShortNames.has(cleanSearchText(shortened)) ? shortened : "",
+      localShortened && !ignoredShortNames.has(cleanSearchText(localShortened)) ? localShortened : ""
+    ];
+    current.aliases = [...new Set([...current.aliases, ...generated]
+      .map(cleanSearchText)
+      .filter(Boolean))];
+    groups.set(provider.id, current);
+  });
+
+  return [...groups.values()];
+}
 
 const rankCodeMeanings = {
   NC: "New course; no published selection-rank profile yet.",
@@ -217,6 +248,12 @@ const searchAliases = {
   developer: ["software", "programming", "computer science", "information technology"],
   programming: ["programming", "coding", "software", "computer", "information technology"],
   "computer science": ["computer science", "computing", "software", "information technology"],
+  "software engineering": ["software engineering", "software", "computing", "computer science", "information technology"],
+  "business analytics": ["business analytics", "business analysis", "data analytics", "information systems", "commerce"],
+  "data analytics": ["data analytics", "data science", "statistics", "business analytics"],
+  "primary education": ["education primary", "primary education", "primary teaching", "teaching"],
+  "secondary education": ["education secondary", "secondary education", "secondary teaching", "teaching"],
+  accounting: ["accounting", "accountancy", "commerce", "business"],
   computers: ["computer", "computing", "computer science", "information technology"],
   cybersecurity: ["cybersecurity", "cyber security", "cyber", "information security"],
   "cyber security": ["cybersecurity", "cyber security", "cyber", "information security"],
@@ -244,6 +281,27 @@ const searchAliases = {
 };
 
 const searchIntentAliases = [
+  ["software developer", "software engineering"],
+  ["software engineer", "software engineering"],
+  ["web developer", "software engineering"],
+  ["app developer", "software engineering"],
+  ["business analyst", "business analytics"],
+  ["data analyst", "data analytics"],
+  ["primary school teacher", "primary education"],
+  ["primary teacher", "primary education"],
+  ["primary teaching", "primary education"],
+  ["high school teacher", "secondary education"],
+  ["secondary teacher", "secondary education"],
+  ["secondary teaching", "secondary education"],
+  ["medical doctor", "medicine"],
+  ["police officer", "criminology"],
+  ["physiotherapist", "physiotherapy"],
+  ["accountant", "accounting"],
+  ["solicitor", "law"],
+  ["lawyer", "law"],
+  ["architect", "architecture"],
+  ["nurse", "nursing"],
+  ["doctor", "medicine"],
   ["comp sci", "computer science"],
   ["computer sciences", "computer science"],
   ["compsci", "computer science"],
@@ -1190,54 +1248,10 @@ function filteredCourses() {
     }))
     .sort((a, b) => compareSearchEntries(a, b))
     .map((entry) => entry.course);
-  const results = dedupeVisibleCourseResults(promoteFieldLeaderCourses(ranked, queryPlan));
+  const results = dedupeVisibleCourseResults(ranked);
   filteredCourseCache.key = cacheKey;
   filteredCourseCache.results = results;
   return results;
-}
-
-function promoteFieldLeaderCourses(courses, queryPlan) {
-  if (state.sort !== "Relevance" || state.provider !== "All providers") return courses;
-  const topic = state.area !== "All study areas"
-    ? topicOptions.find((item) => item.label === state.area)
-    : queryPlan?.contentQuery
-      ? topicForQuery(queryPlan.contentQuery)
-      : null;
-  const qualityRows = topic ? providerQuality[topic.label] : null;
-  if (!qualityRows) return courses;
-
-  const leaderIds = Object.entries(qualityRows)
-    .sort(([, left], [, right]) => right.score - left.score)
-    .slice(0, 3)
-    .map(([providerId]) => providerId);
-  const promoted = leaderIds
-    .map((providerId) => courses
-      .filter((course) => course.providerId === providerId)
-      .map((course, index) => ({
-        course,
-        index,
-        fit: fieldLeaderCourseFitScore(course, queryPlan?.contentQuery || "")
-      }))
-      .sort((left, right) => right.fit - left.fit || left.index - right.index)[0]?.course)
-    .filter(Boolean);
-  if (promoted.length < 2) return courses;
-  const promotedIds = new Set(promoted.map((course) => course.id));
-  return [...promoted, ...courses.filter((course) => !promotedIds.has(course.id))];
-}
-
-function fieldLeaderCourseFitScore(course, query) {
-  const cleanQuery = cleanSearchText(query);
-  if (!cleanQuery) return 0;
-  const title = courseSearchFields(course).title;
-  const aliases = [cleanQuery, ...(searchAliases[cleanQuery] || [])]
-    .map(cleanSearchText)
-    .filter((alias, index, values) => alias && values.indexOf(alias) === index);
-  const aliasScore = aliases.reduce((score, alias, index) => {
-    if (!phraseMatch(title, alias)) return score;
-    return score + Math.max(1, aliases.length - index) * 1000;
-  }, 0);
-  const structureScore = courseTypeLabel(course) === "Double degree" ? -700 : 200;
-  return aliasScore + structureScore - Math.min(180, title.length);
 }
 
 function courseMatchesEstimatedAtar(course) {
@@ -3789,7 +3803,7 @@ function searchScore(course, queryOrPlan) {
   const incomeMinimum = incomeMinimumFromQuery(cleanQuery);
   let score = plan.provider ? 60000 : 0;
 
-  if (!cleanQuery) return score + (course.level === "undergraduate" ? 250 : 0);
+  if (!cleanQuery) return score + providerOnlyCourseScore(course);
   if (title === cleanQuery) score += 90000;
   if (exactDegreeTitle(title, cleanQuery)) score += topic ? 32000 : 85000;
   if (title.startsWith(cleanQuery)) score += 42000;
@@ -3823,16 +3837,26 @@ function courseSearchMatch(course, queryOrPlan) {
     : searchQueryPlan(queryOrPlan);
   if (plan.provider && !courseMatchesProviderGroup(course, plan.provider)) return false;
   if (!plan.contentQuery) return Boolean(plan.provider);
-  const primaryText = courseSearchFields(course).primary;
+  const fields = courseSearchFields(course);
+  const primaryText = fields.primary;
+  const focusedText = cleanSearchText([fields.title, fields.area, fields.careers].join(" "));
   const query = plan.contentQuery;
   const words = plan.contentTokens;
   const topic = topicForQuery(query);
   const incomeMinimum = incomeMinimumFromQuery(query);
+  if (plan.provider) {
+    if (phraseMatch(focusedText, query)) return true;
+    if (focusedAliasMatch(focusedText, query)) return true;
+    if (words.length > 1 && words.every((word) => tokenMatch(focusedText, word))) return true;
+    if (words.length === 1 && tokenMatch(focusedText, words[0])) return true;
+    if (incomeMinimum && courseIncomeOutcomes(course).some((job) => job.max >= incomeMinimum)) return true;
+    return false;
+  }
   if (phraseMatch(primaryText, query)) return true;
   if (aliasMatch(primaryText, query)) return true;
   if (words.length > 1 && words.every((word) => tokenMatch(primaryText, word))) return true;
   if (words.length === 1 && tokenMatch(primaryText, words[0])) return true;
-  if (topic && topicWeightedScore(course, topic) >= 35) return true;
+  if (topic && isBroadTopicQuery(query) && topicWeightedScore(course, topic) >= 35) return true;
   if (incomeMinimum && courseIncomeOutcomes(course).some((job) => job.max >= incomeMinimum)) return true;
   return false;
 }
@@ -4127,7 +4151,9 @@ function searchQueryPlan(value) {
 function expandSearchIntentQuery(value) {
   const original = cleanSearchText(value);
   let query = original;
-  for (const [alias, replacement] of searchIntentAliases) {
+  const orderedAliases = [...searchIntentAliases]
+    .sort((left, right) => tokenise(right[0]).length - tokenise(left[0]).length || right[0].length - left[0].length);
+  for (const [alias, replacement] of orderedAliases) {
     const pattern = new RegExp(`(^|\\s)${escapeRegExp(alias)}(?=\\s|$)`, "g");
     query = query.replace(pattern, (_, leadingSpace) => `${leadingSpace}${replacement}`);
   }
@@ -4264,6 +4290,12 @@ function phraseMatch(text, phrase) {
 
 function aliasMatch(text, query) {
   return (searchAliases[cleanSearchText(query)] || []).some((alias) => phraseMatch(text, alias));
+}
+
+function focusedAliasMatch(text, query) {
+  return (searchAliases[cleanSearchText(query)] || [])
+    .slice(0, 2)
+    .some((alias) => phraseMatch(text, alias));
 }
 
 function weightedAliasMatchScore(text, query, maximum = 32000) {
@@ -4522,9 +4554,21 @@ function courseProviderScore(course) {
 
 function searchProviderQuality(course, query) {
   const topic = topicForQuery(query);
-  if (!topic) return courseProviderScore(course) * 0.5;
+  if (!topic) return courseProviderScore(course) * 12;
   const signal = providerFieldSignal(course, topic);
-  return signal ? signal.score * 520 : courseProviderScore(course) * 140;
+  return signal ? signal.score * 65 : courseProviderScore(course) * 25;
+}
+
+function providerOnlyCourseScore(course) {
+  const qualification = courseTypeLabel(course);
+  const title = cleanSearchText(course.name);
+  let score = course.level === "undergraduate" ? 900 : 0;
+  if (qualification === "Bachelor" || qualification === "Honours") score += 900;
+  if (qualification === "Double degree") score += 240;
+  if (qualification === "Diploma" || qualification === "Advanced Diploma" || qualification === "Undergraduate Certificate") score -= 350;
+  if (numericRank(course.atar) !== null) score += 180;
+  score += Math.max(0, 720 - title.length * 7);
+  return score;
 }
 
 function decodeHtmlEntities(value) {

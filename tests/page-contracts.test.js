@@ -471,20 +471,32 @@ test("Course search handles provider acronyms, keywords and spelling mistakes", 
   assert.match(source, /engineer:\s*\["engineering"/);
   assert.match(source, /coding:\s*\["coding", "programming", "software"/);
   assert.match(source, /\["cs", "computer science"\]/);
+  assert.match(source, /\["software developer", "software engineering"\]/);
+  assert.match(source, /\["business analyst", "business analytics"\]/);
+  assert.match(source, /\["primary teacher", "primary education"\]/);
+  assert.match(source, /function buildProviderAliasGroups/);
+  assert.match(source, /provider\.id\.length >= 3/);
+  assert.match(source, /shortened\.replace\(\/\\s\+australia\$\/i/);
   assert.match(source, /function expandSearchIntentQuery/);
+  assert.match(source, /tokenise\(right\[0\]\)\.length - tokenise\(left\[0\]\)\.length/);
+  assert.match(source, /function focusedAliasMatch/);
+  assert.match(source, /if \(plan\.provider\) \{[\s\S]*phraseMatch\(focusedText, query\)/);
   assert.match(source, /wasExpanded:\s*expansion\.query !== cleanQuery/);
   assert.match(source, /Understood <strong>/);
   assert.match(source, /class="atar-requirement"/);
   assert.match(styles, /\.atar-requirement\s*{[\s\S]*font-weight:\s*950/);
 });
 
-test("Course search promotes recognised field strength and updates results in place", () => {
+test("Course search uses field strength as a tie-breaker and updates results in place", () => {
   const source = read("app.js");
   const styles = read("styles.css");
 
   assert.match(source, /function renderSearchFieldLeaders/);
   assert.match(source, /Course relevance comes first\. Field strength then helps order similar matches\./);
-  assert.match(source, /signal\.score \* 520/);
+  assert.match(source, /signal\.score \* 65/);
+  assert.match(source, /isBroadTopicQuery\(query\) && topicWeightedScore\(course, topic\) >= 35/);
+  assert.match(source, /function providerOnlyCourseScore/);
+  assert.doesNotMatch(source, /promoteFieldLeaderCourses\(ranked/);
   assert.match(source, /document\.startViewTransition/);
   assert.match(styles, /view-transition-name:\s*course-search-results/);
   assert.match(styles, /\.search-field-leaders/);
