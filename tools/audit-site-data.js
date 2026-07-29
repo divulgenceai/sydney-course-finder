@@ -4,10 +4,18 @@ const vm = require("node:vm");
 const source = fs.readFileSync("uac-courses.js", "utf8");
 const context = { window: {} };
 vm.runInNewContext(source, context);
+vm.runInNewContext(fs.readFileSync("tafe-courses.js", "utf8"), context);
 
-const courses = context.window.uacCourses || [];
-const providers = context.window.uacProviders || [];
+const courses = [
+  ...(context.window.uacCourses || []),
+  ...(context.window.tafeCourses || [])
+];
+const providers = [
+  ...(context.window.uacProviders || []),
+  ...(context.window.tafeProviders || [])
+];
 const meta = context.window.uacImportMeta || {};
+const tafeMeta = context.window.tafeImportMeta || {};
 
 const requiredFields = ["id", "name", "university", "campus", "courseCode", "uacUrl", "summary"];
 const nonSydneyCampusWords = [
@@ -119,6 +127,8 @@ console.log(JSON.stringify({
   courses: courses.length,
   providers: providers.length,
   importedAt: meta.importedAt || null,
+  tafeImportedAt: tafeMeta.importedAt || null,
+  tafeCourses: (context.window.tafeCourses || []).length,
   duplicateIds: duplicateIds.length,
   missingRequiredRows: missingFields.length,
   suspiciousCampuses: suspiciousCampuses.length,

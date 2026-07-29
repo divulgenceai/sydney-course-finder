@@ -246,7 +246,7 @@ test("Site is installable as an Android-friendly PWA", () => {
   assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192" && icon.type === "image/png"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512" && icon.purpose === "maskable"));
   assert.match(serviceWorker, /CACHE_NAME/);
-  assert.match(serviceWorker, /sydney-course-finder-app-v38/);
+  assert.match(serviceWorker, /sydney-course-finder-app-v44/);
   assert.match(serviceWorker, /async function cacheFirstThenRefresh[\s\S]*cache\.match\(request\)/);
   assert.match(serviceWorker, /request\.mode === "navigate"[\s\S]*navigationCacheFirstExact\(request/);
   assert.match(serviceWorker, /async function navigationCacheFirstExact[\s\S]*cache\.match\(request\)/);
@@ -323,7 +323,7 @@ test("Pages avoid render-blocking third-party font requests", () => {
     assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
     assert.match(html, /asset-refresh-v38\.js/);
     assert.match(html, /theme\.js\?v=38/);
-    assert.match(html, /styles\.css\?v=38/);
+    assert.match(html, /styles\.css\?v=\d+/);
   }
 });
 
@@ -350,8 +350,8 @@ test("Mobile navigation uses five direct destinations without an overflow menu",
 test("Homepage leads with search, trust information and a three-course comparison", () => {
   const app = read("app.js");
 
-  assert.match(app, /Find the right Sydney university course/);
-  assert.match(app, /Compare entry requirements, pathways, course length, campuses, and study options across Sydney universities/);
+  assert.match(app, /Find the right Sydney course/);
+  assert.match(app, /Compare university degrees and TAFE qualifications/);
   assert.match(app, />Search courses<\/a>/);
   assert.match(app, />Estimate my ATAR<\/a>/);
   assert.match(app, /Lowest selection rank/);
@@ -425,6 +425,45 @@ test("Course search exposes essential filters, collapsed advanced filters and us
   assert.match(app, /Reset all filters/);
   assert.match(app, /querySelectorAll\('\[data-action="close-course-filters"\]'\)/);
   assert.match(css, /html:has\(\.course-filter-panel\.is-open\) \.compare-tray,[\s\S]*visibility:\s*hidden/);
+});
+
+test("Course search treats TAFE as a first-class source with vocational tools", () => {
+  const html = read("index.html");
+  const app = read("app.js");
+  const css = read("styles.css");
+
+  assert.match(html, /tafe-courses\.js/);
+  assert.match(app, /\.\.\.\(window\.tafeCourses \|\| \[\]\)/);
+  assert.match(app, /"TAFE \/ vocational"/);
+  assert.match(app, /"Trade \/ apprenticeship"/);
+  assert.match(app, /function courseMatchesTafeRoute/);
+  assert.match(app, /function isVocationalSearchIntent/);
+  assert.match(app, /No ATAR/);
+  assert.match(app, /Quick Smart and Skilled eligibility check/);
+  assert.match(app, /data-tafe-route-shortcut="university"/);
+  assert.match(app, /TAFE NSW course page/);
+  assert.match(css, /\.tafe-toolkit/);
+  assert.match(css, /\.is-tafe-admission/);
+});
+
+test("Course filters adapt to university, TAFE and other selected filters", () => {
+  const app = read("app.js");
+  const css = read("styles.css");
+  const essentialBlock = app.match(/<div class="filters essential-filters">([\s\S]*?)<\/div>/)?.[1] || "";
+  const advancedBlock = app.match(/<div class="filters advanced-filters">([\s\S]*?)<\/div>/)?.[1] || "";
+
+  assert.match(essentialBlock, /select\("level"/);
+  assert.match(essentialBlock, /select\("courseType"/);
+  assert.doesNotMatch(advancedBlock, /select\("level"/);
+  assert.doesNotMatch(advancedBlock, /select\("courseType"/);
+  assert.match(app, /function facetCoursePool/);
+  assert.match(app, /function courseFacetOptions/);
+  assert.match(app, /function syncDependentCourseFilters/);
+  assert.match(app, /Qualification level/);
+  assert.match(app, /TAFE pathway/);
+  assert.match(app, /ATAR and degree-only filters are hidden/);
+  assert.match(app, /TAFE-only routes are hidden/);
+  assert.match(css, /\.filter-context-note/);
 });
 
 test("Android app surface uses a concise mobile-only presentation", () => {
@@ -648,6 +687,25 @@ test("Home hash navigation scrolls smoothly without full-page rerender jitter", 
   assert.match(hashChangeBlock, /updateHashNavCurrent\(\)/);
   assert.match(hashChangeBlock, /scheduleHashScroll\(preferredHashScrollBehavior\(\)\)/);
   assert.doesNotMatch(hashChangeBlock, /render\(\)/);
+});
+
+test("Desktop and mobile navigation follow the section currently being viewed", () => {
+  const source = read("app.js");
+  const scrollSpyBlock = source.match(/function setupSectionScrollSpy\(\)[\s\S]*?\n}/)?.[0] || "";
+  const currentBlock = source.match(/function updateHashNavCurrent\([\s\S]*?\n}/)?.[0] || "";
+
+  assert.match(source, /navigationSectionIds = \["courses", "providers", "tools", "saved", "about"\]/);
+  assert.match(source, /function sectionAtCurrentScrollPosition/);
+  assert.match(source, /function scheduleSectionScrollSpy/);
+  assert.match(scrollSpyBlock, /addEventListener\("scroll", scheduleSectionScrollSpy, \{ passive: true \}\)/);
+  assert.match(source, /requestAnimationFrame/);
+  assert.match(source, /history\.replaceState\(null, "", hash\)/);
+  assert.match(currentBlock, /\.topnav a\[href\], \.mobile-primary-nav a\[href\], \.mobile-page-menu a\[href\]/);
+  assert.match(currentBlock, /setAttribute\("aria-current", "page"\)/);
+  assert.doesNotMatch(scrollSpyBlock, /render\(\)/);
+  assert.ok(source.indexOf('<section id="providers"') < source.indexOf('<section id="tools"'));
+  assert.ok(source.indexOf('<section id="tools"') < source.indexOf('<section id="saved"'));
+  assert.ok(source.indexOf('<section id="saved"') < source.indexOf('<section id="about"'));
 });
 
 test("ATAR controls keep the range and provider filters aligned", () => {
