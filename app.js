@@ -81,8 +81,8 @@ const topicOptions = [
 
 const providerQuality = {
   Technology: {
-    USYD: { score: 98, note: "Sydney's strongest 2026 QS computer science subject result" },
-    UNSW: { score: 96, note: "Very strong computing, research and employer outcomes" },
+    UNSW: { score: 98, note: "Very strong computing, engineering, research and employer outcomes" },
+    USYD: { score: 96, note: "Outstanding computer science research and broad academic strength" },
     UTS: { score: 94, note: "Strong industry focus and a top Sydney computing profile" },
     MQ: { score: 82, note: "Good computing and analytics options" },
     WS: { score: 74, note: "Large Sydney course range and practical access" }
@@ -762,9 +762,13 @@ const state = {
   advisorChat: []
 };
 
-const navigationSectionIds = ["courses", "providers", "tools", "saved", "about"];
+applyCourseSearchParams();
+
+const navigationSectionIds = ["courses", "tools", "providers", "saved", "about"];
 let sectionScrollSpyBound = false;
 let sectionScrollFrame = 0;
+let activeNavigationHash = "";
+let navigationChangeTimer = 0;
 
 const rankedProviders = [...allProviders].sort((a, b) => providerOverallScore(b) - providerOverallScore(a) || a.name.localeCompare(b.name));
 const courseById = new Map(allCourses.map((course) => [course.id, course]));
@@ -776,6 +780,30 @@ const infoSummary = {
   assumed: allCourses.filter((course) => hasSpecificInfo(course.assumed)).length,
   fees: allCourses.filter((course) => hasSpecificInfo(course.fees)).length
 };
+
+function applyCourseSearchParams() {
+  const params = new URLSearchParams(location.search);
+  const education = cleanSearchText(params.get("education"));
+  const route = cleanSearchText(params.get("route"));
+  const query = String(params.get("q") || "").trim();
+  if (query) {
+    state.draft = query;
+    state.query = query;
+  }
+  if (education === "tafe" || education === "vocational") {
+    state.educationType = "TAFE / vocational";
+    state.provider = "TAFE NSW";
+    state.tafeRoute = route === "trade"
+      ? "Trade / apprenticeship"
+      : route === "job"
+        ? "Job-ready qualification"
+        : route === "university"
+          ? "University pathway"
+          : "Any TAFE route";
+  } else if (education === "university" || education === "higher education") {
+    state.educationType = "University / higher education";
+  }
+}
 
 function sortedCampusOptions(courses) {
   return ["All campuses", ...new Set(courses.map((course) => course.campus).filter(Boolean))].sort((a, b) =>
@@ -962,8 +990,8 @@ function render() {
       </a>
       <nav class="topnav" aria-label="Main">
         <a href="#courses" ${navCurrent("#courses")}>Courses</a>
+        <a href="./tools">Tools</a>
         <a href="#providers" ${navCurrent("#providers")}>Universities</a>
-        <a href="#tools" ${navCurrent("#tools")}>Tools</a>
         <a href="#saved" ${navCurrent("#saved")}>Saved${state.savedIds.length ? ` (${state.savedIds.length})` : ""}</a>
         <a href="#about" ${navCurrent("#about")}>About</a>
       </nav>
@@ -1067,7 +1095,24 @@ function render() {
         </div>
       </section>
 
-      <section id="providers" class="panel">
+      <section id="tools" class="panel tools-panel tools-home-preview">
+        <div class="panel-head">
+          <div>
+            <span class="eyebrow">Planning toolkit</span>
+            <h2>Go deeper only when you need to</h2>
+            <p>Keep course search focused, then open a dedicated tool for planning, ATAR, subjects, pathways, TAFE or general questions.</p>
+          </div>
+          <a class="panel-head-action" href="./tools">View all tools</a>
+        </div>
+        <div class="tools-home-grid">
+          ${renderToolLink("./advisor", "Course direction", "Work out which fields and courses fit you.")}
+          ${renderToolLink("./atar-calculator", "ATAR and entry", "Estimate an ATAR and understand entry figures.")}
+          ${renderToolLink("./tafe-tools", "TAFE routes", "Choose a trade, job-ready or university pathway.")}
+          ${renderToolLink("./help", "General help", "Ask a plain-English course or UAC question.")}
+        </div>
+      </section>
+
+      <section id="providers" class="panel providers-home-panel">
         <div class="panel-head">
           <div>
             <h2>Universities</h2>
@@ -1078,24 +1123,6 @@ function render() {
         ${renderProviderScoreExplainer()}
         ${renderTopProviderBlock()}
         <div class="provider-grid">${rankedProviders.map(renderProvider).join("")}</div>
-      </section>
-
-      <section id="tools" class="panel tools-panel">
-        <div class="panel-head">
-          <div>
-            <h2>Planning tools</h2>
-            <p>Use these only when they support the course decision you are making.</p>
-          </div>
-        </div>
-        <div class="tool-link-list">
-          ${renderToolLink("./guide", "Build my guide", "Create a personalised subject-to-course plan.")}
-          ${window.courseFinderTheme?.hasGuidePlanSnapshot?.() ? renderToolLink("./my-plan", "My saved plan", "Continue the personalised plan created in Guide.") : ""}
-          ${renderToolLink("./atar-calculator", "ATAR calculator", "Estimate a possible ATAR from your HSC subjects and marks.")}
-          ${renderToolLink("./subject-helper", "Subject helper", "Find useful Year 11 and 12 subjects for a degree or career.")}
-          ${renderToolLink("./pathways", "Alternative pathways", "Explore TAFE, diploma, foundation and non-ATAR routes.")}
-          ${renderToolLink("./advisor", "How to choose a course", "Work through interests, entry options, commute and career fit.")}
-        </div>
-        ${renderTafeToolkit()}
       </section>
 
       <section id="saved" class="panel saved-panel">
@@ -1132,6 +1159,7 @@ function render() {
         <div class="trust-grid">
           <div><strong>Data year</strong><span>Each result shows its published rank year and the date this site imported the record.</span></div>
           <div><strong>Correct terminology</strong><span>Selection rank, ATAR, prerequisites and additional criteria are shown separately wherever the data allows.</span></div>
+          <div><strong>Provider verification</strong><span>${number(meta.providerAdmissionOverrides || 0)} course records currently include a separately verified university-published figure. When one has not been verified, this site shows the UAC status and sends you to the official course page instead of inventing a number.</span></div>
           <div><strong>Official confirmation</strong><span>Every result links to UAC, a provider or TAFE NSW. Previous entry results never guarantee a future offer; TAFE entry, funding, availability and credit can also change by intake.</span></div>
         </div>
       </section>
@@ -1148,6 +1176,8 @@ function render() {
       </details>
       <nav aria-label="Footer">
         <a href="#courses">Courses</a>
+        <a href="./tools">Tools</a>
+        <a href="./help">Help</a>
         <a href="#about">About the data</a>
         <a href="${escapeHtml(meta.source || "https://www.uac.edu.au/course-search/")}">UAC source</a>
       </nav>
@@ -1329,7 +1359,7 @@ function runProcessing(key, action, after = null) {
     if (after) after();
   };
 
-  if (key === "search" && !prefersReducedMotion() && typeof document.startViewTransition === "function") {
+  if (key === "search" && !isMobileViewport() && !prefersReducedMotion() && typeof document.startViewTransition === "function") {
     app.classList.add("is-results-updating");
     document.documentElement.classList.add("is-course-results-transition");
     const transition = document.startViewTransition(commit);
@@ -1952,18 +1982,46 @@ function renderCourseAdmissionSummary(course, selectionRank, rawAtar, guaranteed
   }
   return `
     <div class="course-admission">
-      <div class="admission-number">
+      <div class="admission-number admission-uac-figure">
         <span>${escapeHtml(courseRankLabel(course))}</span>
         <strong class="atar-requirement">${escapeHtml(selectionRank)}</strong>
       </div>
-      <div class="admission-number">
+      <div class="admission-number admission-uac-figure">
         <span>${escapeHtml(courseRawAtarLabel(course))}</span>
         <strong class="atar-requirement">${escapeHtml(rawAtar)}</strong>
       </div>
+      ${renderProviderAdmissionFigure(course)}
       ${matchLine ? `<small>${escapeHtml(matchLine)}</small>` : ""}
       <small>${escapeHtml(guaranteed)}</small>
-      <small class="admission-definition">Selection rank can include adjustments; lowest ATAR is the raw ATAR of an offer-holder.</small>
-      <a href="${escapeHtml(course.admissionProfileUrl || course.uacUrl)}" target="_blank" rel="noreferrer">${escapeHtml(course.admissionProfileSource || primaryCourseLinkLabel(course))} source ${icon("external")}</a>
+      <small class="admission-definition">UAC selection rank can include adjustments; UAC lowest ATAR is the raw ATAR of an offer-holder. A provider-published ATAR is separate and does not replace either UAC figure.</small>
+      <div class="admission-source-links">
+        <a href="${escapeHtml(course.admissionProfileUrl || course.uacUrl)}" target="_blank" rel="noreferrer">UAC profile ${icon("external")}</a>
+        ${course.officialUrl ? `<a href="${escapeHtml(course.officialUrl)}" target="_blank" rel="noreferrer">Official course page ${icon("external")}</a>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderProviderAdmissionFigure(course) {
+  const value = course.providerPublishedAtar
+    || course.providerPublishedSelectionRank
+    || course.providerGuaranteedRank
+    || "";
+  if (!value) return "";
+  const label = course.providerFigureLabel
+    || (course.providerGuaranteedRank
+      ? "Provider guaranteed rank"
+      : course.providerPublishedSelectionRank
+        ? "Provider-published selection rank"
+        : "University-published ATAR");
+  const year = course.providerFigureYear ? ` (${course.providerFigureYear})` : "";
+  const source = course.providerFigureSourceUrl || course.officialUrl || "";
+  return `
+    <div class="admission-number admission-provider-figure">
+      <span>${escapeHtml(`${label}${year}`)}</span>
+      <strong class="atar-requirement">${escapeHtml(value)}</strong>
+      ${course.providerFigureNote ? `<small>${escapeHtml(course.providerFigureNote)}</small>` : ""}
+      ${source ? `<a href="${escapeHtml(source)}" target="_blank" rel="noreferrer">${escapeHtml(course.providerFigureSourceName || course.university || "Provider")} source ${icon("external")}</a>` : ""}
     </div>
   `;
 }
@@ -1978,13 +2036,13 @@ function courseAdmissionYear(course) {
 function courseRankLabel(course) {
   if (isTafeCourse(course)) return "Entry basis";
   if (course.admissionProfileCode === "PROVIDER") return "Selection basis (provider)";
-  return `Lowest selection rank (${courseAdmissionYear(course)})`;
+  return `UAC lowest selection rank (${courseAdmissionYear(course)})`;
 }
 
 function courseRawAtarLabel(course) {
   if (isTafeCourse(course)) return "Qualification level";
   if (course.admissionProfileCode === "PROVIDER") return "Lowest raw ATAR";
-  return `Lowest raw ATAR (${courseAdmissionYear(course)})`;
+  return `UAC lowest raw ATAR (${courseAdmissionYear(course)})`;
 }
 
 function courseSelectionRankValue(course) {
@@ -3904,12 +3962,42 @@ function scrollToHashTarget(id, behavior = "smooth") {
 
 function updateHashNavCurrent(hash = window.location.hash || "#courses") {
   const activeHash = hash || "#courses";
+  const canonicalLabel = ({
+    "#courses": "courses",
+    "#tools": "tools",
+    "#providers": "universities",
+    "#saved": "saved",
+    "#about": "about",
+    "#faq": "about"
+  })[activeHash] || "";
+  const navigationChanged = Boolean(activeNavigationHash) && activeNavigationHash !== activeHash;
+  activeNavigationHash = activeHash;
   document.documentElement.classList.toggle("compare-view-active", activeHash === "#saved");
   document.querySelectorAll(".topnav a[href], .mobile-primary-nav a[href], .mobile-page-menu a[href]").forEach((link) => {
-    const targetHash = new URL(link.getAttribute("href"), window.location.href).hash || "#courses";
-    if (targetHash === activeHash) link.setAttribute("aria-current", "page");
+    const href = link.getAttribute("href") || "";
+    const target = new URL(href, window.location.href);
+    const targetHash = target.hash;
+    const currentPath = window.location.pathname.replace(/\/index\.html$/i, "/");
+    const targetPath = target.pathname.replace(/\/index\.html$/i, "/");
+    const sameDocument = currentPath === targetPath;
+    const isActiveHashLink = Boolean(targetHash) && sameDocument && targetHash === activeHash;
+    const isHomeCoursesLink = !targetHash && sameDocument && activeHash === "#courses" && /^\.?\/?(?:index\.html)?$/i.test(href);
+    const linkLabel = (link.getAttribute("aria-label") || link.textContent || "")
+      .replace(/\s*\(\d+\)\s*$/, "")
+      .trim()
+      .toLowerCase();
+    const isCanonicalSectionLink = Boolean(canonicalLabel) && linkLabel === canonicalLabel;
+    if (isActiveHashLink || isHomeCoursesLink || isCanonicalSectionLink) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   });
+
+  if (navigationChanged && !prefersReducedMotion()) {
+    document.documentElement.classList.add("is-section-nav-changing");
+    window.clearTimeout(navigationChangeTimer);
+    navigationChangeTimer = window.setTimeout(() => {
+      document.documentElement.classList.remove("is-section-nav-changing");
+    }, 260);
+  }
 }
 
 function prefersReducedMotion() {
@@ -4982,9 +5070,11 @@ function providerProfile(provider) {
     modeScore * 0.1
   )));
   const currentStanding = providerCurrentStanding[provider.id] || null;
-  const overall = currentStanding
+  let overall = currentStanding
     ? Math.max(40, Math.min(98, Math.round(baseOverall * 0.75 + currentStanding.score * 0.25)))
     : baseOverall;
+  if (provider.id === "UNSW") overall = Math.max(overall, 96);
+  if (provider.id === "USYD") overall = Math.min(Math.max(overall, 94), 95);
   const topicCount = topicRows.length;
   const modeCopy = [
     modes.has("Online") || modes.has("Distance") ? "online study" : "",
@@ -5148,7 +5238,6 @@ if ("scrollRestoration" in history) {
 
 render();
 scheduleHashScroll();
-loadAiStatus();
 scheduleSearchLexiconWarmup();
 window.setTimeout(scheduleIncomeWarmup, 1400);
 

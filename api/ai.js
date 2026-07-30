@@ -5,11 +5,15 @@ const vm = require("node:vm");
 const MAX_BODY_BYTES = 160_000;
 const DEFAULT_MODEL = "gemini-3.5-flash";
 const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"];
+const DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b";
 const USE_GOOGLE_SEARCH = process.env.GEMINI_DISABLE_SEARCH !== "1";
 const STATUS_TTL_MS = 60_000;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_REQUESTS = 24;
 
 let courseDataCache;
 let statusCache;
+const rateLimitBuckets = new Map();
 
 module.exports = async function aiHandler(req, res) {
   if (req.method === "GET") {
@@ -23,6 +27,15 @@ module.exports = async function aiHandler(req, res) {
   }
 
   try {
+    if (!consumeRateLimit(req)) {
+      sendJson(res, 429, {
+        ok: false,
+        provider: "Course Finder AI",
+        error: "Too many requests. Please wait a moment and try again.",
+        errorType: "rate_limit"
+      });
+      return;
+    }
     const payload = await readJson(req);
     const result = await generateAiReply(payload);
     sendJson(res, 200, result);
@@ -37,12 +50,32 @@ module.exports = async function aiHandler(req, res) {
 };
 
 async function generateAiReply(payload = {}) {
+  const provider = configuredAiProvider();
+  if (provider === "groq") {
+    const result = await callGroq({
+      apiKey: configuredGroqKey(),
+      model: primaryGroqModel(),
+      payload
+    });
+    const text = cleanModelText(result.text);
+    if (!text) throw new Error("Groq returned an empty response");
+    return {
+      ok: true,
+      provider: process.env.AI_PROVIDER_LABEL || `Groq ${result.model}`,
+      model: result.model,
+      searchGrounding: false,
+      text,
+      sources: [],
+      actions: suggestedActions(payload.message, text, payload.type)
+    };
+  }
+
   const apiKey = configuredApiKey();
   if (!apiKey) {
     return {
       ok: false,
       provider: "AI not connected",
-      error: "GEMINI_API_KEY is not configured",
+      error: "No server AI key is configured. Set GROQ_API_KEY or GEMINI_API_KEY.",
       errorType: "missing_key"
     };
   }
@@ -107,8 +140,62 @@ async function finaliseGeminiReply({ apiKey, model, payload, response, useSearch
     model,
     searchGrounding: Boolean(useSearch),
     text: appendSourceLine(text, sources),
-    sources
+    sources,
+    actions: suggestedActions(payload.message, text, payload.type)
   };
+}
+
+async function callGroq({ apiKey, model, payload }) {
+  if (!apiKey) throw new Error("GROQ_API_KEY is not configured");
+  const response = await fetchWithTimeout("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model,
+      messages: buildOpenAiMessages(payload),
+      temperature: payload.type === "advisor" ? 0.5 : 0.35,
+      max_completion_tokens: payload.type === "advisor" ? 1100 : 900
+    })
+  }, 18_000);
+  if (!response.ok) {
+    const body = await response.text();
+    const error = new Error(`Groq request failed (${response.status}): ${truncate(body, 600)}`);
+    error.status = response.status;
+    throw error;
+  }
+  const data = await response.json();
+  return {
+    model: data.model || model,
+    text: data.choices?.[0]?.message?.content || ""
+  };
+}
+
+function buildOpenAiMessages(payload = {}) {
+  const type = normaliseTaskType(payload.type);
+  const latestMessage = truncate(String(payload.message || ""), 2200);
+  const history = historyWithoutLatest(normaliseHistory(payload.history), latestMessage)
+    .map((item) => ({
+      role: item.role === "assistant" ? "assistant" : "user",
+      content: item.text
+    }));
+  return [
+    { role: "system", content: systemInstruction(type) },
+    { role: "user", content: buildReferencePack(payload, latestMessage, type) },
+    { role: "assistant", content: "Reference pack received. I will answer the student's next message directly and keep official figures properly labelled." },
+    ...history,
+    {
+      role: "user",
+      content: [
+        payload.repairInstruction ? `Repair instruction:\n${payload.repairInstruction}\n` : "",
+        `Latest student message:\n${latestMessage || "(empty)"}`,
+        "",
+        "Answer this exact message. Give the direct answer first, then the shortest useful explanation and next action."
+      ].join("\n")
+    }
+  ];
 }
 
 async function callGemini({ apiKey, model, payload, useSearch }) {
@@ -138,7 +225,7 @@ async function callGemini({ apiKey, model, payload, useSearch }) {
 }
 
 function buildGeminiBody(payload = {}, useSearch) {
-  const type = payload.type === "advisor" ? "advisor" : "ask";
+  const type = normaliseTaskType(payload.type);
   const latestMessage = truncate(String(payload.message || ""), 2200);
   const history = historyWithoutLatest(normaliseHistory(payload.history), latestMessage);
   const contents = [
@@ -222,7 +309,7 @@ function buildReferencePack(payload, latestMessage, type) {
 }
 
 function systemInstruction(type) {
-  const helperName = type === "advisor" ? "course direction helper" : "Ask sidebar helper";
+  const helperName = type === "advisor" ? "course direction helper" : "general help assistant";
   return [
     `You are the Sydney Course Finder ${helperName}. You help NSW HSC students understand ATAR, selection ranks, UAC, Sydney universities, subjects, course choice, pathways, prerequisites, careers and applications.`,
     "Be a real conversational helper: answer the student's latest question first, then give the reasoning and practical next steps.",
@@ -234,6 +321,8 @@ function systemInstruction(type) {
     "For school acronyms like BBHS, say the acronym is ambiguous and ask for the full school name while still explaining the general rule.",
     "For prerequisites and subjects, state whether the subject is likely a hard requirement, assumed knowledge, recommended preparation, or only useful background. Do not invent a hard prerequisite.",
     "For course and university recommendations, use the imported course records first, then explain why using fit, ATAR risk, campus/commute, mode, prerequisites, accreditation/placements, careers, provider profile and backup pathways.",
+    "When a provider-published ATAR is included, label it separately from UAC lowest selection rank and UAC lowest raw ATAR. Never merge or substitute those figures.",
+    "You can direct students around this site: Courses /#courses; Tools /tools; Guide /guide; Course direction /advisor; ATAR calculator /atar-calculator; Subject Helper /subject-helper; Pathways /pathways; TAFE tools /tafe-tools; Saved /#saved; Universities /#providers.",
     "For questions outside course choice, answer briefly if safe, then connect it back to study/applications only if useful.",
     "Use Google Search grounding when current official rules may matter, but avoid pretending exact official numbers are known if they are not in the data or search result.",
     "Do not hallucinate exact ATAR cut-offs, adjustment amounts, deadlines, fees, prerequisites or eligibility. Say what is likely, then identify the official page or detail needed for certainty.",
@@ -243,6 +332,19 @@ function systemInstruction(type) {
 
 async function aiStatus() {
   const data = loadCourseData();
+  if (configuredAiProvider() === "groq") {
+    return {
+      ok: true,
+      configured: true,
+      connected: true,
+      provider: process.env.AI_PROVIDER_LABEL || `Groq ${primaryGroqModel()}`,
+      model: primaryGroqModel(),
+      searchGrounding: false,
+      coursesAvailable: data.courses.length,
+      status: "ready",
+      requires: "GROQ_API_KEY is configured on the server."
+    };
+  }
   const apiKey = configuredApiKey();
   const base = {
     ok: true,
@@ -253,7 +355,7 @@ async function aiStatus() {
     searchGrounding: USE_GOOGLE_SEARCH,
     coursesAvailable: data.courses.length,
     status: apiKey ? "checking" : "missing_key",
-    requires: "Set GEMINI_API_KEY on the server to enable Gemini replies."
+    requires: "Set GROQ_API_KEY (recommended free starter) or GEMINI_API_KEY on the server to enable model replies."
   };
 
   if (!apiKey) return base;
@@ -319,6 +421,24 @@ function configuredApiKey() {
     || process.env.GOOGLE_GENERATIVE_AI_API_KEY
     || process.env.GOOGLE_API_KEY
     || "";
+}
+
+function configuredGroqKey() {
+  return process.env.GROQ_API_KEY || "";
+}
+
+function configuredAiProvider() {
+  if (configuredGroqKey()) return "groq";
+  if (configuredApiKey()) return "gemini";
+  return "";
+}
+
+function primaryGroqModel() {
+  return process.env.GROQ_MODEL || DEFAULT_GROQ_MODEL;
+}
+
+function normaliseTaskType(value) {
+  return value === "advisor" ? "advisor" : value === "help" ? "help" : "ask";
 }
 
 function primaryModel() {
@@ -399,11 +519,33 @@ function loadCourseData() {
   const source = fs.readFileSync(filePath, "utf8");
   const sandbox = { window: {} };
   vm.runInNewContext(source, sandbox, { filename: filePath, timeout: 3000 });
+  const overrides = loadProviderAdmissionOverrides();
+  const courses = (Array.isArray(sandbox.window.uacCourses) ? sandbox.window.uacCourses : []).map((course) => {
+    const override = overrides.get(String(course.courseCode || ""));
+    if (!override || (override.providerId && override.providerId !== course.providerId)) return course;
+    const { courseCodes, providerId, ...fields } = override;
+    return { ...course, ...fields };
+  });
   courseDataCache = {
-    courses: Array.isArray(sandbox.window.uacCourses) ? sandbox.window.uacCourses : [],
+    courses,
     meta: sandbox.window.uacImportMeta || {}
   };
   return courseDataCache;
+}
+
+function loadProviderAdmissionOverrides() {
+  const result = new Map();
+  const filePath = path.join(__dirname, "..", "course-data", "provider-admission-overrides.json");
+  if (!fs.existsSync(filePath)) return result;
+  try {
+    const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    for (const entry of data.entries || []) {
+      for (const courseCode of entry.courseCodes || []) result.set(String(courseCode), entry);
+    }
+  } catch {
+    // The imported UAC dataset remains usable if the optional provider audit file is invalid.
+  }
+  return result;
 }
 
 function compactCourse(course, score) {
@@ -420,6 +562,11 @@ function compactCourse(course, score) {
     modes: Array.isArray(course.modes) ? course.modes.join(", ") : shortField(course.modes),
     uacUrl: course.uacUrl || "",
     officialUrl: course.officialUrl || course.url || "",
+    providerPublishedAtar: course.providerPublishedAtar || "",
+    providerPublishedSelectionRank: course.providerPublishedSelectionRank || "",
+    providerGuaranteedRank: course.providerGuaranteedRank || "",
+    providerFigureSourceUrl: course.providerFigureSourceUrl || "",
+    providerFigureNote: course.providerFigureNote || "",
     score: typeof score === "number" ? Math.round(score) : undefined
   };
 }
@@ -457,6 +604,9 @@ function formatCourses(courses) {
       `campus: ${course.campus || "not listed"}`,
       `code: ${course.code || "not listed"}`,
       `ATAR/profile: ${course.atar || "not listed"}`,
+      `provider-published ATAR: ${course.providerPublishedAtar || "not listed"}`,
+      `provider-published selection rank: ${course.providerPublishedSelectionRank || "not listed"}`,
+      `provider source: ${course.providerFigureSourceUrl || course.officialUrl || "not listed"}`,
       `prerequisites: ${course.prerequisites || "not listed"}`,
       `assumed knowledge: ${course.assumedKnowledge || "not listed"}`,
       `careers: ${course.careers || "not listed"}`,
@@ -625,6 +775,25 @@ function safeError(error) {
   return truncate(error?.message || "AI request failed", 700);
 }
 
+function suggestedActions(question, answer, type) {
+  const text = cleanSearchText(`${question || ""} ${answer || ""}`);
+  const candidates = [];
+  const add = (route, label) => {
+    if (!candidates.some((item) => item.route === route)) candidates.push({ route, label });
+  };
+  if (/\bsubject|hsc|year 11|year 12\b/.test(text)) add("subjects", "Open Subject Helper");
+  if (/\batar|mark|estimate|calculator\b/.test(text)) add("calculator", "Estimate my ATAR");
+  if (/\bpathway|no atar|diploma|foundation|transfer|left school\b/.test(text)) add("pathways", "Explore pathways");
+  if (/\btafe|trade|apprentice|certificate|vocational\b/.test(text)) add("tafe", "Open TAFE tools");
+  if (/\bcompare|save|shortlist\b/.test(text)) add("saved", "View saved and compared courses");
+  if (/\buniversity|provider|prestige|campus\b/.test(text)) add("universities", "Browse universities");
+  if (/\bcourse|degree|entry|selection rank|prerequisite\b/.test(text)) add("courses", "Search courses");
+  if (type === "advisor" || /\bcareer|direction|not sure|choose\b/.test(text)) add("advisor", "Open Course direction");
+  if (/\bplan|timeline|uac preference\b/.test(text)) add("guide", "Build a Guide plan");
+  if (!candidates.length) add("tools", "View all tools");
+  return candidates.slice(0, 3);
+}
+
 function isModelUnavailable(error) {
   return /404|not found|not supported|model/i.test(String(error?.message || "")) && /model|not found|not supported/i.test(String(error?.message || ""));
 }
@@ -639,11 +808,29 @@ function isHardSetupError(error) {
 
 function classifyAiError(error) {
   const message = String(error?.message || "");
-  if (/GEMINI_API_KEY|not configured/i.test(message)) return "missing_key";
+  if (/GEMINI_API_KEY|GROQ_API_KEY|not configured/i.test(message)) return "missing_key";
   if (/PERMISSION_DENIED|403|denied|forbidden|API key/i.test(message)) return "permission";
   if (/quota|rate limit|429/i.test(message)) return "quota";
   if (/not found|not supported|404|model/i.test(message)) return "model";
   return "connection";
+}
+
+function consumeRateLimit(req) {
+  const now = Date.now();
+  const forwarded = String(req.headers?.["x-forwarded-for"] || "").split(",")[0].trim();
+  const key = forwarded || req.socket?.remoteAddress || "unknown";
+  const current = rateLimitBuckets.get(key);
+  if (!current || now - current.startedAt >= RATE_LIMIT_WINDOW_MS) {
+    rateLimitBuckets.set(key, { startedAt: now, count: 1 });
+    return true;
+  }
+  current.count += 1;
+  if (rateLimitBuckets.size > 500) {
+    for (const [bucketKey, bucket] of rateLimitBuckets) {
+      if (now - bucket.startedAt >= RATE_LIMIT_WINDOW_MS) rateLimitBuckets.delete(bucketKey);
+    }
+  }
+  return current.count <= RATE_LIMIT_REQUESTS;
 }
 
 async function readJson(req) {

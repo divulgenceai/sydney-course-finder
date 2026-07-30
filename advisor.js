@@ -284,7 +284,7 @@ const state = {
   advisorChat: [],
   processing: "",
   helperProvider: "Checking AI",
-  aiStatus: { checked: false, configured: false, connected: false, provider: "Gemini", model: "gemini-3.5-flash" }
+  aiStatus: { checked: false, configured: false, connected: false, provider: "Course Finder AI", model: "" }
 };
 
 function render() {
@@ -316,8 +316,8 @@ function render() {
     <main class="advisor-main">
       <section class="hero advisor-hero">
         <div>
-          <h1>Course helper</h1>
-          <p>Answer a focused set of questions, then get a data-based first direction from the Sydney UAC course dataset. The chat uses this page's course data and pathway rules.</p>
+          <h1>Find your course direction</h1>
+          <p>Answer a focused set of questions, get a transparent data-based shortlist, then ask follow-up questions using the same course evidence.</p>
         </div>
         <dl class="stats two">
           <div><dt>Course records</dt><dd>${number(allCourses.length)}</dd></div>
@@ -328,7 +328,7 @@ function render() {
       <section class="panel advisor-panel">
         <div class="panel-head">
           <div>
-            <h2>Find a direction</h2>
+            <h2>Build a starting direction</h2>
             <p>The first answer is mostly data scoring from course name, field, ATAR fit, subjects, interests, mode, campus and provider profile.</p>
           </div>
           <a class="help-link" href="./#atar">Back to ATAR match</a>
@@ -462,7 +462,7 @@ function renderAdvisorResult(ranked, profile) {
       <div class="chat-box">
         <div class="chat-head">
           <h3>Chat with the helper</h3>
-          <span>${escapeHtml(state.helperProvider)}</span>
+          <span data-helper-provider>${escapeHtml(state.helperProvider)}</span>
         </div>
         <div class="chat-log">
           ${state.advisorChat.length ? state.advisorChat.map((message) => `
@@ -556,13 +556,13 @@ function scrollChatToBottom() {
 }
 
 function advisorPendingProvider() {
-  return state.aiStatus?.connected ? "Gemini" : state.aiStatus?.configured ? "AI issue" : "AI not connected";
+  return state.aiStatus?.connected ? state.aiStatus.provider : "Local course guide";
 }
 
 function advisorPendingText() {
   return state.aiStatus?.connected
-    ? "Asking Gemini with your answers and the course data..."
-    : "Gemini is not ready, so I will show the setup issue instead of a scripted answer.";
+    ? "Using your answers and the relevant course records..."
+    : "Checking your shortlist with the verified local course guide...";
 }
 
 async function loadAiStatus() {
@@ -574,21 +574,22 @@ async function loadAiStatus() {
       checked: true,
       configured: Boolean(data.configured),
       connected: Boolean(data.connected),
-      provider: data.provider || "Gemini",
+      provider: data.provider || "Course Finder AI",
       model: data.model || "",
       searchGrounding: Boolean(data.searchGrounding),
       coursesAvailable: Number(data.coursesAvailable || 0),
       error: data.error || ""
     };
     if (!state.advisorChat.length || state.helperProvider === "Checking AI") {
-      state.helperProvider = state.aiStatus.connected ? state.aiStatus.provider : state.aiStatus.configured ? "AI issue" : "AI not connected";
+      state.helperProvider = state.aiStatus.connected ? state.aiStatus.provider : "Local course guide";
     }
   } catch (error) {
     console.warn("AI status unavailable:", error);
-    state.aiStatus = { checked: true, configured: false, connected: false, provider: "Gemini", model: "", error: "AI status endpoint unavailable" };
-    if (!state.advisorChat.length || state.helperProvider === "Checking AI") state.helperProvider = "AI not connected";
+    state.aiStatus = { checked: true, configured: false, connected: false, provider: "Local course guide", model: "", error: "AI status endpoint unavailable" };
+    if (!state.advisorChat.length || state.helperProvider === "Checking AI") state.helperProvider = "Local course guide";
   }
-  render();
+  const providerBadge = advisorApp.querySelector("[data-helper-provider]");
+  if (providerBadge) providerBadge.textContent = state.helperProvider;
 }
 
 function advisorProfile() {
@@ -906,7 +907,7 @@ function advisorChatReply(message) {
 
 async function advisorAiChatReply(message) {
   if (state.aiStatus?.checked && !state.aiStatus.connected) {
-    return aiNotReadyReply();
+    return advisorChatReply(message);
   }
   const ranked = advisorRankedCourses().slice(0, 6);
   const profile = advisorProfile();
@@ -921,10 +922,10 @@ async function advisorAiChatReply(message) {
         rankedCourses: ranked.map(({ course, score, reasons }) => compactAiCourse(course, score, reasons))
       }
     });
-    return { text: ai.text, provider: ai.provider || "Gemini" };
+    return { text: ai.text, provider: ai.provider || "Course Finder AI" };
   } catch (error) {
     logAiIssue("Advisor AI failed:", error);
-    return aiErrorReply(error);
+    return advisorChatReply(message);
   }
 }
 
@@ -1049,6 +1050,23 @@ function localAdvisorChatReply(message) {
   const profile = advisorProfile();
   const primary = ranked[0]?.course;
   if (!primary) return "I need more answers first. Fill in subjects, passions and ATAR, then run the helper.";
+
+  if (/(safe|safest|lowest risk|most realistic|backup)/.test(question) && /(atar|entry|rank|option|course)/.test(question)) {
+    const numericOptions = ranked
+      .map((entry) => ({ ...entry, rank: numericRank(entry.course.atar) }))
+      .filter((entry) => entry.rank !== null);
+    const reachable = numericOptions.filter((entry) => entry.rank <= profile.atar);
+    const safest = [...reachable].sort((a, b) => a.rank - b.rank || b.score - a.score)[0];
+    const balanced = reachable[0] || numericOptions[0];
+    if (!safest) {
+      return `None of the current shortlist has a numeric entry profile safely below your ${profile.atar.toFixed(2)} estimate. Keep ${primary.name} as a direction, but add a lower-entry related course plus an EAS, SRS, diploma or TAFE-to-university backup.`;
+    }
+    const margin = profile.atar - safest.rank;
+    const balancedNote = balanced && balanced.course.id !== safest.course.id
+      ? ` The strongest balance of fit and entry is ${balanced.course.name} at ${balanced.course.university} (${displayRank(balanced.course.atar)}), while the lower-rank option is the safer backup.`
+      : "";
+    return `${safest.course.name} at ${safest.course.university} is the safest ATAR-based option in this shortlist: its imported profile is ${displayRank(safest.course.atar)}, about ${margin.toFixed(1)} points below your ${profile.atar.toFixed(2)} estimate.${balancedNote} Entry figures are historical, so keep at least one pathway option and confirm the official course page.`;
+  }
 
   const directFacts = directCourseFactReply(question, ranked, profile);
   if (directFacts) return directFacts;

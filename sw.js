@@ -1,7 +1,10 @@
-const CACHE_NAME = "sydney-course-finder-app-v44";
+const CACHE_NAME = "sydney-course-finder-app-v55";
 const ROUTE_FALLBACKS = {
   "/": "/index.html",
   "/index": "/index.html",
+  "/tools": "/tools.html",
+  "/help": "/help.html",
+  "/tafe-tools": "/tafe-tools.html",
   "/guide": "/guide.html",
   "/pathways": "/pathways.html",
   "/no-atar": "/pathways.html",
@@ -18,9 +21,15 @@ const APP_SHELL = [
   "/index.html",
   "/styles.css",
   "/theme.js",
-  "/asset-refresh-v38.js",
+  "/asset-refresh-v55.js",
   "/course-details.js",
   "/app.js",
+  "/tools.html",
+  "/tools-page.js",
+  "/help.html",
+  "/help.js",
+  "/tafe-tools.html",
+  "/tafe-tools.js",
   "/uac-courses-lite.js",
   "/tafe-courses.js",
   "/manifest.webmanifest",

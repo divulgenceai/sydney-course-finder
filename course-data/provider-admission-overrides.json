@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "reviewedAt": "2026-07-31",
+  "notes": "Provider-published figures are kept separate from UAC historical offer profiles. They must never overwrite UAC selection-rank or raw-ATAR values.",
+  "entries": [
+    {
+      "courseCodes": ["335298", "335299"],
+      "providerId": "SCU",
+      "providerPublishedAtar": "70",
+      "providerFigureLabel": "University-published ATAR",
+      "providerFigureYear": 2026,
+      "providerFigureSourceUrl": "https://www.scu.edu.au/study/courses/bachelor-of-information-technology-3007410/2026/",
+      "providerFigureSourceName": "Southern Cross University",
+      "providerFigureCheckedAt": "2026-07-31",
+      "providerFigureNote": "The domestic course snapshot lists ATAR 70. UAC separately reports fewer than five ATAR-based offers for these Sydney UAC course records."
+    },
+    {
+      "courseCodes": ["334325", "334326", "334328"],
+      "providerId": "SCU",
+      "providerPublishedAtar": "70",
+      "providerFigureLabel": "University-published ATAR",
+      "providerFigureYear": 2026,
+      "providerFigureSourceUrl": "https://www.scu.edu.au/study/courses/bachelor-of-information-technology-bachelor-of-business-3207755/",
+      "providerFigureSourceName": "Southern Cross University",
+      "providerFigureCheckedAt": "2026-07-31",
+      "providerFigureNote": "The domestic double-degree course snapshot lists ATAR 70. UAC separately reports fewer than five ATAR-based offers for these Sydney UAC course records."
+    }
+  ]
+}

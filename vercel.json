@@ -4,6 +4,18 @@
   "trailingSlash": false,
   "rewrites": [
     {
+      "source": "/tools",
+      "destination": "/tools.html"
+    },
+    {
+      "source": "/help",
+      "destination": "/help.html"
+    },
+    {
+      "source": "/tafe-tools",
+      "destination": "/tafe-tools.html"
+    },
+    {
       "source": "/advisor",
       "destination": "/advisor.html"
     },

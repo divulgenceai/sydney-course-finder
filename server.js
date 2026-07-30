@@ -76,6 +76,12 @@ function resolveFile(pathname) {
   const clean = decodeURIComponent(pathname).replace(/\\/g, "/");
   const route = clean === "/"
     ? "/index.html"
+    : clean === "/tools"
+      ? "/tools.html"
+    : clean === "/help"
+      ? "/help.html"
+    : clean === "/tafe-tools"
+      ? "/tafe-tools.html"
     : clean === "/guide"
       ? "/guide.html"
     : clean === "/advisor"

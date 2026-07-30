@@ -33,9 +33,9 @@
   ],
   "shortcuts": [
     {
-      "name": "Guide",
-      "short_name": "Guide",
-      "url": "/guide",
+      "name": "Planning tools",
+      "short_name": "Tools",
+      "url": "/tools",
       "icons": [{ "src": "/assets/app-icon-192.png", "sizes": "192x192" }]
     },
     {

@@ -255,9 +255,27 @@ function buildOutput(courses) {
     uniqueProviders: providers.length,
     note: "Course names, codes, study areas and links come from the official TAFE NSW sitemap. Offering-specific delivery, duration, entry and fee details must be confirmed on TAFE NSW."
   };
+  const fields = [
+    "id",
+    "courseCode",
+    "name",
+    "area",
+    "tafeArea",
+    "qualification",
+    "tafePathwayType",
+    "isTrade",
+    "isUniversityPathway",
+    "nationallyRecognised",
+    "searchTerms",
+    "careers",
+    "officialUrl"
+  ];
+  const rows = courses.map((course) => fields.map((field) => course[field]));
   return [
     `window.tafeProviders=${JSON.stringify(providers)};`,
-    `window.tafeCourses=${JSON.stringify(courses)};`,
+    `window.tafeCourseFields=${JSON.stringify(fields)};`,
+    `window.tafeCourseRows=${JSON.stringify(rows)};`,
+    "window.tafeCourses=window.tafeCourseRows.map(function(row){var value={};for(var i=0;i<window.tafeCourseFields.length;i+=1)value[window.tafeCourseFields[i]]=row[i];var checks=['Smart and Skilled eligibility','Current fee-free availability'];if(/^Certificate (?:I|II|III|IV)$/.test(value.qualification))checks.push('Concession eligibility');if(value.qualification==='Diploma'||value.qualification==='Advanced Diploma')checks.push('VET Student Loan eligibility');var url=value.officialUrl;return Object.assign(value,{level:'vocational',levels:['vocational'],providerId:'TAFENSW',providerLogo:'https://www.tafensw.edu.au/images/TAFE-logo.svg',university:'TAFE NSW',campus:'TAFE NSW locations and online options vary',campusCode:'TAFE',campusPostcode:'',courseLevel:value.qualification,sourceType:'tafe',providerType:'tafe',fundingChecks:checks,atar:'NA',selectionRank:'NA',lowestAtar:'NA',medianAtar:'NA',highestAtar:'NA',admissionProfileCode:'TAFE',admissionProfileSource:'TAFE NSW official course page',admissionProfileUrl:url,atarYear:new Date().getFullYear(),duration:'Varies by location and study option',modes:[],intake:'Varies by location and offering',prerequisites:'No ATAR is used. Entry requirements vary by course and delivery option; check the official TAFE NSW page.',assumed:'No HSC assumed knowledge is listed in this catalogue record.',additionalCriteria:value.isTrade?'Some offerings may require an apprenticeship, traineeship, workplace access or other evidence. Check the current offering.':'Check the current offering for age, literacy, licence, portfolio, placement or prior-study requirements.',fees:checks.join(', ')+' should be checked. Funding and fee-free places are not guaranteed.',summary:value.name+' is a TAFE NSW '+value.tafeArea.toLowerCase()+' qualification. Delivery, duration, entry requirements and fees vary by location and intake.',practicalExperience:value.isTrade?'Workplace, apprenticeship or traineeship arrangements may apply to some offerings.':'Practical training or work placement requirements vary by course.',uacUrl:url,source:'TAFE NSW official course catalogue',sourceLabel:'TAFE NSW',dedupedCount:1});});",
     `window.tafeImportMeta=${JSON.stringify(meta)};`,
     ""
   ].join("\n");

@@ -53,3 +53,11 @@ test("Generated TAFE catalogue has broad official coverage and stable identifier
   }
   assert.ok(courses.some((course) => /Tertiary Preparation/i.test(course.name) && course.isUniversityPathway));
 });
+
+test("Generated TAFE catalogue uses a compact mobile-friendly payload", () => {
+  const source = fs.readFileSync("tafe-courses.js", "utf8");
+  assert.match(source, /window\.tafeCourseFields=/);
+  assert.match(source, /window\.tafeCourseRows=/);
+  assert.match(source, /window\.tafeCourses=window\.tafeCourseRows\.map/);
+  assert.ok(Buffer.byteLength(source) < 900_000, `expected compact payload under 900 KB, found ${Buffer.byteLength(source)} bytes`);
+});

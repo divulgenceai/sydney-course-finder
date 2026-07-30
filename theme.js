@@ -36,11 +36,11 @@
     About: "\u24d8"
   });
   const mobileNavMedia = "(max-width: 760px)";
-  const mobilePrimaryLabels = ["Courses", "Universities", "Tools", "Saved", "About"];
+  const mobilePrimaryLabels = ["Courses", "Tools", "Universities", "Saved", "About"];
   const mobilePrimaryDestinations = {
     Courses: "./#courses",
+    Tools: "./tools",
     Universities: "./#providers",
-    Tools: "./#tools",
     Saved: "./#saved",
     About: "./#about"
   };
@@ -190,8 +190,8 @@
     const saved = savedCourseCount();
     return `
       <a href="./#courses">Courses</a>
+      <a href="./tools">Tools</a>
       <a href="./#providers">Universities</a>
-      <a href="./#tools">Tools</a>
       <a href="./#saved">Saved${saved ? ` (${saved})` : ""}</a>
       <a href="./#about">About</a>
     `;
@@ -204,6 +204,9 @@
       .replace(/\/+$/, "") || "/";
     const toolPaths = new Set([
       "/guide",
+      "/tools",
+      "/help",
+      "/tafe-tools",
       "/pathways",
       "/no-atar",
       "/atar-calculator",
@@ -252,6 +255,8 @@
       </div>
       <nav aria-label="Footer">
         <a href="./#courses">Courses</a>
+        <a href="./tools">Tools</a>
+        <a href="./help">Help</a>
         <a href="./#about">About the data</a>
         <a href="./#faq">FAQ</a>
       </nav>
@@ -388,11 +393,10 @@
     const sameDocument = current.pathname === url.pathname && current.search === url.search;
     if (sameDocument && target.hash) {
       const hash = target.hash;
-      if (current.hash === hash) {
-        document.querySelector(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      } else {
-        location.hash = hash;
-      }
+      if (current.hash !== hash) history.pushState(null, "", hash);
+      document.querySelector(hash)?.scrollIntoView({ behavior: "auto", block: "start" });
+      syncCanonicalNavCurrent();
+      syncMobilePrimaryCurrent();
       return true;
     }
 

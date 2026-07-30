@@ -47,18 +47,26 @@ Open `http://127.0.0.1:4180`.
 npm test
 npm run check
 npm run audit:data
+npm run audit:admission
 ```
 
-## Optional AI helper
+## Optional AI helpers
 
-The course-help chat can use Gemini through the server-side `/api/ai` endpoint. It is optional; no API key is committed.
+General Help and Course Direction work without an external model by using verified local guidance and the imported course catalogue. For longer conversational answers, the server-side `/api/ai` endpoint supports Groq first and Gemini as an alternative. No secret is exposed to the browser or committed to Git.
 
-Copy `.env.example` to `.env`, then add your own key:
+Copy `.env.example` to `.env`, then configure either provider:
 
 ```env
+# Recommended free-tier starting point
+GROQ_API_KEY=your_groq_key
+GROQ_MODEL=openai/gpt-oss-20b
+
+# Optional alternative
 GEMINI_API_KEY=your_google_ai_studio_key
-GEMINI_MODEL=gemini-3.5-flash
+GEMINI_MODEL=gemini-2.5-flash
 ```
+
+Model answers are grounded with relevant imported UAC records and the user’s current local plan context. The interface falls back to deterministic local guidance if a provider is unavailable or rate-limited.
 
 ## Project map
 
@@ -67,11 +75,26 @@ GEMINI_MODEL=gemini-3.5-flash
 - `subject-helper.js` — career/degree-to-subject planning.
 - `pathways.js` and `pathways-logic.js` — situation-aware alternative-entry routes.
 - `atar-calculator.js` and `atar-data.js` — NSW ATAR estimation and subject guidance.
-- `advisor.js` — course-choice helper.
+- `tools.html` and `tools-page.js` — the dedicated planning-tools index.
+- `help.html` and `help.js` — general course, ATAR and UAC help with local fallbacks.
+- `tafe-tools.html` and `tafe-tools.js` — trade, job-ready and TAFE-to-university route guidance.
+- `advisor.js` — conversational course-direction helper.
+- `api/ai.js` — server-side Groq/Gemini gateway with course-data retrieval and rate limiting.
 - `uac-courses-lite.js` — browser-optimised imported course records.
-- `course-data/` — source data and admission-profile enrichment inputs.
+- `course-data/` — source data, detail chunks and verified provider-admission overrides.
 - `tests/` — product contracts and planning-logic tests.
 - `android/` — Android WebView wrapper source.
+
+## Admission-data workflow
+
+UAC lowest selection rank, UAC lowest raw ATAR and university-published ATAR are separate fields. Provider figures are only displayed after their official page and year are recorded in `course-data/provider-admission-overrides.json`.
+
+```bash
+npm run build:data-lite
+npm run audit:admission
+```
+
+The audit writes `audits/provider-admission-audit.json`, including every record that still needs provider verification. Suppressed UAC figures such as “fewer than 5 offers” remain suppressed; the app links to the official provider page rather than estimating a number.
 
 ## Data and admissions note
 

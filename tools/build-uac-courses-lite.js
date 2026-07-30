@@ -70,7 +70,22 @@ const compactEntryRule = (value, kind) => {
   return parts.join(" ");
 };
 
-const fullCourses = sandbox.window.uacCourses || [];
+const providerOverridesPath = path.join(root, "course-data", "provider-admission-overrides.json");
+const providerOverrides = fs.existsSync(providerOverridesPath)
+  ? JSON.parse(fs.readFileSync(providerOverridesPath, "utf8"))
+  : { entries: [] };
+const providerOverrideByCourseCode = new Map();
+for (const entry of providerOverrides.entries || []) {
+  for (const courseCode of entry.courseCodes || []) {
+    providerOverrideByCourseCode.set(String(courseCode), entry);
+  }
+}
+const fullCourses = (sandbox.window.uacCourses || []).map((course) => {
+  const override = providerOverrideByCourseCode.get(String(course.courseCode || ""));
+  if (!override || (override.providerId && override.providerId !== course.providerId)) return course;
+  const { courseCodes, providerId, ...admissionFields } = override;
+  return { ...course, ...admissionFields };
+});
 
 const standardUacUrl = (course) => {
   const level = String(course.level || "");
@@ -99,6 +114,15 @@ const courses = fullCourses.map((course) => ({
   admissionProfileSource: course.admissionProfileSource,
   admissionProfileUrl: course.admissionProfileUrl,
   atarYear: course.atarYear,
+  providerPublishedAtar: course.providerPublishedAtar,
+  providerPublishedSelectionRank: course.providerPublishedSelectionRank,
+  providerGuaranteedRank: course.providerGuaranteedRank,
+  providerFigureLabel: course.providerFigureLabel,
+  providerFigureYear: course.providerFigureYear,
+  providerFigureSourceUrl: course.providerFigureSourceUrl,
+  providerFigureSourceName: course.providerFigureSourceName,
+  providerFigureCheckedAt: course.providerFigureCheckedAt,
+  providerFigureNote: compactText(course.providerFigureNote, 260),
   duration: course.duration,
   modes: course.modes,
   intake: course.intake,
@@ -118,7 +142,15 @@ const providers = (sandbox.window.uacProviders || []).map((provider) => ({
   ...provider,
   detailChunk: detailChunkName(provider.id)
 }));
-const meta = sandbox.window.uacImportMeta || {};
+const meta = {
+  ...(sandbox.window.uacImportMeta || {}),
+  providerAdmissionOverridesReviewedAt: providerOverrides.reviewedAt || "",
+  providerAdmissionOverrides: fullCourses.filter((course) =>
+    course.providerPublishedAtar
+    || course.providerPublishedSelectionRank
+    || course.providerGuaranteedRank
+  ).length
+};
 const courseFields = Object.keys(courses[0] || {});
 const courseRows = courses.map((course) => courseFields.map((field) => course[field]));
 const output = [
