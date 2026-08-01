@@ -289,7 +289,9 @@
 
   function detectPlanningIntent({ query, profiles, courses }) {
     const clean = normaliseText(query);
-    if (!clean) return { kind: "none", label: "", profile: "", confidence: 0, alternatives: [] };
+    if (!clean || (clean.length < 2 && !/^(ai|it)$/.test(clean))) {
+      return { kind: "none", label: "", profile: "", confidence: 0, alternatives: [] };
+    }
 
     const careerCandidates = [];
     const degreeCandidates = [];
@@ -319,6 +321,7 @@
         });
       }
       for (const career of String(course?.careers || "").split(/[,;/]+/).map((item) => item.trim()).filter(Boolean)) {
+        if (!isCompleteIntentLabel(career)) continue;
         const careerScore = intentPhraseScore(clean, normaliseText(career));
         if (careerScore) {
           careerCandidates.push({
@@ -363,6 +366,7 @@
   function intentPhraseScore(query, candidate) {
     if (!query || !candidate) return 0;
     if (query === candidate) return 100;
+    if (query.length < 3 || candidate.length < 3) return 0;
     if (candidate.includes(query) || query.includes(candidate)) return 72;
     const queryTokens = new Set(query.split(" "));
     const candidateTokens = candidate.split(" ");
@@ -374,12 +378,20 @@
     const seen = new Set();
     return [...(candidates || [])]
       .sort((a, b) => b.score - a.score || a.label.localeCompare(b.label))
+      .filter((item) => isCompleteIntentLabel(item.label))
       .filter((item) => {
         const key = `${item.kind}:${normaliseText(item.label)}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       });
+  }
+
+  function isCompleteIntentLabel(value) {
+    const raw = String(value || "").trim();
+    const clean = normaliseText(raw);
+    if (clean.length < 3 || !/[a-z]{2}/i.test(clean)) return false;
+    return !/(?:\.{3}|…)$/.test(raw);
   }
 
   function intentPublicResult(item) {

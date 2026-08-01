@@ -418,19 +418,7 @@ function renderGuide(options = {}) {
         <img class="site-logo" src="./assets/logo.svg" alt="Sydney Course Finder logo" />
         <span>Sydney Course Finder</span>
       </a>
-      <nav class="topnav" aria-label="Main">
-        <a href="./#courses">Courses</a>
-        <a href="./guide" aria-current="page">Guide</a>
-        ${window.courseFinderTheme?.myPlanNavMarkup?.() || ""}
-        <a href="./pathways">Pathways</a>
-        <a href="./#atar">ATAR</a>
-        <a href="./atar-calculator">Calculator</a>
-        <a href="./subject-helper">Subjects</a>
-        <a href="./advisor">Course help</a>
-        <a href="./#saved">Saved</a>
-        <a href="./#providers">Universities</a>
-        <a href="./#faq">FAQ</a>
-      </nav>
+      <nav class="topnav" aria-label="Main"></nav>
       <div class="topbar-actions">${window.courseFinderTheme?.buttonMarkup?.() || ""}</div>
     </header>
 
@@ -541,7 +529,7 @@ function renderGuideDirectionDeck() {
             <h3>Your answer deck is folded away</h3>
             <p>The Guide is using all ${directionCards.length} direction-card answers to rank subjects, courses, universities and careers.</p>
           </div>
-          <strong>✓</strong>
+          <strong aria-label="Complete">&#10003;</strong>
         </div>
         <div class="guide-deck-fold">
           <i></i><i></i><i></i>
@@ -863,6 +851,10 @@ function renderGuideResult(result) {
   const deckNote = guideState.deckAnswers.some(Boolean) ? " Your direction-card choices also influenced this match." : "";
   return `
     <section class="panel guide-result" id="guide-result">
+      <div class="guide-stale-notice" role="status">
+        <strong>Your answers changed.</strong>
+        <span>Select “Update my plan” to refresh every recommendation below.</span>
+      </div>
       <div class="guide-result-head">
         <div>
           <span class="guide-pill">${escapeHtml(result.profile.label)}</span>
@@ -1049,7 +1041,7 @@ function renderGuideAdjustSelect(key, label, options, value, impact) {
 function renderGuideEstimatePanel(estimate) {
   return `
     <section class="guide-estimate-panel">
-      <div>
+      <div class="guide-estimate-summary">
         <span>Projected ATAR from marks</span>
         <strong>${escapeHtml(estimate.atarLabel)}</strong>
         <small>${escapeHtml(estimate.note)}</small>
@@ -1057,9 +1049,9 @@ function renderGuideEstimatePanel(estimate) {
       <div class="guide-estimate-list">
         ${estimate.subjects.slice(0, 5).map((subject) => `
           <article class="${subject.impact >= 0 ? "up" : "down"}">
-            <strong>${escapeHtml(subject.name)}</strong>
-            <span>${escapeHtml(formatNumber(subject.scaledTotal, 1))}</span>
-            <small>${escapeHtml(formatNumber(subject.projectedMark, 1))}/${subject.maxMark} projected. ${subject.impact >= 0 ? "+" : ""}${escapeHtml(formatNumber(subject.impact, 1))} vs break-even line</small>
+            <strong class="guide-estimate-subject-name">${escapeHtml(subject.name)}</strong>
+            <span aria-label="Scaled contribution ${escapeHtml(formatNumber(subject.scaledTotal, 1))}">${escapeHtml(formatNumber(subject.scaledTotal, 1))}</span>
+            <small><b>${escapeHtml(formatNumber(subject.projectedMark, 1))}/${subject.maxMark}</b> projected · ${subject.impact >= 0 ? "+" : ""}${escapeHtml(formatNumber(subject.impact, 1))} against the neutral scaling baseline</small>
           </article>
         `).join("")}
       </div>
@@ -1070,7 +1062,7 @@ function renderGuideEstimatePanel(estimate) {
 function renderGuideSchoolPanel(estimate) {
   return `
     <section class="guide-estimate-panel guide-school-panel">
-      <div>
+      <div class="guide-estimate-summary">
         <span>School tracking signal</span>
         <strong>${escapeHtml(estimate.atarLabel)}</strong>
         <small>${escapeHtml(estimate.text)}</small>
@@ -1168,18 +1160,23 @@ function bindGuideEvents() {
     if (target.dataset.guideTermRow) {
       const row = guideState.subjectsWithMarks.find((item) => item.id === target.dataset.guideTermRow);
       if (row && target.dataset.guideTermKey) row[target.dataset.guideTermKey] = target.value;
+      guideState.result = null;
+      markGuideResultStale();
       scheduleGuideProgressSave();
       return;
     }
     if (target.dataset.guideMarkRow) {
       const row = guideState.subjectsWithMarks.find((item) => item.id === target.dataset.guideMarkRow);
       if (row) row.mark = target.value;
+      guideState.result = null;
+      markGuideResultStale();
       scheduleGuideProgressSave();
       return;
     }
     if (!target.name) return;
     guideState[target.name] = target.value;
     guideState.result = null;
+    markGuideResultStale();
     scheduleGuideProgressSave();
   });
   form?.addEventListener("change", (event) => {
@@ -1187,6 +1184,7 @@ function bindGuideEvents() {
     if (target.dataset.guideSubjectRow) {
       const row = guideState.subjectsWithMarks.find((item) => item.id === target.dataset.guideSubjectRow);
       if (row) row.subject = target.value;
+      guideState.result = null;
       persistGuideProgress();
       renderGuide({ preserveScroll: true });
       return;
@@ -1210,17 +1208,13 @@ function bindGuideEvents() {
       renderGuide({ preserveScroll: true });
       return;
     }
-    guideState.processing = true;
+    guideState.result = buildGuidePlan();
+    guideState.processing = false;
+    persistGuideProgress();
     renderGuide({ preserveScroll: true });
-    window.setTimeout(() => {
-      guideState.result = buildGuidePlan();
-      guideState.processing = false;
-      persistGuideProgress();
-      renderGuide({ preserveScroll: true });
-      requestAnimationFrame(() => {
-        guideApp.querySelector("#guide-result")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    }, 220);
+    requestAnimationFrame(() => {
+      guideApp.querySelector("#guide-result")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   });
   guideApp.querySelector("[data-guide-reset]")?.addEventListener("click", () => {
     localStorage.removeItem(guideStorageKey);
@@ -1234,6 +1228,7 @@ function bindGuideEvents() {
   });
   guideApp.querySelector("[data-guide-add-subject]")?.addEventListener("click", () => {
     guideState.subjectsWithMarks.push(createGuideSubjectRow());
+    guideState.result = null;
     persistGuideProgress();
     renderGuide({ preserveScroll: true });
   });
@@ -1241,6 +1236,7 @@ function bindGuideEvents() {
     button.addEventListener("click", () => {
       guideState.subjectsWithMarks = guideState.subjectsWithMarks.filter((row) => row.id !== button.dataset.guideRemoveSubject);
       if (!guideState.subjectsWithMarks.length) guideState.subjectsWithMarks.push(createGuideSubjectRow());
+      guideState.result = null;
       persistGuideProgress();
       renderGuide({ preserveScroll: true });
     });
@@ -1269,6 +1265,14 @@ function bindGuideEvents() {
   guideApp.querySelector("[data-guide-jump='form']")?.addEventListener("click", () => {
     guideApp.querySelector("#guide-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
+}
+
+function markGuideResultStale() {
+  const result = guideApp.querySelector("#guide-result");
+  if (!result) return;
+  result.classList.add("is-stale");
+  const submit = guideApp.querySelector('[data-guide-form] button[type="submit"]');
+  if (submit) submit.textContent = "Update my plan";
 }
 
 function applyGuideAdjustment(field) {
@@ -1306,6 +1310,7 @@ function bindGuideDeckEvents() {
       guideDeckReviewEditing = false;
       guideState.resultRequested = false;
       guideState.result = null;
+      markGuideResultStale();
       persistGuideProgress();
       replaceGuideDeck();
     });

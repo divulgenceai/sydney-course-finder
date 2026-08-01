@@ -118,6 +118,27 @@ test("returns none instead of random guidance for an unknown query", () => {
   assert.equal(result.confidence, 0);
 });
 
+test("truncated lightweight career fragments cannot become the detected job label", () => {
+  const profiles = [{
+    label: "Engineering",
+    keywords: ["engineer"],
+    careers: [],
+    degrees: ["Engineering"]
+  }];
+  const courses = [{
+    name: "Bachelor of Engineering",
+    careers: "E…, project engineering…",
+    area: "Engineering"
+  }];
+
+  const result = detectPlanningIntent({ query: "engineer", profiles, courses });
+  const punctuationOnly = detectPlanningIntent({ query: "E...", profiles, courses });
+
+  assert.equal(result.label, "Bachelor of Engineering");
+  assert.notEqual(result.label, "E…");
+  assert.equal(punctuationOnly.kind, "none");
+});
+
 test("required subject evidence outranks preparation tiers", () => {
   const result = mergeSubjectRecommendations({
     profileSubjects: [
