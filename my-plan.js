@@ -403,7 +403,7 @@ async function askMyPlanCopilot(message) {
 async function requestMyPlanReply(message, proposals) {
   const history = myPlanChatState.messages
     .filter((item) => !item.pending)
-    .slice(-8)
+    .slice(-12)
     .map((item) => ({ role: item.role, text: item.text }));
   try {
     const response = await fetch("/api/ai", {
@@ -429,9 +429,16 @@ async function requestMyPlanReply(message, proposals) {
       };
     }
   } catch {
-    // The grounded local planner below remains useful when the model is unavailable.
+    // Safe plan controls remain available while the hosted model reconnects.
   }
-  return localMyPlanReply(message, proposals, true);
+  const offline = localMyPlanReply(message, proposals, true);
+  if (proposals.length) return { ...offline, provider: "Protected plan control" };
+  if (offline && !/^I can answer why/i.test(offline.text || "")) return { ...offline, provider: "Offline plan reference" };
+  return {
+    text: "The hosted AI is temporarily unavailable, so I cannot give you a genuine conversational plan answer yet. Retry in a moment; your saved plan has not been changed.",
+    provider: "AI unavailable",
+    actions: [{ href: "./guide#guide-result", label: "Review the saved Guide" }]
+  };
 }
 
 function localMyPlanReply(message, proposals, includeFallback = true) {

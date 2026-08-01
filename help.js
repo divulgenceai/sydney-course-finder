@@ -172,7 +172,7 @@ async function requestHelpReply(message) {
   if (commandReply) return commandReply;
   const history = state.messages
     .filter((item) => !item.pending)
-    .slice(-8)
+    .slice(-12)
     .map((item) => ({ role: item.role, text: item.text }));
   try {
     const response = await fetch("/api/ai", {
@@ -195,9 +195,15 @@ async function requestHelpReply(message) {
       };
     }
   } catch {
-    // The verified local answer below keeps Help useful without an external model.
+    // Keep a clearly-labelled reference answer available while the hosted model reconnects.
   }
-  return localHelpReply(message, true);
+  const offline = localHelpReply(message, false, history);
+  if (offline) return { ...offline, provider: "Offline reference answer" };
+  return reply(
+    "The hosted AI is temporarily unavailable, so I cannot give you a genuine conversational answer to that message yet. Retry in a moment. Course Search and the planning tools still work while the model reconnects.",
+    "AI unavailable",
+    ["courses", "tools"]
+  );
 }
 
 function localContext() {
@@ -241,8 +247,17 @@ function runLocalWebsiteCommand(message) {
   );
 }
 
-function localHelpReply(message, includeFallback = true) {
+function localHelpReply(message, includeFallback = true, history = []) {
   const query = normalise(message);
+  const historyText = normalise((history || []).map((item) => item.text || "").join(" "));
+  if (/\b(?:how|where)\b.*\b(?:check|find|see|know)\b|\bhow do i check\b/.test(query)
+    && /\b(?:adjustment|adjustment factor|bonus point|selection rank)\b/.test(historyText)) {
+    return reply(
+      "Open the exact university course page, then find its entry requirements or selection-rank adjustments section. Check each adjustment category you may qualify for, such as HSC subject results, EAS, location, school or elite athlete/performer schemes. The amounts and eligibility are university- and course-specific, so confirm them on the provider page and UAC's adjustment-factors page rather than adding points to your ATAR yourself.",
+      "Verified local guidance",
+      ["courses", "calculator"]
+    );
+  }
   if (!/\b(?:selection|entry|admission|atar)\s+rank\b/.test(query)
     && /\b(?:uni|unis|university|universities)\b.*\b(?:rank|ranks|ranking|rankings|score|scores)\b|\b(?:rank|ranks|ranking|rankings)\b.*\b(?:uni|unis|university|universities)\b/.test(query)) {
     return reply(
