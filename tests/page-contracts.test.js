@@ -324,6 +324,17 @@ test("Mobile layout uses an app-style shell with bottom navigation", () => {
   assert.doesNotMatch(theme, /handleMobileNavScroll/);
 });
 
+test("Mobile course cards give descriptive UAC figures a full aligned row", () => {
+  const css = read("styles.css");
+  const mobileAlignment = css.slice(css.indexOf("/* v65 mobile course-card alignment"));
+
+  assert.match(mobileAlignment, /@media \(max-width: 600px\)/);
+  assert.match(mobileAlignment, /\.course-admission[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)\s*!important/);
+  assert.match(mobileAlignment, /\.course-admission \.admission-number[\s\S]*grid-column:\s*1 \/ -1/);
+  assert.match(mobileAlignment, /\.course-admission \.admission-number strong[\s\S]*overflow-wrap:\s*break-word/);
+  assert.match(mobileAlignment, /\.course-admission \.admission-source-links[\s\S]*display:\s*grid/);
+});
+
 test("Course search keeps every record while full details load lazily", () => {
   const htmlFiles = ["index.html", "guide.html", "pathways.html", "no-atar.html", "subject-helper.html", "subjects.html", "my-plan.html", "advisor.html"];
   const generator = read("tools/build-uac-courses-lite.js");
@@ -370,7 +381,7 @@ test("Site is installable as an Android-friendly PWA", () => {
   assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192" && icon.type === "image/png"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512" && icon.purpose === "maskable"));
   assert.match(serviceWorker, /CACHE_NAME/);
-  assert.match(serviceWorker, /sydney-course-finder-app-v64/);
+  assert.match(serviceWorker, /sydney-course-finder-app-v65/);
   assert.match(serviceWorker, /async function cacheFirstThenRefresh[\s\S]*cache\.match\(request\)/);
   assert.match(serviceWorker, /request\.mode === "navigate"[\s\S]*navigationCacheFirstExact\(request/);
   assert.match(serviceWorker, /async function navigationCacheFirstExact[\s\S]*cache\.match\(request\)/);

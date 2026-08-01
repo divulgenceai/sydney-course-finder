@@ -1,4 +1,4 @@
-const CACHE_NAME = "sydney-course-finder-app-v64";
+const CACHE_NAME = "sydney-course-finder-app-v65";
 const ROUTE_FALLBACKS = {
   "/": "/index.html",
   "/index": "/index.html",
