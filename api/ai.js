@@ -642,7 +642,10 @@ async function aiStatus() {
     provider: check.ok ? providerLabel(check.model || primaryModel(), USE_GOOGLE_SEARCH) : "AI connection failed",
     model: check.model || primaryModel(),
     status: check.ok ? "ready" : "error",
-    error: check.error || ""
+    error: check.error || "",
+    requires: check.ok
+      ? "The hosted AI is connected and ready."
+      : "Check GEMINI_API_KEY, or configure GROQ_API_KEY as the preferred hosted provider."
   };
 }
 
