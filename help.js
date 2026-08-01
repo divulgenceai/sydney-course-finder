@@ -77,8 +77,9 @@ function render() {
           <div class="help-chat-log" data-help-log aria-live="polite"></div>
           <form class="help-chat-form" data-help-form>
             <label class="sr-only" for="help-message">Your question</label>
-            <textarea id="help-message" name="message" rows="2" placeholder="Ask about ATAR, UAC, pathways, subjects or this website" required></textarea>
+            <textarea id="help-message" name="message" rows="2" placeholder="Ask about ATAR, UAC, pathways, subjects or this website" aria-describedby="help-keyboard-hint" required></textarea>
             <button type="submit">Ask</button>
+            <small class="chat-key-hint" id="help-keyboard-hint">Enter to send · Shift+Enter for a new line</small>
           </form>
           <small class="help-disclaimer">Planning support only. Confirm current course rules, dates and admission criteria with UAC or the provider.</small>
         </section>
@@ -98,6 +99,12 @@ function renderMessages() {
         <article class="help-message ${message.role}${message.pending ? " is-pending" : ""}">
           <strong>${message.role === "user" ? "You" : "Helper"}${message.provider ? `<span>${escapeHtml(message.provider)}</span>` : ""}</strong>
           <div>${formatMessage(message.text)}</div>
+          ${message.sources?.length ? `
+            <div class="help-message-sources" aria-label="Official sources">
+              <span>Official sources checked</span>
+              ${message.sources.map((source, index) => `<a href="${escapeHtml(source.uri)}" target="_blank" rel="noopener noreferrer">${index + 1}. ${escapeHtml(source.title)}</a>`).join("")}
+            </div>
+          ` : ""}
           ${message.actions?.length ? `
             <div class="help-message-actions">
               ${message.actions.map((action) => `<a href="${escapeHtml(action.href)}">${escapeHtml(action.label)}</a>`).join("")}
@@ -120,13 +127,19 @@ function bindEvents() {
   helpApp.querySelectorAll("[data-help-question]").forEach((button) => {
     button.addEventListener("click", () => askQuestion(button.dataset.helpQuestion || ""));
   });
-  helpApp.querySelector("[data-help-form]")?.addEventListener("submit", (event) => {
+  const form = helpApp.querySelector("[data-help-form]");
+  const input = form?.elements.message;
+  form?.addEventListener("submit", (event) => {
     event.preventDefault();
-    const input = event.currentTarget.elements.message;
-    const message = input.value.trim();
+    const message = String(input?.value || "").trim();
     if (!message || state.pending) return;
     input.value = "";
     askQuestion(message);
+  });
+  input?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    if (!state.pending) form?.requestSubmit();
   });
 }
 
@@ -137,7 +150,7 @@ async function askQuestion(message) {
   const pending = {
     role: "assistant",
     text: "Checking the course and UAC guidance...",
-    provider: state.status.connected ? state.status.provider : "Local course knowledge",
+    provider: state.status.connected ? state.status.provider : "Checking grounded AI",
     pending: true
   };
   state.messages.push(pending);
@@ -148,12 +161,15 @@ async function askQuestion(message) {
   pending.text = reply.text;
   pending.provider = reply.provider;
   pending.actions = reply.actions;
+  pending.sources = reply.sources;
   pending.pending = false;
   state.pending = false;
   renderMessages();
 }
 
 async function requestHelpReply(message) {
+  const commandReply = runLocalWebsiteCommand(message);
+  if (commandReply) return commandReply;
   const history = state.messages
     .filter((item) => !item.pending)
     .slice(-8)
@@ -174,13 +190,14 @@ async function requestHelpReply(message) {
       return {
         text: payload.text,
         provider: payload.provider || "Course Finder AI",
-        actions: normaliseActions(payload.actions)
+        actions: normaliseActions(payload.actions),
+        sources: normaliseSources(payload.sources)
       };
     }
   } catch {
     // The verified local answer below keeps Help useful without an external model.
   }
-  return localHelpReply(message);
+  return localHelpReply(message, true);
 }
 
 function localContext() {
@@ -203,8 +220,37 @@ function localContext() {
   };
 }
 
-function localHelpReply(message) {
+function runLocalWebsiteCommand(message) {
   const query = normalise(message);
+  const currentTheme = window.courseFinderTheme?.current?.() || document.documentElement.dataset.theme || "light";
+  let requestedTheme = "";
+  if (/\b(?:turn|switch|set|enable|use|make)\b.*\bdark\s*mode\b|\bdark\s*mode\s+(?:on|please)\b/.test(query)) requestedTheme = "dark";
+  if (/\b(?:turn|switch|set|enable|use|make)\b.*\blight\s*mode\b|\blight\s*mode\s+(?:on|please)\b/.test(query)) requestedTheme = "light";
+  if (/\b(?:toggle|change|switch)\s+(?:the\s+)?(?:colour\s+)?theme\b/.test(query) && !requestedTheme) {
+    requestedTheme = currentTheme === "dark" ? "light" : "dark";
+  }
+  if (!requestedTheme) return null;
+  if (currentTheme !== requestedTheme) window.courseFinderTheme?.toggle?.();
+  const alreadySet = currentTheme === requestedTheme;
+  return reply(
+    alreadySet
+      ? `${requestedTheme === "dark" ? "Dark" : "Light"} mode is already on.`
+      : `Done - ${requestedTheme === "dark" ? "dark" : "light"} mode is now on and saved for the rest of the website.`,
+    "Website control",
+    []
+  );
+}
+
+function localHelpReply(message, includeFallback = true) {
+  const query = normalise(message);
+  if (!/\b(?:selection|entry|admission|atar)\s+rank\b/.test(query)
+    && /\b(?:uni|unis|university|universities)\b.*\b(?:rank|ranks|ranking|rankings|score|scores)\b|\b(?:rank|ranks|ranking|rankings)\b.*\b(?:uni|unis|university|universities)\b/.test(query)) {
+    return reply(
+      "There are two different things here. Sydney Course Finder's overall /100 score is a local planning score based on course breadth, Sydney availability, study flexibility and field strength; it is not an official league table. Its specialised /100 score changes by study area. In the current overall view UNSW is placed first, University of Sydney next, while universities such as UTS can rank more strongly for a particular practical or technology-focused course. Use rankings to shortlist, then compare the actual degree, accreditation, entry rules, campus, cost and support.",
+      "Verified local guidance",
+      ["universities", "courses"]
+    );
+  }
   if (/\b(selection rank|bonus point|adjustment|adjusted atar)\b/.test(query)) {
     return reply(
       "Your ATAR does not change. A university may add eligible adjustment factors to create a selection rank for a specific course. That selection rank is what may be compared with the course entry profile, while prerequisites and other criteria still apply.",
@@ -212,7 +258,7 @@ function localHelpReply(message) {
       ["calculator", "courses"]
     );
   }
-  if (/\b(atar)\b/.test(query) && /\b(what|mean|difference|same)\b/.test(query)) {
+  if (/\b(atar)\b/.test(query) && /\b(what|whats|mean|difference|same)\b/.test(query)) {
     return reply(
       "ATAR is your rank among your age group in NSW. It is not a mark and it is not the same as a course selection rank. Course pages should be read carefully because some figures include adjustments and some show the raw ATAR of an offer-holder.",
       "Verified local guidance",
@@ -233,6 +279,13 @@ function localHelpReply(message) {
       ["courses", "guide"]
     );
   }
+  if (/\b(?:what|how|who|where)\b.*\buac\b|\buac\b.*\b(?:application|apply|offer|round|deadline|preference)\b/.test(query)) {
+    return reply(
+      "UAC is the Universities Admissions Centre. For most NSW undergraduate applications, you submit one application, order your course preferences by genuine preference, then UAC coordinates offer rounds using each institution's entry rules. Dates and preferences can change, so confirm the current application, offer-round and preference deadlines directly with UAC.",
+      "Verified local guidance",
+      ["guide", "courses"]
+    );
+  }
   if (/\b(no atar|without atar|left school|drop.?out|pathway|diploma|foundation|tafe)\b/.test(query)) {
     return reply(
       "You still have several routes: TAFE or a diploma with credit, university foundation studies, portfolio or audition entry, SRS or EAS where eligible, a related lower-entry course followed by transfer, or mature-age entry later. The best route depends on whether you finished Year 12 and the field you want.",
@@ -247,6 +300,34 @@ function localHelpReply(message) {
       ["courses", "saved"]
     );
   }
+  if (/\b(fee|fees|cost|costs|hecs|help loan|csp|commonwealth supported)\b/.test(query)) {
+    return reply(
+      "Check whether the place is Commonwealth supported before comparing fees. A CSP reduces the tuition amount and eligible students may defer the student contribution through HECS-HELP; private or full-fee places work differently. Also budget for the Student Services and Amenities Fee, equipment, placements, travel and accommodation. Confirm every figure on the official provider page because fees change by year and subject load.",
+      "Verified local guidance",
+      ["courses"]
+    );
+  }
+  if (/\b(scholarship|scholarships|financial support|eas|equity)\b/.test(query)) {
+    return reply(
+      "Check both university scholarships and UAC equity schemes. Eligibility can depend on academic results, financial hardship, location, leadership, sport, course or personal circumstances. EAS may also affect selection rank, but it does not change your ATAR. Apply early and verify documents and closing dates on the official scholarship or UAC page.",
+      "Verified local guidance",
+      ["courses", "guide"]
+    );
+  }
+  if (/\b(campus|commute|distance|travel|online|part time|full time)\b/.test(query)) {
+    return reply(
+      "Compare the actual teaching campus and timetable, not only the university name. Check door-to-door travel, required on-campus days, placement locations, online attendance rules and whether part-time study is genuinely offered for that course. Course Search can filter campus, mode and duration before you save a shortlist.",
+      "Verified local guidance",
+      ["courses"]
+    );
+  }
+  if (/\b(career|careers|job|jobs|salary|income|earn|pay)\b/.test(query)) {
+    return reply(
+      "Treat career and income ranges as broad planning signals, not guarantees. Start with the occupations a degree is accredited or commonly used for, then check placements, graduate roles, registration requirements and whether further study is needed. Income varies with experience, location, employer and specialisation.",
+      "Verified local guidance",
+      ["advisor", "guide", "courses"]
+    );
+  }
   if (/\b(where|navigate|find|tool|start|help me choose)\b/.test(query)) {
     return reply(
       "Use Course search when you know a field or course. Use Course direction when you are unsure what fits. Use Guide for a complete school-to-university plan, ATAR calculator for a mark estimate, Subject Helper for Year 11/12 choices, and Pathways or TAFE tools for alternative entry.",
@@ -254,6 +335,7 @@ function localHelpReply(message) {
       ["tools", "advisor", "guide"]
     );
   }
+  if (!includeFallback) return null;
   return reply(
     "I can give a reliable general answer, but I need one more detail to make this specific. Tell me the course or career, your school year, and what you are worried about — entry rank, subjects, commute, pathways or career outcomes.",
     "Verified local guidance",
@@ -279,10 +361,28 @@ function normaliseActions(actions) {
   }).filter(Boolean);
 }
 
+function normaliseSources(sources) {
+  if (!Array.isArray(sources)) return [];
+  const seen = new Set();
+  return sources.slice(0, 6).map((source) => {
+    try {
+      const url = new URL(String(source?.uri || source?.url || ""));
+      if (!/^https?:$/.test(url.protocol) || seen.has(url.href)) return null;
+      seen.add(url.href);
+      return {
+        uri: url.href,
+        title: String(source?.title || url.hostname).trim().slice(0, 100)
+      };
+    } catch {
+      return null;
+    }
+  }).filter(Boolean).slice(0, 4);
+}
+
 function statusLabel() {
-  if (!state.status.checked) return "Verified local guidance ready";
+  if (!state.status.checked) return "Checking grounded AI";
   if (state.status.connected) return `${state.status.provider} connected`;
-  return "Verified local guidance ready — AI can be added with a server key";
+  return "Offline guidance ready — start local AI for open questions";
 }
 
 async function checkStatus() {
@@ -301,8 +401,21 @@ function formatMessage(value) {
   const escaped = escapeHtml(value);
   return escaped
     .split(/\n{2,}/)
-    .map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br>")}</p>`)
+    .map((paragraph) => {
+      const lines = paragraph.split("\n").filter((line) => line.trim());
+      if (lines.length && lines.every((line) => /^\s*[-•]\s+/.test(line))) {
+        return `<ul>${lines.map((line) => `<li>${formatInlineMessage(line.replace(/^\s*[-•]\s+/, ""))}</li>`).join("")}</ul>`;
+      }
+      return `<p>${formatInlineMessage(paragraph).replace(/\n/g, "<br>")}</p>`;
+    })
     .join("");
+}
+
+function formatInlineMessage(value) {
+  return String(value || "")
+    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+    .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`\n]+)`/g, "<code>$1</code>");
 }
 
 function normalise(value) {

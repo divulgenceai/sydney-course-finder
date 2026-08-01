@@ -655,6 +655,11 @@
     syncMobilePrimaryCurrent();
   }
 
+  function bindPartial(scope = document) {
+    enhanceAndroidSelects(scope);
+    syncMobilePrimaryCurrent();
+  }
+
   function registerServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol === "file:") return;
@@ -716,6 +721,7 @@
     hasGuidePlanSnapshot,
     myPlanNavMarkup,
     bind,
+    bindPartial,
     decorateMobileNav,
     setupMobileNav,
     syncMobilePrimaryCurrent,

@@ -32,6 +32,15 @@ let searchLexiconWarmupScheduled = false;
 let incomeWarmupIndex = 0;
 let incomeWarmupScheduled = false;
 let renderPass = 0;
+let searchRenderFrame = 0;
+let searchRenderGeneration = 0;
+let activeCourseSearchTransition = null;
+let rankedProviders = [];
+let providerDirectoryReady = false;
+let providerHydrationScheduled = false;
+let providerHydrationIndex = 0;
+let providerHydrationActivated = false;
+let providerVisibilityObserver = null;
 
 const levelLabels = {
   undergraduate: "Undergraduate",
@@ -770,7 +779,6 @@ let sectionScrollFrame = 0;
 let activeNavigationHash = "";
 let navigationChangeTimer = 0;
 
-const rankedProviders = [...allProviders].sort((a, b) => providerOverallScore(b) - providerOverallScore(a) || a.name.localeCompare(b.name));
 const courseById = new Map(allCourses.map((course) => [course.id, course]));
 const duplicateRowsHidden = Number(meta.duplicateRowsRemoved ?? importedCourses.length - allCourses.length);
 
@@ -970,15 +978,135 @@ function renderFilterContextNote() {
   `;
 }
 
-function render() {
-  if (renderPass > 0) app.classList.add("is-state-update");
+function courseSearchViewModel() {
   const filterOptions = syncDependentCourseFilters();
   const tafeOnly = state.educationType === "TAFE / vocational";
-  const sortOptions = tafeOnly
-    ? ["Relevance", "Study area fit", "Income potential"]
-    : searchSortOptions;
-  const results = filteredCourses();
-  const searchActive = hasActiveCourseSearch();
+  return {
+    filterOptions,
+    tafeOnly,
+    sortOptions: tafeOnly ? ["Relevance", "Study area fit", "Income potential"] : searchSortOptions,
+    results: filteredCourses(),
+    searchActive: hasActiveCourseSearch()
+  };
+}
+
+function renderCourseSearchSection(view = courseSearchViewModel()) {
+  const { filterOptions, tafeOnly, sortOptions, results, searchActive } = view;
+  return `
+    <section id="courses" class="panel course-search-panel" aria-labelledby="course-search-title">
+      <div class="panel-head">
+        <div>
+          <h2 id="course-search-title">Search courses</h2>
+          <p>Start with a course, career or university, then narrow the results. Filters work even when the search box is empty.</p>
+        </div>
+        <span class="result-count" role="status" aria-live="polite">${searchActive ? `${number(results.length)} results` : "Ready to search"}</span>
+      </div>
+      <form class="search-form" data-form="search">
+        <label>
+          <span class="sr-only">Course, career or university</span>
+          ${icon("search")}
+          <input name="search" type="search" autocomplete="off" value="${escapeHtml(state.draft)}" placeholder="Try computer science, nursing, UTS or law" />
+        </label>
+        <button type="submit">Search courses</button>
+      </form>
+      ${renderSearchInterpretation()}
+      <button class="mobile-filter-toggle" type="button" data-action="toggle-course-filters" aria-expanded="${state.mobileFiltersOpen}">
+        <span>${icon("filter")} Filters${activeCourseFilterCount() ? ` (${activeCourseFilterCount()})` : ""}</span>
+        <strong>${searchActive ? `${number(results.length)} results` : "Choose filters"}</strong>
+      </button>
+      <button class="course-filter-scrim" type="button" data-action="close-course-filters" aria-label="Close filters" tabindex="${state.mobileFiltersOpen ? "0" : "-1"}"></button>
+      <div class="course-filter-panel ${state.mobileFiltersOpen ? "is-open" : ""}" data-course-filter-panel>
+        <div class="mobile-filter-head">
+          <div>
+            <strong>Filter courses</strong>
+            <span>${activeCourseFilterCount()} active</span>
+          </div>
+          <button type="button" data-action="clear">Reset</button>
+        </div>
+        <div class="filters essential-filters">
+          ${select("educationType", "Education type", educationTypeOptions, state.educationType)}
+          ${select("area", "Study area", filterOptions.areas, state.area)}
+          ${select("level", tafeOnly ? "Qualification level" : "Study level", filterOptions.levels, state.level)}
+          ${select("courseType", "Course type", filterOptions.courseTypes, state.courseType)}
+          ${tafeOnly ? select("tafeRoute", "TAFE pathway", filterOptions.tafeRoutes, state.tafeRoute) : ""}
+          ${tafeOnly ? "" : numberControl("estimatedAtar", "Estimated ATAR", state.estimatedAtar, "Optional", 0, 99.95, 0.05)}
+          ${select("provider", tafeOnly ? "Training provider" : "Provider", filterOptions.providers, state.provider)}
+          ${!tafeOnly && filterOptions.campuses.length > 1 ? select("campus", "Campus", filterOptions.campuses, state.campus) : ""}
+          ${filterOptions.durations.length > 1 ? select("duration", "Course duration", filterOptions.durations, state.duration) : ""}
+          ${filterOptions.modes.length > 1 ? select("mode", "Mode", filterOptions.modes, state.mode) : ""}
+        </div>
+        ${renderFilterContextNote()}
+        <details class="advanced-filter-disclosure" ${state.advancedFiltersOpen ? "open" : ""}>
+          <summary>Advanced filters <span>${advancedCourseFilterCount() ? `${advancedCourseFilterCount()} active` : "Optional"}</span></summary>
+          <div class="filters advanced-filters">
+            ${state.educationType === "All education types" ? select("tafeRoute", "TAFE route", filterOptions.tafeRoutes, state.tafeRoute) : ""}
+            ${tafeOnly ? "" : select("degreeStructure", "Degree structure", degreeStructureOptions, state.degreeStructure)}
+            ${tafeOnly ? "" : select("prerequisite", "Prerequisites", prerequisiteOptions, state.prerequisite)}
+            ${tafeOnly ? "" : select("pathway", "Pathways", pathwayFilterOptions, state.pathway)}
+            ${tafeOnly ? "" : select("guaranteedEntry", "Guaranteed entry", guaranteedEntryOptions, state.guaranteedEntry)}
+            ${select("income", "Income goal", incomeOptions, state.income)}
+            ${select("sort", "Sort by", sortOptions, state.sort)}
+            ${tafeOnly ? "" : textControl("locationQuery", "Distance from", state.locationQuery, "Sydney suburb or postcode")}
+          </div>
+          ${tafeOnly ? "" : renderDistanceNote()}
+        </details>
+        <div class="filter-foot">
+          <button class="clear-btn" type="button" data-action="clear">Reset all filters</button>
+          <small>Admission figures are historical and may change each intake.</small>
+        </div>
+        <button class="mobile-filter-done" type="button" data-action="close-course-filters">Show ${number(results.length)} results</button>
+      </div>
+      <div class="search-trust-note">
+        <strong>Read entry figures carefully.</strong>
+        <span>University selection ranks may include adjustments. TAFE courses do not use an ATAR, but can still have age, literacy, licence, portfolio, workplace or prior-study requirements.</span>
+      </div>
+      <div class="course-results-region" aria-busy="${state.processing === "search"}">
+        ${searchActive && results.length ? renderSearchFieldLeaders(results) : ""}
+        <div class="course-list">
+          ${renderProcessStrip("search", "Searching courses")}
+          ${searchActive && results.length ? results.slice(0, state.visible).map((course, index) => renderCourse(course, "", index, true)).join("") : ""}
+          ${searchActive && !results.length ? renderNoResults() : ""}
+          ${!searchActive ? renderCourseSearchStart() : ""}
+          ${results.length > state.visible ? `<button class="load-more" type="button" data-action="more">Show more</button>` : ""}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderCourseSearchOnly() {
+  const current = app.querySelector("#courses");
+  if (!current) {
+    render();
+    return;
+  }
+  const activeElement = current.contains(document.activeElement) ? document.activeElement : null;
+  const activeAction = activeElement?.getAttribute("data-action") || "";
+  const activeName = activeElement?.getAttribute("name") || "";
+  const filterScrollTop = current.querySelector("[data-course-filter-panel]")?.scrollTop || 0;
+  const template = document.createElement("template");
+  template.innerHTML = renderCourseSearchSection().trim();
+  const next = template.content.firstElementChild;
+  if (!next) return;
+  current.replaceWith(next);
+  bindEvents({ searchOnly: true });
+  window.courseFinderTheme?.bindPartial?.(next);
+  updateHashNavCurrent();
+  const nextFilterPanel = next.querySelector("[data-course-filter-panel]");
+  if (nextFilterPanel && filterScrollTop) nextFilterPanel.scrollTop = filterScrollTop;
+  const focusSelector = activeAction
+    ? `[data-action="${CSS.escape(activeAction)}"]`
+    : activeName
+      ? `[name="${CSS.escape(activeName)}"]`
+      : "";
+  const nextFocus = focusSelector ? next.querySelector(focusSelector) : null;
+  nextFocus?.focus?.({ preventScroll: true });
+}
+
+function render() {
+  if (renderPass > 0) app.classList.add("is-state-update");
+  const courseSearchView = courseSearchViewModel();
+  const { filterOptions, tafeOnly, sortOptions, results, searchActive } = courseSearchView;
   const savedCourses = savedCourseList();
   const compareCourses = compareCourseList();
   app.innerHTML = `
@@ -1113,16 +1241,7 @@ function render() {
       </section>
 
       <section id="providers" class="panel providers-home-panel">
-        <div class="panel-head">
-          <div>
-            <h2>Universities</h2>
-            <p>Browse Sydney universities and providers, with an overall site profile and a separate score for the area each provider is strongest in.</p>
-          </div>
-          <span>${allProviders.length} providers</span>
-        </div>
-        ${renderProviderScoreExplainer()}
-        ${renderTopProviderBlock()}
-        <div class="provider-grid">${rankedProviders.map(renderProvider).join("")}</div>
+        ${renderProviderDirectoryContent()}
       </section>
 
       <section id="saved" class="panel saved-panel">
@@ -1185,7 +1304,77 @@ function render() {
   `;
   bindEvents();
   window.courseFinderTheme?.bind?.(app);
+  scheduleProviderDirectoryHydration();
   renderPass += 1;
+}
+
+function renderProviderDirectoryContent() {
+  return `
+    <div class="panel-head">
+      <div>
+        <h2>Universities</h2>
+        <p>Browse Sydney universities and providers, with an overall site profile and a separate score for the area each provider is strongest in.</p>
+      </div>
+      <span>${allProviders.length} providers</span>
+    </div>
+    ${providerDirectoryReady ? `
+      ${renderProviderScoreExplainer()}
+      ${renderTopProviderBlock()}
+      <div class="provider-grid">${rankedProviders.map(renderProvider).join("")}</div>
+    ` : `
+      <div class="provider-directory-loading" role="status">
+        <strong>University profiles are preparing</strong>
+        <span>Course search is ready now. Detailed overall and specialised scores load when the browser is idle.</span>
+      </div>
+    `}
+  `;
+}
+
+function scheduleProviderDirectoryHydration() {
+  if (providerDirectoryReady || providerHydrationScheduled) return;
+  if (isMobileViewport() && !providerHydrationActivated && "IntersectionObserver" in window) {
+    if (providerVisibilityObserver) return;
+    const section = app.querySelector("#providers");
+    if (!section) return;
+    providerVisibilityObserver = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      providerVisibilityObserver?.disconnect();
+      providerVisibilityObserver = null;
+      providerHydrationActivated = true;
+      scheduleProviderDirectoryHydration();
+    }, { rootMargin: "480px 0px" });
+    providerVisibilityObserver.observe(section);
+    return;
+  }
+  providerHydrationActivated = true;
+  providerHydrationScheduled = true;
+  const runChunk = (deadline = { timeRemaining: () => 8, didTimeout: true }) => {
+    providerHydrationScheduled = false;
+    const startedAt = performance.now();
+    while (providerHydrationIndex < allProviders.length) {
+      providerProfile(allProviders[providerHydrationIndex]);
+      providerHydrationIndex += 1;
+      const outOfBudget = performance.now() - startedAt > 12;
+      const idleBudgetLow = !deadline.didTimeout && deadline.timeRemaining() < 3;
+      if (outOfBudget || idleBudgetLow) break;
+    }
+    if (providerHydrationIndex < allProviders.length) {
+      scheduleProviderDirectoryHydration();
+      return;
+    }
+    rankedProviders = [...allProviders].sort((a, b) => providerOverallScore(b) - providerOverallScore(a) || a.name.localeCompare(b.name));
+    providerDirectoryReady = true;
+    const section = app.querySelector("#providers");
+    if (!section) return;
+    section.innerHTML = renderProviderDirectoryContent();
+    bindProviderTopicControl(section);
+    window.courseFinderTheme?.bindPartial?.(section);
+  };
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(runChunk, { timeout: 1200 });
+  } else {
+    window.setTimeout(() => runChunk(), 48);
+  }
 }
 
 function formatImportDate() {
@@ -1349,33 +1538,51 @@ function renderProcessStrip(key, label) {
 function runProcessing(key, action, after = null) {
   const x = window.scrollX;
   const y = window.scrollY;
-  const commit = () => {
-    action();
-    state.processing = "";
-    render();
-  };
+  const renderUpdate = key === "search" ? renderCourseSearchOnly : render;
   const restore = () => {
     window.scrollTo(x, y);
     if (after) after();
   };
 
-  if (key === "search" && !isMobileViewport() && !prefersReducedMotion() && typeof document.startViewTransition === "function") {
+  if (key === "search") {
+    action();
+    state.processing = "";
+    const generation = ++searchRenderGeneration;
+    if (searchRenderFrame) cancelAnimationFrame(searchRenderFrame);
     app.classList.add("is-results-updating");
     document.documentElement.classList.add("is-course-results-transition");
-    const transition = document.startViewTransition(commit);
-    transition.updateCallbackDone.then(
-      () => requestAnimationFrame(restore),
-      () => requestAnimationFrame(restore)
-    );
-    const cleanUpTransition = () => {
-      app.classList.remove("is-results-updating");
-      document.documentElement.classList.remove("is-course-results-transition");
-    };
-    transition.finished.then(cleanUpTransition, cleanUpTransition);
+    searchRenderFrame = requestAnimationFrame(() => {
+      searchRenderFrame = 0;
+      if (generation !== searchRenderGeneration) return;
+      const cleanUpTransition = () => {
+        if (generation !== searchRenderGeneration) return;
+        app.classList.remove("is-results-updating");
+        document.documentElement.classList.remove("is-course-results-transition");
+        activeCourseSearchTransition = null;
+      };
+      if (!isMobileViewport() && !prefersReducedMotion() && typeof document.startViewTransition === "function") {
+        activeCourseSearchTransition?.skipTransition?.();
+        const transition = document.startViewTransition(renderUpdate);
+        activeCourseSearchTransition = transition;
+        transition.updateCallbackDone.then(
+          () => requestAnimationFrame(restore),
+          () => requestAnimationFrame(restore)
+        );
+        transition.finished.then(cleanUpTransition, cleanUpTransition);
+        return;
+      }
+      renderUpdate();
+      requestAnimationFrame(() => {
+        restore();
+        cleanUpTransition();
+      });
+    });
     return;
   }
 
-  commit();
+  action();
+  state.processing = "";
+  renderUpdate();
   requestAnimationFrame(restore);
 }
 
@@ -1537,47 +1744,35 @@ function filteredCourses() {
     origin ? origin.label : cleanSearchText(state.locationQuery)
   ].join("|");
   if (filteredCourseCache.key === cacheKey) return filteredCourseCache.results;
+  const needsAreaScore = state.sort === "Study area fit"
+    || (state.sort === "Relevance" && state.area !== "All study areas");
+  const needsIncomeScore = state.sort === "Income potential"
+    || (incomeOnly && state.sort === "Relevance");
   const ranked = allCourses
     .filter((course) => {
-      const queryMatch = !query || courseSearchMatch(course, queryPlan);
-      const educationTypeMatch = courseMatchesEducationType(course, state.educationType);
-      const tafeRouteMatch = courseMatchesTafeRoute(course, state.tafeRoute);
-      const levelMatch = courseMatchesLevelFilter(course, state.level);
-      const typeMatch = state.courseType === "All course types" || courseTypeLabel(course) === state.courseType;
-      const areaMatch = courseMatchesStudyArea(course, state.area);
-      const providerMatch = state.provider === "All providers" || course.university === state.provider;
-      const campusMatch = state.campus === "All campuses" || course.campus === state.campus;
-      const modeMatch = state.mode === "All modes" || (course.modes || []).includes(state.mode);
-      const incomeMatch = courseMeetsIncome(course, state.income);
-      const atarMatch = courseMatchesEstimatedAtar(course);
-      const durationMatch = courseMatchesDuration(course, state.duration);
-      const prerequisiteMatch = courseMatchesPrerequisiteFilter(course, state.prerequisite);
-      const pathwayMatch = courseMatchesPathwayFilter(course, state.pathway);
-      const guaranteedMatch = courseMatchesGuaranteedEntryFilter(course, state.guaranteedEntry);
-      const structureMatch = courseMatchesDegreeStructure(course, state.degreeStructure);
-      return queryMatch
-        && educationTypeMatch
-        && tafeRouteMatch
-        && levelMatch
-        && typeMatch
-        && areaMatch
-        && providerMatch
-        && campusMatch
-        && modeMatch
-        && incomeMatch
-        && atarMatch
-        && durationMatch
-        && prerequisiteMatch
-        && pathwayMatch
-        && guaranteedMatch
-        && structureMatch;
+      if (query && !courseSearchMatch(course, queryPlan)) return false;
+      if (!courseMatchesEducationType(course, state.educationType)) return false;
+      if (!courseMatchesTafeRoute(course, state.tafeRoute)) return false;
+      if (!courseMatchesLevelFilter(course, state.level)) return false;
+      if (state.courseType !== "All course types" && courseTypeLabel(course) !== state.courseType) return false;
+      if (!courseMatchesStudyArea(course, state.area)) return false;
+      if (state.provider !== "All providers" && course.university !== state.provider) return false;
+      if (state.campus !== "All campuses" && course.campus !== state.campus) return false;
+      if (state.mode !== "All modes" && !(course.modes || []).includes(state.mode)) return false;
+      if (!courseMeetsIncome(course, state.income)) return false;
+      if (!courseMatchesEstimatedAtar(course)) return false;
+      if (!courseMatchesDuration(course, state.duration)) return false;
+      if (!courseMatchesPrerequisiteFilter(course, state.prerequisite)) return false;
+      if (!courseMatchesPathwayFilter(course, state.pathway)) return false;
+      if (!courseMatchesGuaranteedEntryFilter(course, state.guaranteedEntry)) return false;
+      return courseMatchesDegreeStructure(course, state.degreeStructure);
     })
     .map((course) => ({
       course,
       score: searchScore(course, queryPlan),
-      areaScore: studyAreaSortScore(course),
+      areaScore: needsAreaScore ? studyAreaSortScore(course) : 0,
       distance: origin ? courseDistanceKm(course, origin) : null,
-      incomeScore: courseIncomeOutcomes(course)[0]?.max || 0
+      incomeScore: needsIncomeScore ? (courseIncomeOutcomes(course)[0]?.max || 0) : 0
     }))
     .sort((a, b) => compareSearchEntries(a, b))
     .map((entry) => entry.course);
@@ -3412,9 +3607,12 @@ function formatAskCoursesWithIncome(entries) {
   }).join("; ");
 }
 
-function bindEvents() {
-  bindHashNavLinks();
-  setupSectionScrollSpy();
+function bindEvents(options = {}) {
+  const searchOnly = Boolean(options.searchOnly);
+  if (!searchOnly) {
+    bindHashNavLinks();
+    setupSectionScrollSpy();
+  }
 
   app.querySelector('[data-form="search"]')?.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -3659,9 +3857,10 @@ function bindEvents() {
     });
   });
 
-  bindCourseActionButtons(app);
+  const courseInteractionScope = searchOnly ? app.querySelector("#courses") : app;
+  bindCourseActionButtons(courseInteractionScope || app);
 
-  app.querySelectorAll(".course-item[data-course-id]").forEach((courseItem) => {
+  (courseInteractionScope || app).querySelectorAll(".course-item[data-course-id]").forEach((courseItem) => {
     const initialCourse = courseById.get(courseItem.dataset.courseId);
     courseItem.querySelector("[data-toggle-course]")?.addEventListener("click", () => {
       const id = courseItem.dataset.courseId;
@@ -3672,6 +3871,8 @@ function bindEvents() {
     });
     if (state.openCourseIds.has(courseItem.dataset.courseId) && initialCourse) hydrateCourseDetail(courseItem, initialCourse);
   });
+
+  if (searchOnly) return;
 
   app.querySelectorAll("[data-remove-compare]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -3730,10 +3931,7 @@ function bindEvents() {
     });
   });
 
-  app.querySelector('[data-action="providerTopic"]')?.addEventListener("change", (event) => {
-    state.providerTopic = event.target.value;
-    render();
-  });
+  bindProviderTopicControl(app);
 
   app.querySelector('[data-action="add-subject"]')?.addEventListener("change", (event) => {
     if (event.target.value) {
@@ -3814,6 +4012,17 @@ function bindEvents() {
     pending.provider = reply.provider;
     pending.pending = false;
     renderPreservingViewport();
+  });
+}
+
+function bindProviderTopicControl(root) {
+  root.querySelector('[data-action="providerTopic"]')?.addEventListener("change", (event) => {
+    state.providerTopic = event.target.value;
+    const section = app.querySelector("#providers");
+    if (!section || !providerDirectoryReady) return;
+    section.innerHTML = renderProviderDirectoryContent();
+    bindProviderTopicControl(section);
+    window.courseFinderTheme?.bindPartial?.(section);
   });
 }
 

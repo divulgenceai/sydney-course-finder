@@ -213,7 +213,33 @@ test("Tools, Help and TAFE tools are dedicated lightweight pages", () => {
   }
 });
 
-test("AI endpoint is model-agnostic, retrieval-grounded and server-key only", () => {
+test("Help answers common university questions and can safely control the theme", () => {
+  const help = read("help.js");
+
+  assert.match(help, /Sydney Course Finder's overall \/100 score is a local planning score/);
+  assert.match(help, /UNSW is placed first, University of Sydney next/);
+  assert.match(help, /function runLocalWebsiteCommand/);
+  assert.match(help, /Website control/);
+  assert.match(help, /courseFinderTheme\?\.toggle/);
+  const modelRequest = help.indexOf('fetch("/api/ai"');
+  const offlineFallback = help.indexOf("return localHelpReply(message, true)");
+  assert.ok(modelRequest > -1 && offlineFallback > modelRequest, "Help should ask the model before using its offline fallback");
+  assert.match(help, /normaliseSources/);
+  assert.match(help, /Official sources checked/);
+});
+
+test("Help and My Plan use Enter to send while Shift+Enter keeps a new line", () => {
+  for (const file of ["help.js", "my-plan.js"]) {
+    const source = read(file);
+    assert.match(source, /addEventListener\("keydown"/);
+    assert.match(source, /event\.key !== "Enter" \|\| event\.shiftKey \|\| event\.isComposing/);
+    assert.match(source, /event\.preventDefault\(\)/);
+    assert.match(source, /form\?\.requestSubmit\(\)/);
+    assert.match(source, /Enter to send · Shift\+Enter for a new line/);
+  }
+});
+
+test("AI endpoint supports free local inference, site retrieval and restricted official research", () => {
   const endpoint = read("api/ai.js");
   const env = read(".env.example");
   const advisor = read("advisor.js");
@@ -221,10 +247,16 @@ test("AI endpoint is model-agnostic, retrieval-grounded and server-key only", ()
   assert.match(endpoint, /GROQ_API_KEY/);
   assert.match(endpoint, /GEMINI_API_KEY/);
   assert.match(endpoint, /openai\/gpt-oss-20b/);
+  assert.match(endpoint, /qwen3-vl:8b/);
+  assert.match(endpoint, /callOllama/);
   assert.match(endpoint, /findRelevantCourses/);
+  assert.match(endpoint, /findRelevantTafeCourses/);
   assert.match(endpoint, /buildReferencePack/);
+  assert.match(endpoint, /collectOfficialResearch/);
+  assert.match(endpoint, /isTrustedOfficialUrl/);
   assert.match(endpoint, /suggestedActions/);
   assert.match(endpoint, /consumeRateLimit/);
+  assert.match(env, /OLLAMA_MODEL/);
   assert.match(env, /GROQ_API_KEY/);
   assert.match(env, /GEMINI_API_KEY/);
   assert.match(advisor, /advisorChatReply\(message\)/);
@@ -328,7 +360,7 @@ test("Site is installable as an Android-friendly PWA", () => {
   assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192" && icon.type === "image/png"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512" && icon.purpose === "maskable"));
   assert.match(serviceWorker, /CACHE_NAME/);
-  assert.match(serviceWorker, /sydney-course-finder-app-v55/);
+  assert.match(serviceWorker, /sydney-course-finder-app-v64/);
   assert.match(serviceWorker, /async function cacheFirstThenRefresh[\s\S]*cache\.match\(request\)/);
   assert.match(serviceWorker, /request\.mode === "navigate"[\s\S]*navigationCacheFirstExact\(request/);
   assert.match(serviceWorker, /async function navigationCacheFirstExact[\s\S]*cache\.match\(request\)/);
@@ -403,8 +435,8 @@ test("Pages avoid render-blocking third-party font requests", () => {
   for (const file of htmlFiles) {
     const html = read(file);
     assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
-    assert.match(html, /asset-refresh-v55\.js/);
-    assert.match(html, /theme\.js\?v=55/);
+    assert.match(html, /asset-refresh-v64\.js/);
+    assert.match(html, /theme\.js\?v=64/);
     assert.match(html, /styles\.css\?v=\d+/);
   }
 });
@@ -437,7 +469,7 @@ test("Mobile navigation and search avoid expensive full-page motion", () => {
 
   assert.match(theme, /history\.pushState\(null,\s*"",\s*hash\)/);
   assert.match(theme, /scrollIntoView\(\{\s*behavior:\s*"auto"/);
-  assert.match(app, /key === "search" && !isMobileViewport\(\)/);
+  assert.match(app, /if \(!isMobileViewport\(\) && !prefersReducedMotion\(\)/);
   assert.match(css, /\/\* v41 mobile performance and focus/);
   assert.match(css, /scroll-behavior:\s*auto\s*!important/);
   assert.doesNotMatch(index, /subject-helper-logic\.js/);
@@ -954,8 +986,10 @@ test("Page and result transitions use smooth non-refresh animations", () => {
   const scopedMotion = css.match(/\/\* v38 scoped motion:[\s\S]*$/)?.[0] || "";
 
   assert.match(scopedMotion, /main,\s*\n\.hero,\s*\n\.panel[\s\S]*animation:\s*none !important/);
-  assert.match(scopedMotion, /@view-transition\s*{\s*\n\s*navigation:\s*auto/);
-  assert.match(scopedMotion, /view-transition-name:\s*app-page-content/);
+  assert.doesNotMatch(scopedMotion, /@view-transition\s*{\s*\n\s*navigation:\s*auto/);
+  assert.doesNotMatch(scopedMotion, /view-transition-name:\s*app-page-content/);
+  assert.match(scopedMotion, /animation:\s*safeDocumentArrival\s+150ms/);
+  assert.match(scopedMotion, /\.topbar \.topnav > a\[aria-current="page"\][\s\S]*border:\s*0\s*!important/);
   assert.match(scopedMotion, /view-transition-name:\s*subject-helper-results/);
   assert.match(scopedMotion, /view-transition-name:\s*pathway-routes/);
   assert.match(scopedMotion, /view-transition-name:\s*pathway-providers/);
@@ -975,6 +1009,61 @@ test("Page and result transitions use smooth non-refresh animations", () => {
   assert.match(pathways, /is-pathway-results-transition/);
   assert.doesNotMatch(pathways, /is-refreshing-results/);
   assert.match(subjectHelper, /is-subject-results-transition/);
+});
+
+test("Course search updates only its own panel without rebuilding the full homepage", () => {
+  const source = read("app.js");
+  const scopedRender = source.match(/function renderCourseSearchOnly\(\)[\s\S]*?\n}/)?.[0] || "";
+  const processing = source.match(/function runProcessing\([\s\S]*?\n}/)?.[0] || "";
+
+  assert.match(source, /function renderCourseSearchSection/);
+  assert.match(scopedRender, /current\.replaceWith\(next\)/);
+  assert.match(scopedRender, /bindEvents\(\{ searchOnly: true \}\)/);
+  assert.match(scopedRender, /courseFinderTheme\?\.bindPartial\?\.\(next\)/);
+  assert.match(scopedRender, /focus\?\.\(\{ preventScroll: true \}\)/);
+  assert.doesNotMatch(scopedRender, /app\.innerHTML/);
+  assert.match(processing, /key === "search" \? renderCourseSearchOnly : render/);
+  assert.match(source, /if \(searchOnly\) return/);
+});
+
+test("Partial results keep the existing mobile navigation mounted", () => {
+  const app = read("app.js");
+  const theme = read("theme.js");
+
+  assert.match(theme, /function bindPartial\(scope = document\)/);
+  assert.match(theme, /bindPartial,/);
+  assert.doesNotMatch(app, /courseFinderTheme\?\.bind\?\.\(next\)/);
+});
+
+test("Course search short-circuits rejected records and defers optional scoring", () => {
+  const source = read("app.js");
+  const filtered = source.match(/function filteredCourses\(\)[\s\S]*?\n}/)?.[0] || "";
+
+  assert.match(filtered, /if \(query && !courseSearchMatch\(course, queryPlan\)\) return false/);
+  assert.match(filtered, /needsAreaScore \? studyAreaSortScore\(course\) : 0/);
+  assert.match(filtered, /needsIncomeScore \? \(courseIncomeOutcomes\(course\)\[0\]\?\.max \|\| 0\) : 0/);
+});
+
+test("Rapid course-filter changes coalesce into the next animation frame", () => {
+  const source = read("app.js");
+  const processing = source.match(/function runProcessing\([\s\S]*?\n}/)?.[0] || "";
+
+  assert.match(source, /let searchRenderFrame = 0/);
+  assert.match(processing, /cancelAnimationFrame\(searchRenderFrame\)/);
+  assert.match(processing, /searchRenderFrame = requestAnimationFrame/);
+  assert.match(processing, /activeCourseSearchTransition\?\.skipTransition\?\.\(\)/);
+});
+
+test("Detailed university profiles hydrate in idle chunks after search is ready", () => {
+  const source = read("app.js");
+
+  assert.match(source, /function scheduleProviderDirectoryHydration/);
+  assert.match(source, /window\.requestIdleCallback\(runChunk/);
+  assert.match(source, /performance\.now\(\) - startedAt > 12/);
+  assert.match(source, /new IntersectionObserver/);
+  assert.match(source, /rootMargin: "480px 0px"/);
+  assert.match(source, /providerDirectoryReady = true/);
+  assert.doesNotMatch(source, /const rankedProviders = \[\.\.\.allProviders\]/);
 });
 
 test("Pathways result refresh does not restart opacity-zero card animations", () => {
@@ -1007,6 +1096,50 @@ test("My Plan page reads the saved Guide result as a linear plan", () => {
   assert.match(myPlan, /SEEK|LinkedIn|GradConnection|Prosple/);
 });
 
+test("Subject Helper exposes every detected assumed-knowledge subject", () => {
+  const source = read("subject-helper.js");
+  const css = read("styles.css");
+
+  assert.match(source, /const assumedNames = assumedSubjects\.map/);
+  assert.match(source, /class="subject-check-list"/);
+  assert.doesNotMatch(source, /assumedSubjects\.length > 3/);
+  assert.doesNotMatch(source, /\+ \$\{assumedSubjects\.length - 3\} more/);
+  assert.match(css, /\.subject-check-list li/);
+});
+
+test("My Plan copilot reads plan context and requires approval for allowlisted Guide changes", () => {
+  const myPlan = read("my-plan.js");
+  const endpoint = read("api/ai.js");
+
+  assert.match(myPlan, /myPlanActionDefinitions = Object\.freeze/);
+  assert.match(myPlan, /type:\s*"plan"/);
+  assert.match(myPlan, /myPlanAiContext/);
+  assert.match(myPlan, /data-plan-apply/);
+  assert.match(myPlan, /applyMyPlanProposal/);
+  assert.match(myPlan, /proposal\.status !== "pending"/);
+  assert.match(myPlan, /localStorage\.removeItem\(myPlanStorageKeys\.guidePlan\)/);
+  assert.match(myPlan, /Review and rebuild Guide/);
+  assert.doesNotMatch(myPlan, /\beval\s*\(|new Function\s*\(/);
+  assert.match(endpoint, /value === "plan" \? "plan"/);
+  assert.match(endpoint, /Never claim a change has already been applied/);
+  assert.match(endpoint, /function buildProtectedPlanReply/);
+  assert.match(endpoint, /Nothing has been changed yet/);
+  assert.match(endpoint, /That order is a preference ladder/);
+});
+
+test("My Plan copilot explains the saved UAC order before generic why answers", () => {
+  const myPlan = read("my-plan.js");
+  const uacAnswerPosition = myPlan.indexOf("That order is a preference ladder");
+  const genericWhyPosition = myPlan.indexOf("if (/\\bwhy\\b|recommend|picked|chosen|match/");
+
+  assert.ok(uacAnswerPosition > -1);
+  assert.ok(genericWhyPosition > -1);
+  assert.ok(uacAnswerPosition < genericWhyPosition);
+  assert.match(myPlan, /uniquePlanCourses/);
+  assert.match(myPlan, /Current shortlist:/);
+  assert.match(myPlan, /projected ATAR/);
+});
+
 test("Guide exposes manual adjustment controls with impact warnings", () => {
   const source = read("guide.js");
   assert.match(source, /renderGuidePlanAdjustments/);
@@ -1015,6 +1148,21 @@ test("Guide exposes manual adjustment controls with impact warnings", () => {
   assert.match(source, /addEventListener\("blur"/);
   assert.match(source, /changes the recommendation/i);
   assert.match(source, /does not break/i);
+});
+
+test("Guide projections stay readable and invalidate stale plans immediately", () => {
+  const source = read("guide.js");
+  const css = read("styles.css");
+
+  assert.match(source, /class="guide-estimate-subject-name"/);
+  assert.match(source, /neutral scaling baseline/);
+  assert.match(source, /markGuideResultStale/);
+  assert.match(source, /Your answers changed/);
+  assert.doesNotMatch(source, /guideState\.result\s*=\s*buildGuidePlan\(\)[\s\S]{0,220}},\s*220\)/);
+  assert.match(source, /<nav class="topnav" aria-label="Main"><\/nav>/);
+  assert.match(css, /\.guide-estimate-list\s*{[\s\S]*?grid-template-columns:\s*repeat\(5,/);
+  assert.match(css, /\.guide-estimate-subject-name\s*{[\s\S]*?font-size:\s*15px/);
+  assert.doesNotMatch(css, /\.guide-estimate-panel strong\s*{[\s\S]*?font-size:\s*30px/);
 });
 
 test("Page entrance animation keeps panels readable on first paint", () => {

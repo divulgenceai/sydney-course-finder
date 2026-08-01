@@ -567,8 +567,8 @@ function renderSubjectResults(query, profile, plan, matches) {
       </div>
 
       <div class="subject-check-grid">
-        ${renderSubjectCheckCard("Entry blocker check", summary.requiredTitle, summary.requiredCopy, summary.requiredSubjects.length ? "warning" : "safe")}
-        ${renderSubjectCheckCard("Assumed knowledge", summary.assumedTitle, summary.assumedCopy)}
+        ${renderSubjectCheckCard("Entry blocker check", summary.requiredTitle, summary.requiredCopy, summary.requiredSubjects.length ? "warning" : "safe", summary.requiredSubjects)}
+        ${renderSubjectCheckCard("Assumed knowledge", summary.assumedTitle, summary.assumedCopy, "", summary.assumedSubjects)}
         ${renderSubjectCheckCard("Best move", "Choose for fit and strength", "Confirm the exact UAC or university page, then pick subjects you can score well in and actually use at uni.")}
       </div>
 
@@ -624,7 +624,7 @@ function subjectPlanSummary(plan, matches) {
   const requiredSubjects = allItems.filter((item) => Number(item.evidence?.required || 0) > 0);
   const assumedSubjects = allItems.filter((item) => Number(item.evidence?.assumed || 0) > 0);
   const signals = allItems.filter((item) => Number(item.evidence?.required || 0) || Number(item.evidence?.assumed || 0));
-  const assumedNames = assumedSubjects.slice(0, 3).map((item) => item.name);
+  const assumedNames = assumedSubjects.map((item) => item.name);
   const evidenceLabel = matches.length >= 8 || signals.length >= 3 ? "Good evidence" : matches.length ? "Some evidence" : "Light evidence";
   return {
     requiredSubjects,
@@ -633,13 +633,13 @@ function subjectPlanSummary(plan, matches) {
     evidenceLabel,
     evidenceTone: evidenceLabel === "Good evidence" ? "good" : "some",
     requiredTitle: requiredSubjects.length
-      ? requiredSubjects.slice(0, 3).map((item) => item.name).join(", ")
+      ? `${requiredSubjects.length} required subject${requiredSubjects.length === 1 ? "" : "s"} found`
       : "No blocking HSC subject found",
     requiredCopy: requiredSubjects.length
       ? "These subjects appeared in prerequisite fields. Treat them as must-confirm before choosing."
       : "The matched UAC records do not show a subject you must have for entry. Assumed knowledge still affects readiness.",
     assumedTitle: assumedSubjects.length
-      ? `${assumedNames.join(", ")}${assumedSubjects.length > 3 ? ` + ${assumedSubjects.length - 3} more` : ""}`
+      ? `${assumedNames.length} preparation subject${assumedNames.length === 1 ? "" : "s"} found`
       : "No assumed knowledge detected",
     assumedCopy: assumedSubjects.length
       ? "Assumed knowledge is preparation. Missing it usually means extra work or a bridging course, not automatic rejection."
@@ -663,11 +663,16 @@ function uniqueSubjectItems(items) {
   });
 }
 
-function renderSubjectCheckCard(label, title, copy, tone = "") {
+function renderSubjectCheckCard(label, title, copy, tone = "", subjects = []) {
   return `
     <article class="subject-check-card ${escapeHtml(tone)}">
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(title)}</strong>
+      ${subjects.length ? `
+        <ul class="subject-check-list">
+          ${subjects.map((item) => `<li>${escapeHtml(item.name)}</li>`).join("")}
+        </ul>
+      ` : ""}
       <p>${escapeHtml(copy)}</p>
     </article>
   `;
