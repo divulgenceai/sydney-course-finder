@@ -664,7 +664,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol === "file:") return;
     navigator.serviceWorker
-      .register("/sw.js", { scope: "/", updateViaCache: "none" })
+      .register("/release-v65/sw.js", { scope: "/", updateViaCache: "none" })
       .then(() => undefined)
       .catch(() => {
       // The site still works if a local browser blocks service worker registration.

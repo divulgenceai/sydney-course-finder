@@ -324,8 +324,9 @@ test("Mobile layout uses an app-style shell with bottom navigation", () => {
   assert.doesNotMatch(theme, /handleMobileNavScroll/);
 });
 
-test("Mobile course cards give descriptive UAC figures a full aligned row", () => {
+test("Mobile course cards adapt UAC figures without repeating secondary detail", () => {
   const css = read("styles.css");
+  const app = read("app.js");
   const mobileAlignment = css.slice(css.indexOf("/* v65 mobile course-card alignment"));
 
   assert.match(mobileAlignment, /@media \(max-width: 600px\)/);
@@ -333,6 +334,10 @@ test("Mobile course cards give descriptive UAC figures a full aligned row", () =
   assert.match(mobileAlignment, /\.course-admission \.admission-number[\s\S]*grid-column:\s*1 \/ -1/);
   assert.match(mobileAlignment, /\.course-admission \.admission-number strong[\s\S]*overflow-wrap:\s*break-word/);
   assert.match(mobileAlignment, /\.course-admission \.admission-source-links[\s\S]*display:\s*grid/);
+  assert.match(app, /compactFigureLayout = \[selectionRank, rawAtar\]\.every/);
+  assert.match(app, /has-compact-figures/);
+  assert.match(mobileAlignment, /\.course-admission\.has-compact-figures[\s\S]*grid-template-columns:\s*repeat\(2/);
+  assert.match(mobileAlignment, /\.course-result-card \.admission-definition,[\s\S]*\.course-result-card \.course-source-line[\s\S]*display:\s*none/);
 });
 
 test("Course search keeps every record while full details load lazily", () => {
@@ -367,6 +372,7 @@ test("Site is installable as an Android-friendly PWA", () => {
   const serviceWorker = read("sw.js");
   const theme = read("theme.js");
   const server = read("server.js");
+  const vercel = read("vercel.json");
 
   for (const file of htmlFiles) {
     const html = read(file);
@@ -381,7 +387,10 @@ test("Site is installable as an Android-friendly PWA", () => {
   assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192" && icon.type === "image/png"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512" && icon.purpose === "maskable"));
   assert.match(serviceWorker, /CACHE_NAME/);
-  assert.match(serviceWorker, /sydney-course-finder-app-v65/);
+  assert.match(serviceWorker, /sydney-course-finder-app-v66/);
+  assert.match(serviceWorker, /asset-refresh-v65\.js/);
+  assert.match(serviceWorker, /release-v65\/styles\.css/);
+  assert.match(serviceWorker, /release-v65\/app\.js/);
   assert.match(serviceWorker, /async function cacheFirstThenRefresh[\s\S]*cache\.match\(request\)/);
   assert.match(serviceWorker, /request\.mode === "navigate"[\s\S]*navigationCacheFirstExact\(request/);
   assert.match(serviceWorker, /async function navigationCacheFirstExact[\s\S]*cache\.match\(request\)/);
@@ -400,7 +409,11 @@ test("Site is installable as an Android-friendly PWA", () => {
   assert.match(serviceWorker, /async function navigationCacheFirstExact/);
   assert.match(serviceWorker, /async function networkFirst/);
   assert.match(serviceWorker, /ignoreSearch:\s*true/);
-  assert.match(theme, /serviceWorker\s*\.\s*register\("\/sw\.js",\s*\{ scope:\s*"\/",\s*updateViaCache:\s*"none" \}/);
+  assert.match(theme, /serviceWorker\s*\.\s*register\("\/release-v65\/sw\.js",\s*\{ scope:\s*"\/",\s*updateViaCache:\s*"none" \}/);
+  assert.match(vercel, /"cleanUrls":\s*false/);
+  assert.match(vercel, /"source":\s*"\/tools"[\s\S]*"destination":\s*"\/tools\.html"/);
+  assert.match(vercel, /"source":\s*"\/guide"[\s\S]*"destination":\s*"\/guide\.html"/);
+  assert.match(vercel, /"source":\s*"\/release-v65\/sw\.js"[\s\S]*"Service-Worker-Allowed"[\s\S]*"value":\s*"\/"/);
   assert.match(theme, /scheduleServiceWorkerRegistration/);
   assert.match(theme, /requestIdleCallback/);
   assert.doesNotMatch(theme, /registration\.update\(\)/);
@@ -408,6 +421,8 @@ test("Site is installable as an Android-friendly PWA", () => {
   assert.doesNotMatch(theme, /controllerchange/);
   assert.doesNotMatch(serviceWorker, /"\/uac-courses\.js"/);
   assert.match(server, /\.webmanifest/);
+  assert.match(server, /"\/release-v65\/app\.js":\s*"\/app\.js"/);
+  assert.match(server, /Service-Worker-Allowed/);
 });
 
 test("Android wrapper can build a phone app around the live site", () => {
@@ -456,9 +471,9 @@ test("Pages avoid render-blocking third-party font requests", () => {
   for (const file of htmlFiles) {
     const html = read(file);
     assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
-    assert.match(html, /asset-refresh-v64\.js/);
-    assert.match(html, /theme\.js\?v=64/);
-    assert.match(html, /styles\.css\?v=\d+/);
+    assert.match(html, /asset-refresh-v65\.js/);
+    assert.match(html, /release-v65\/theme\.js/);
+    assert.match(html, /release-v65\/styles\.css/);
   }
 });
 
@@ -491,8 +506,10 @@ test("Mobile navigation and search avoid expensive full-page motion", () => {
   assert.match(theme, /history\.pushState\(null,\s*"",\s*hash\)/);
   assert.match(theme, /scrollIntoView\(\{\s*behavior:\s*"auto"/);
   assert.match(app, /if \(!isMobileViewport\(\) && !prefersReducedMotion\(\)/);
+  assert.match(app, /window\.scrollTo\(\{ top: Math\.max\(0, top\), behavior: "auto" \}\)/);
   assert.match(css, /\/\* v41 mobile performance and focus/);
   assert.match(css, /scroll-behavior:\s*auto\s*!important/);
+  assert.match(css, /@media \(max-width: 390px\)[\s\S]*\.course-finder-hero \.hero-trust small[\s\S]*display:\s*none/);
   assert.doesNotMatch(index, /subject-helper-logic\.js/);
 });
 

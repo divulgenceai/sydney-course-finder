@@ -2175,8 +2175,9 @@ function renderCourseAdmissionSummary(course, selectionRank, rawAtar, guaranteed
       </div>
     `;
   }
+  const compactFigureLayout = [selectionRank, rawAtar].every((value) => /^\d{1,3}(?:\.\d{1,2})?$/.test(String(value).trim()));
   return `
-    <div class="course-admission">
+    <div class="course-admission${compactFigureLayout ? " has-compact-figures" : ""}">
       <div class="admission-number admission-uac-figure">
         <span>${escapeHtml(courseRankLabel(course))}</span>
         <strong class="atar-requirement">${escapeHtml(selectionRank)}</strong>
@@ -3622,6 +3623,13 @@ function bindEvents(options = {}) {
       state.query = state.draft;
       state.visible = 24;
       state.openCourseIds.clear();
+    }, () => {
+      if (!isMobileViewport()) return;
+      const results = app.querySelector("#courses .course-list, #courses .course-empty-state");
+      if (!results) return;
+      const headerOffset = document.querySelector(".topbar")?.getBoundingClientRect().height || 54;
+      const top = results.getBoundingClientRect().top + window.scrollY - headerOffset - 8;
+      window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
     });
   });
 

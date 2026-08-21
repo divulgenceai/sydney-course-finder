@@ -17731,3 +17731,62 @@ body {
     animation: none;
   }
 }
+
+/* v65 compact mobile release: keep primary actions reachable and make course
+   scanning concise without forcing descriptive admission values into columns. */
+@media (max-width: 760px) {
+  .mobile-filter-head button {
+    min-width: 44px;
+    min-height: 44px;
+    padding-inline: 8px;
+  }
+
+  .course-result-card .admission-definition,
+  .course-result-card .course-source-line {
+    display: none;
+  }
+
+  .course-result-card .admission-source-links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .course-result-card .admission-source-links a {
+    min-height: 44px;
+    align-items: center;
+    margin: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .course-admission.has-compact-figures {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0 12px;
+  }
+
+  .course-admission.has-compact-figures .admission-number {
+    grid-column: auto;
+    width: auto;
+    padding-top: 0;
+  }
+}
+
+@media (max-width: 390px) {
+  .course-finder-hero {
+    padding-block: 26px 20px;
+  }
+
+  .course-finder-hero .hero-copy > p {
+    margin-bottom: 16px;
+  }
+
+  .course-finder-hero .hero-trust {
+    margin-top: 16px;
+    padding-top: 10px;
+  }
+
+  .course-finder-hero .hero-trust small {
+    display: none;
+  }
+}
