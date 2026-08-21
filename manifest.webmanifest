@@ -33,21 +33,33 @@
   ],
   "shortcuts": [
     {
-      "name": "Planning tools",
-      "short_name": "Tools",
-      "url": "/tools",
+      "name": "Guide",
+      "short_name": "Guide",
+      "url": "/guide",
       "icons": [{ "src": "/assets/app-icon-192.png", "sizes": "192x192" }]
     },
     {
-      "name": "ATAR calculator",
-      "short_name": "ATAR",
-      "url": "/atar-calculator",
+      "name": "Course direction and ATAR match",
+      "short_name": "Direction",
+      "url": "/advisor",
       "icons": [{ "src": "/assets/app-icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Subject helper",
       "short_name": "Subjects",
       "url": "/subject-helper",
+      "icons": [{ "src": "/assets/app-icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "University forms",
+      "short_name": "Forms",
+      "url": "/university-forms",
+      "icons": [{ "src": "/assets/app-icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "UAC application planner",
+      "short_name": "UAC planner",
+      "url": "/uac-planner",
       "icons": [{ "src": "/assets/app-icon-192.png", "sizes": "192x192" }]
     }
   ]

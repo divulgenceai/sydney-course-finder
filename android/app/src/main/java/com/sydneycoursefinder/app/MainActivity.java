@@ -22,6 +22,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.ProgressBar;
+import android.window.OnBackInvokedDispatcher;
 
 public class MainActivity extends Activity {
     private WebView webView;
@@ -44,7 +45,7 @@ public class MainActivity extends Activity {
         refreshWebAssetsOnLoad = getSharedPreferences("app_state", MODE_PRIVATE)
             .getInt("web_asset_version", 0) < BuildConfig.VERSION_CODE;
         if (refreshWebAssetsOnLoad) webView.clearCache(true);
-        webView.setBackgroundColor(Color.BLACK);
+        webView.setBackgroundColor(Color.WHITE);
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         webView.setHorizontalScrollBarEnabled(false);
@@ -113,7 +114,7 @@ public class MainActivity extends Activity {
         settings.setDatabaseEnabled(true);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setLoadsImagesAutomatically(true);
-        settings.setLoadWithOverviewMode(true);
+        settings.setLoadWithOverviewMode(false);
         settings.setUseWideViewPort(true);
         settings.setTextZoom(100);
         settings.setBuiltInZoomControls(false);
@@ -139,7 +140,7 @@ public class MainActivity extends Activity {
         pageProgress.setProgressBackgroundTintList(ColorStateList.valueOf(Color.TRANSPARENT));
 
         FrameLayout rootLayout = new FrameLayout(this);
-        rootLayout.setBackgroundColor(Color.BLACK);
+        rootLayout.setBackgroundColor(Color.WHITE);
         rootLayout.addView(webView, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
@@ -151,6 +152,12 @@ public class MainActivity extends Activity {
         progressLayout.gravity = Gravity.TOP;
         rootLayout.addView(pageProgress, progressLayout);
         setContentView(rootLayout);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                this::handleBackPress
+            );
+        }
         hideStatusBar();
         if (savedInstanceState == null) {
             webView.loadUrl(BuildConfig.APP_URL);
@@ -205,10 +212,28 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
+        handleBackPress();
+    }
+
+    private void handleBackPress() {
+        if (webView == null) {
+            finish();
+            return;
+        }
+        webView.evaluateJavascript(
+            "(() => { try { return !!(window.courseFinderTheme && window.courseFinderTheme.handleMobileBack && window.courseFinderTheme.handleMobileBack()); } catch (error) { return false; } })();",
+            handled -> {
+                if ("true".equals(handled)) return;
+                navigateBackOrFinish();
+            }
+        );
+    }
+
+    private void navigateBackOrFinish() {
+        if (webView.canGoBack()) {
             webView.goBack();
             return;
         }
-        super.onBackPressed();
+        finish();
     }
 }

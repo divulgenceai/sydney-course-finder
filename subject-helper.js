@@ -15,6 +15,7 @@ const savedLookup = loadLookupState();
 const courseFieldCache = new WeakMap();
 const profileCourseScoreCache = new WeakMap();
 let subjectHelperRenderPass = 0;
+let subjectEvidenceDismissBound = false;
 
 const helperState = {
   draft: params.get("q") || savedLookup.query || "",
@@ -308,6 +309,12 @@ function render() {
           </label>
           <button class="match-btn" type="submit">Find my subjects</button>
         </form>
+        <div class="subject-search-guidance" aria-label="How Subject Helper works">
+          <span><b>1</b> Automatically detects a career or degree</span>
+          <span><b>2</b> Checks course prerequisites and assumed knowledge</span>
+          <span><b>3</b> Separates priority subjects from useful extras</span>
+          <a href="./advisor">Check course entry ranges</a>
+        </div>
         <div class="subject-example-row" aria-label="Example searches">
           ${quickSearches.map((item) => `<button type="button" data-quick-search="${escapeHtml(item)}">${escapeHtml(item)}</button>`).join("")}
         </div>
@@ -567,8 +574,8 @@ function renderSubjectResults(query, profile, plan, matches) {
       </div>
 
       <div class="subject-check-grid">
-        ${renderSubjectCheckCard("Entry blocker check", summary.requiredTitle, summary.requiredCopy, summary.requiredSubjects.length ? "warning" : "safe", summary.requiredSubjects)}
-        ${renderSubjectCheckCard("Assumed knowledge", summary.assumedTitle, summary.assumedCopy, "", summary.assumedSubjects)}
+        ${renderSubjectCheckCard("Entry blocker check", summary.requiredTitle, summary.requiredCopy, summary.requiredSubjects.length ? "warning" : "safe")}
+        ${renderSubjectCheckCard("Assumed knowledge", summary.assumedTitle, summary.assumedCopy)}
         ${renderSubjectCheckCard("Best move", "Choose for fit and strength", "Confirm the exact UAC or university page, then pick subjects you can score well in and actually use at uni.")}
       </div>
 
@@ -633,13 +640,13 @@ function subjectPlanSummary(plan, matches) {
     evidenceLabel,
     evidenceTone: evidenceLabel === "Good evidence" ? "good" : "some",
     requiredTitle: requiredSubjects.length
-      ? `${requiredSubjects.length} required subject${requiredSubjects.length === 1 ? "" : "s"} found`
+      ? requiredSubjects.map((item) => item.name).join(", ")
       : "No blocking HSC subject found",
     requiredCopy: requiredSubjects.length
       ? "These subjects appeared in prerequisite fields. Treat them as must-confirm before choosing."
       : "The matched UAC records do not show a subject you must have for entry. Assumed knowledge still affects readiness.",
     assumedTitle: assumedSubjects.length
-      ? `${assumedNames.length} preparation subject${assumedNames.length === 1 ? "" : "s"} found`
+      ? assumedNames.join(", ")
       : "No assumed knowledge detected",
     assumedCopy: assumedSubjects.length
       ? "Assumed knowledge is preparation. Missing it usually means extra work or a bridging course, not automatic rejection."
@@ -663,16 +670,11 @@ function uniqueSubjectItems(items) {
   });
 }
 
-function renderSubjectCheckCard(label, title, copy, tone = "", subjects = []) {
+function renderSubjectCheckCard(label, title, copy, tone = "") {
   return `
     <article class="subject-check-card ${escapeHtml(tone)}">
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(title)}</strong>
-      ${subjects.length ? `
-        <ul class="subject-check-list">
-          ${subjects.map((item) => `<li>${escapeHtml(item.name)}</li>`).join("")}
-        </ul>
-      ` : ""}
       <p>${escapeHtml(copy)}</p>
     </article>
   `;
@@ -715,9 +717,12 @@ function renderCourseEvidence(match) {
   return `
     <details class="subject-course-row" data-course-id="${escapeHtml(course.id || "")}">
       <summary>
-        <span>
-          <strong>${escapeHtml(course.name || "Unnamed course")}</strong>
-          <small>${escapeHtml(course.university || course.providerId || "Sydney provider")} - ${escapeHtml(course.campus || "Check campus")} - ATAR <strong class="atar-requirement">${escapeHtml(displayRank(course.atar))}</strong></small>
+        <span class="subject-course-provider-info">
+          ${subjectCourseProviderMark(course)}
+          <span class="subject-course-copy">
+            <strong>${escapeHtml(course.name || "Unnamed course")}</strong>
+            <small>${escapeHtml(course.university || course.providerId || "Sydney provider")} - ${escapeHtml(course.campus || "Check campus")} - ATAR <strong class="atar-requirement">${escapeHtml(displayRank(course.atar))}</strong></small>
+          </span>
         </span>
         <em class="${requiredSubjects.length ? "required" : "safe"}">${requiredSubjects.length ? "Required subject listed" : "No required subject"}</em>
         <b>Expand</b>
@@ -725,6 +730,38 @@ function renderCourseEvidence(match) {
       ${renderSubjectCourseDetail(course, requiredSubjects, assumedSubjects)}
     </details>
   `;
+}
+
+function subjectCourseProviderMark(course) {
+  const provider = window.uacProviderMap?.[course.providerId] || {};
+  const providerName = course.university || provider.name || course.providerId || "Sydney provider";
+  const fallback = course.providerId || providerInitials(providerName);
+  const logo = course.providerLogo || provider.logo || "";
+  return `
+    <span class="subject-course-provider-mark" aria-label="${escapeHtml(providerName)}">
+      <span class="subject-course-provider-fallback" aria-hidden="true">${escapeHtml(fallback)}</span>
+      ${logo ? `<img src="${escapeHtml(logo)}" alt="${escapeHtml(providerName)} logo" loading="lazy" decoding="async" />` : ""}
+    </span>
+  `;
+}
+
+function providerInitials(name = "") {
+  const ignored = new Set(["and", "of", "the", "university", "college"]);
+  const words = String(name).split(/\s+/).filter(Boolean);
+  const meaningful = words.filter((word) => !ignored.has(word.toLowerCase()));
+  return (meaningful.length ? meaningful : words).slice(0, 3).map((word) => word[0]).join("").toUpperCase() || "UNI";
+}
+
+function bindSubjectCourseProviderFallbacks(root) {
+  root.querySelectorAll(".subject-course-provider-mark img").forEach((image) => {
+    if (image.dataset.fallbackBound === "true") return;
+    image.dataset.fallbackBound = "true";
+    const reveal = () => image.classList.add("is-loaded");
+    image.addEventListener("load", reveal, { once: true });
+    image.addEventListener("error", () => image.remove(), { once: true });
+    if (image.complete && image.naturalWidth > 0) reveal();
+    else if (image.complete) image.remove();
+  });
 }
 
 function renderSubjectCourseDetail(course, requiredSubjects = extractSubjectNames(course.prerequisites || ""), assumedSubjects = extractSubjectNames(course.assumed || "")) {
@@ -860,6 +897,7 @@ function renderFocusedGuideLink(query) {
 
 function bindEvents() {
   window.courseFinderTheme?.bind?.(subjectHelperApp);
+  bindSubjectCourseProviderFallbacks(subjectHelperApp);
   const form = subjectHelperApp.querySelector("[data-subject-search]");
   const input = form?.elements.query;
 
@@ -885,6 +923,7 @@ function bindEvents() {
         if (label) label.textContent = "Expand";
         return;
       }
+      closeSubjectCourseEvidence(details);
       const course = courseById.get(String(details.dataset.courseId || ""));
       if (!course) {
         if (label) label.textContent = "Details unavailable";
@@ -896,6 +935,28 @@ function bindEvents() {
       }
       hydrateSubjectCourseDetail(details, course);
     });
+  });
+  bindSubjectEvidenceDismissal();
+}
+
+function bindSubjectEvidenceDismissal() {
+  if (subjectEvidenceDismissBound) return;
+  subjectEvidenceDismissBound = true;
+  document.addEventListener("pointerdown", (event) => {
+    if (event.target.closest?.(".subject-course-row")) return;
+    closeSubjectCourseEvidence();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeSubjectCourseEvidence();
+  });
+}
+
+function closeSubjectCourseEvidence(except = null) {
+  subjectHelperApp.querySelectorAll(".subject-course-row[open]").forEach((details) => {
+    if (details === except) return;
+    details.open = false;
+    const label = details.querySelector("summary b");
+    if (label) label.textContent = "Expand";
   });
 }
 
@@ -914,7 +975,7 @@ function runSubjectHelperProcessing(delay = 160) {
     render();
   };
 
-  if (prefersReducedMotion() || typeof document.startViewTransition !== "function") {
+  if (prefersReducedMotion() || isCompactAppSurface() || typeof document.startViewTransition !== "function") {
     requestAnimationFrame(update);
     return;
   }
@@ -931,6 +992,11 @@ function runSubjectHelperProcessing(delay = 160) {
 
 function prefersReducedMotion() {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches || false;
+}
+
+function isCompactAppSurface() {
+  return document.documentElement.dataset.appSurface === "android"
+    || window.matchMedia?.("(max-width: 820px)")?.matches;
 }
 
 function loadLookupState() {

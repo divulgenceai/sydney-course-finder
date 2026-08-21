@@ -38,6 +38,14 @@ const pathwayState = {
   situation: initialSituation(),
   goal: initialPathwayGoal()
 };
+const pathwayProviderLogoIds = {
+  "wsu-college": "WS",
+  "uts-college": "UTSC",
+  "macquarie-college": "MQ",
+  "unsw-college": "UNSWC",
+  "sydney-pathways": "USYD",
+  adfa: "UNSW"
+};
 let pathwaysRenderPass = 0;
 
 renderPathwaysPage();
@@ -59,6 +67,7 @@ function renderPathwaysPage() {
   `;
 
   bindPathwayEvents();
+  bindPathwayProviderFallbacks(pathwaysApp);
   window.courseFinderTheme?.bind?.(pathwaysApp);
   pathwaysRenderPass += 1;
 }
@@ -191,21 +200,24 @@ function renderSimpleRouteCard(route, index) {
             <p>${escapeHtml(route.bestFor)}</p>
           </div>
         </div>
-        <dl class="simple-route-info">
-          <div>
-            <dt>Important details</dt>
-            <dd>${escapeHtml(route.details)}</dd>
-          </div>
-          <div>
-            <dt>Requirements to check</dt>
-            <dd>${escapeHtml(route.requirements)}</dd>
-          </div>
-          <div>
-            <dt>Pathway to university</dt>
-            <dd>${escapeHtml(route.universityPathway)}</dd>
-          </div>
-        </dl>
-        ${renderRouteLinks(route)}
+        <details class="simple-route-more">
+          <summary><span>Requirements and university progression</span><i aria-hidden="true">+</i></summary>
+          <dl class="simple-route-info">
+            <div>
+              <dt>Important details</dt>
+              <dd>${escapeHtml(route.details)}</dd>
+            </div>
+            <div>
+              <dt>Requirements to check</dt>
+              <dd>${escapeHtml(route.requirements)}</dd>
+            </div>
+            <div>
+              <dt>Pathway to university</dt>
+              <dd>${escapeHtml(route.universityPathway)}</dd>
+            </div>
+          </dl>
+          ${renderRouteLinks(route)}
+        </details>
       </div>
     </article>
   `;
@@ -252,6 +264,7 @@ function renderPathwayProviderCard(provider, index) {
     <article class="pathway-provider-card" style="--item-delay:${index * 45}ms">
       <div class="pathway-provider-heading">
         <span class="pathway-provider-number">${index + 1}</span>
+        ${pathwayProviderMark(provider)}
         <div>
           <span class="eyebrow">Recommended pathway provider</span>
           <h3>${escapeHtml(provider.name)}</h3>
@@ -265,13 +278,49 @@ function renderPathwayProviderCard(provider, index) {
       <ol class="pathway-provider-journey" aria-label="Pathway steps">
         ${provider.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}
       </ol>
-      <dl>
-        <div><dt>Why this is credible</dt><dd>${escapeHtml(provider.evidence)}</dd></div>
-        <div><dt>Requirements to confirm</dt><dd>${escapeHtml(provider.requirements)}</dd></div>
-      </dl>
+      <details class="pathway-provider-more">
+        <summary><span>Evidence and requirements</span><i aria-hidden="true">+</i></summary>
+        <dl>
+          <div><dt>Why this is credible</dt><dd>${escapeHtml(provider.evidence)}</dd></div>
+          <div><dt>Requirements to confirm</dt><dd>${escapeHtml(provider.requirements)}</dd></div>
+        </dl>
+      </details>
       <a class="secondary-btn pathway-provider-link" href="${escapeHtml(provider.officialUrl)}" target="_blank" rel="noopener">Check official pathway</a>
     </article>
   `;
+}
+
+function pathwayProviderMark(provider) {
+  const providerId = pathwayProviderLogoIds[provider.id] || "";
+  const providerRecord = window.uacProviderMap?.[providerId]
+    || (window.uacProviders || []).find((item) => item.name === provider.name);
+  const fallback = providerId || providerInitials(provider.name);
+  const logo = providerRecord?.logo || "";
+  return `
+    <span class="pathway-provider-logo" aria-label="${escapeHtml(provider.name)}">
+      <span class="pathway-provider-logo-fallback" aria-hidden="true">${escapeHtml(fallback)}</span>
+      ${logo ? `<img src="${escapeHtml(logo)}" alt="${escapeHtml(provider.name)} logo" loading="lazy" decoding="async" />` : ""}
+    </span>
+  `;
+}
+
+function providerInitials(name = "") {
+  const ignored = new Set(["and", "of", "the", "university", "college", "pathways", "admission"]);
+  const words = String(name).replace(/[—–-]/g, " ").split(/\s+/).filter(Boolean);
+  const meaningful = words.filter((word) => !ignored.has(word.toLowerCase()));
+  return (meaningful.length ? meaningful : words).slice(0, 3).map((word) => word[0]).join("").toUpperCase() || "UNI";
+}
+
+function bindPathwayProviderFallbacks(root) {
+  root.querySelectorAll(".pathway-provider-logo img").forEach((image) => {
+    if (image.dataset.fallbackBound === "true") return;
+    image.dataset.fallbackBound = "true";
+    const reveal = () => image.classList.add("is-loaded");
+    image.addEventListener("load", reveal, { once: true });
+    image.addEventListener("error", () => image.remove(), { once: true });
+    if (image.complete && image.naturalWidth > 0) reveal();
+    else if (image.complete) image.remove();
+  });
 }
 
 function renderSimplePathwayChecklist(result) {
@@ -308,8 +357,9 @@ function renderOfficialSources() {
       <div class="panel-head">
         <div>
           <h2>Official places to confirm</h2>
-          <p>This page gives the map. These links confirm the real entry rule, deadline, fees and credit.</p>
+          <p>This page gives the map. These links confirm the real entry rule, deadline, fees and credit. Core UAC pathway guidance checked 18 August 2026.</p>
         </div>
+        <span class="status-pill">Official sources</span>
       </div>
       <div class="official-link-grid">
         ${officialPathwayLinks.map((link) => `
@@ -339,11 +389,11 @@ function refreshPathwaysPage({ scrollToRoutes = false } = {}) {
   const update = () => renderPathwaysPage();
   const afterUpdate = () => {
     if (scrollToRoutes) {
-      pathwaysApp.querySelector("#pathway-routes")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      pathwaysApp.querySelector("#pathway-routes")?.scrollIntoView({ behavior: isCompactAppSurface() ? "auto" : "smooth", block: "nearest" });
     }
   };
 
-  if (prefersReducedMotion() || typeof document.startViewTransition !== "function") {
+  if (prefersReducedMotion() || isCompactAppSurface() || typeof document.startViewTransition !== "function") {
     update();
     requestAnimationFrame(afterUpdate);
     return;
@@ -365,6 +415,11 @@ function refreshPathwaysPage({ scrollToRoutes = false } = {}) {
 
 function prefersReducedMotion() {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches || false;
+}
+
+function isCompactAppSurface() {
+  return document.documentElement.dataset.appSurface === "android"
+    || window.matchMedia?.("(max-width: 820px)")?.matches;
 }
 
 function currentPathwayResult() {

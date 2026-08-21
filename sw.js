@@ -1,37 +1,44 @@
-const CACHE_NAME = "sydney-course-finder-app-v66";
+const CACHE_NAME = "sydney-course-finder-app-v65";
 const ROUTE_FALLBACKS = {
   "/": "/index.html",
   "/index": "/index.html",
-  "/tools": "/tools.html",
-  "/help": "/help.html",
-  "/tafe-tools": "/tafe-tools.html",
   "/guide": "/guide.html",
   "/pathways": "/pathways.html",
   "/no-atar": "/pathways.html",
   "/atar-calculator": "/atar-calculator.html",
+  "/atar-compass": "/advisor.html",
+  "/atar-match": "/advisor.html",
   "/calculator": "/calculator.html",
+  "/uac-planner": "/uac-planner.html",
+  "/preference-planner": "/uac-planner.html",
+  "/early-entry": "/uac-planner.html",
   "/subject-helper": "/subject-helper.html",
   "/subjects": "/subjects.html",
   "/advisor": "/advisor.html",
+  "/university-forms": "/university-forms.html",
+  "/forms": "/university-forms.html",
   "/my-plan": "/my-plan.html",
   "/plan": "/my-plan.html"
 };
 const APP_SHELL = [
   "/",
   "/index.html",
-  "/release-v65/styles.css",
-  "/release-v65/theme.js",
+  "/styles.css",
+  "/mobile.css",
+  "/theme.js",
   "/asset-refresh-v65.js",
+  "/toolkit.js",
   "/course-details.js",
-  "/release-v65/app.js",
-  "/tools.html",
-  "/tools-page.js",
-  "/help.html",
-  "/help.js",
-  "/tafe-tools.html",
-  "/tafe-tools.js",
-  "/uac-courses-lite.js",
-  "/tafe-courses.js",
+  "/app.js",
+  "/advisor.html",
+  "/advisor.js",
+  "/university-forms.html",
+  "/university-forms-data.js",
+  "/university-forms.js",
+  "/uac-planner.html",
+  "/early-entry-data.js",
+  "/uac-planner.js",
+  "/vendor/pdf-lib.min.js",
   "/manifest.webmanifest",
   "/assets/logo-light.svg",
   "/assets/logo-dark.svg",
@@ -73,7 +80,7 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(navigationCacheFirstExact(request, navigationFallback(url)));
+    event.respondWith(networkFirst(request, navigationFallback(url)));
     return;
   }
 
@@ -121,12 +128,12 @@ async function networkFirst(request, fallbackUrl) {
   const cache = await caches.open(CACHE_NAME);
   try {
     const fresh = await fetch(request);
-    if (fresh && fresh.ok) await cache.put(request, fresh.clone());
+    if (fresh && fresh.ok) await cache.put(canonicalNavigationRequest(request), fresh.clone());
     return fresh;
   } catch {
     const cached = await cache.match(request, { ignoreSearch: true });
     if (cached) return cached;
-    const fallback = fallbackUrl ? await cache.match(fallbackUrl) : undefined;
+    const fallback = fallbackUrl ? await cache.match(fallbackUrl, { ignoreSearch: true }) : undefined;
     if (fallback) return fallback;
     return new Response("This page is not available offline yet.", {
       status: 503,
@@ -135,28 +142,16 @@ async function networkFirst(request, fallbackUrl) {
   }
 }
 
-async function navigationCacheFirstExact(request, fallbackUrl) {
-  const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(request);
-  const refresh = fetch(request)
-    .then(async (response) => {
-      if (response && response.ok) await cache.put(request, response.clone());
-      return response;
-    })
-    .catch(() => null);
-
-  if (cached) {
-    refresh.catch(() => undefined);
-    return cached;
-  }
-
-  const fresh = await refresh;
-  if (fresh) return fresh;
-  const fallback = fallbackUrl ? await cache.match(fallbackUrl, { ignoreSearch: true }) : undefined;
-  if (fallback) return fallback;
-  return new Response("This page is not available offline yet.", {
-    status: 503,
-    headers: { "Content-Type": "text/plain; charset=utf-8" }
+function canonicalNavigationRequest(request) {
+  const url = new URL(request.url);
+  url.search = "";
+  url.hash = "";
+  return new Request(url.href, {
+    method: "GET",
+    headers: request.headers,
+    credentials: request.credentials,
+    mode: "same-origin",
+    redirect: "follow"
   });
 }
 

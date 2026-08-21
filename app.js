@@ -1,8 +1,5 @@
 const app = document.querySelector("#app");
-const importedCourses = [
-  ...(window.uacCourses || []),
-  ...(window.tafeCourses || [])
-];
+const importedCourses = window.uacCourses || [];
 const dedupedImport = collapseDuplicateCourses(importedCourses);
 const allCourses = dedupedImport.courses;
 const duplicateCourseMap = dedupedImport.redirects;
@@ -10,15 +7,11 @@ const providerCourseCounts = allCourses.reduce((counts, course) => {
   counts.set(course.providerId, (counts.get(course.providerId) || 0) + 1);
   return counts;
 }, new Map());
-const allProviders = [
-  ...(window.uacProviders || []),
-  ...(window.tafeProviders || [])
-].map((provider) => ({
+const allProviders = (window.uacProviders || []).map((provider) => ({
   ...provider,
   courseCount: providerCourseCounts.get(provider.id) || 0
 }));
 const meta = window.uacImportMeta || {};
-const tafeMeta = window.tafeImportMeta || {};
 const courseTextCache = new WeakMap();
 const primaryCourseTextCache = new WeakMap();
 const topicScoreCache = new WeakMap();
@@ -29,25 +22,17 @@ const filteredCourseCache = { key: "", results: [] };
 const searchQueryPlanCache = new Map();
 let searchLexicon = null;
 let searchLexiconWarmupScheduled = false;
+let searchIndexWarmupIndex = 0;
+let searchIndexWarmupScheduled = false;
 let incomeWarmupIndex = 0;
 let incomeWarmupScheduled = false;
 let renderPass = 0;
-let searchRenderFrame = 0;
-let searchRenderGeneration = 0;
-let activeCourseSearchTransition = null;
-let rankedProviders = [];
-let providerDirectoryReady = false;
-let providerHydrationScheduled = false;
-let providerHydrationIndex = 0;
-let providerHydrationActivated = false;
-let providerVisibilityObserver = null;
 
 const levelLabels = {
   undergraduate: "Undergraduate",
   postgraduate: "Postgraduate",
   international: "International",
-  online: "Online",
-  vocational: "TAFE / vocational"
+  online: "Online"
 };
 
 const subjectOptions = [
@@ -90,8 +75,8 @@ const topicOptions = [
 
 const providerQuality = {
   Technology: {
-    UNSW: { score: 98, note: "Very strong computing, engineering, research and employer outcomes" },
-    USYD: { score: 96, note: "Outstanding computer science research and broad academic strength" },
+    USYD: { score: 98, note: "Sydney's strongest 2026 QS computer science subject result" },
+    UNSW: { score: 96, note: "Very strong computing, research and employer outcomes" },
     UTS: { score: 94, note: "Strong industry focus and a top Sydney computing profile" },
     MQ: { score: 82, note: "Good computing and analytics options" },
     WS: { score: 74, note: "Large Sydney course range and practical access" }
@@ -185,10 +170,9 @@ const providerCurrentStanding = {
   }
 };
 
-const providerAliases = buildProviderAliasGroups([
-  { id: "TAFENSW", label: "TAFE NSW", aliases: ["tafe", "tafe nsw", "nsw tafe", "technical and further education"] },
+const providerAliases = [
   { id: "WS", label: "Western Sydney University", aliases: ["wsu", "western sydney university", "western sydney uni", "western sydney"] },
-  { id: "UTS", label: "University of Technology Sydney", aliases: ["uts", "university of technology sydney", "uts university", "technology sydney"] },
+  { id: "UTS", label: "University of Technology Sydney", aliases: ["uts", "university of technology sydney", "technology sydney"] },
   { id: "UTSC", label: "UTS College", aliases: ["uts college", "uts insearch", "insearch"] },
   { id: "UNSW", label: "UNSW", aliases: ["unsw", "university of new south wales", "new south wales uni"] },
   { id: "UNSWC", label: "UNSW College", aliases: ["unsw college", "unsw global"] },
@@ -199,38 +183,7 @@ const providerAliases = buildProviderAliasGroups([
   { id: "CQU", label: "CQUniversity", aliases: ["cqu", "cquniversity", "central queensland university"] },
   { id: "ICMS", label: "International College of Management, Sydney", aliases: ["icms", "international college of management"] },
   { id: "AIT", label: "Academy of Interactive Technology", aliases: ["ait", "academy of interactive technology"] }
-]);
-
-function buildProviderAliasGroups(curatedGroups) {
-  const ignoredShortNames = new Set(["sydney", "australia", "university", "college", "technology sydney"]);
-  const groups = new Map(curatedGroups.map((group) => [group.id, {
-    ...group,
-    aliases: [...group.aliases]
-  }]));
-
-  allProviders.forEach((provider) => {
-    const name = String(provider.name || "").trim();
-    const current = groups.get(provider.id) || { id: provider.id, label: name, aliases: [] };
-    const shortened = name
-      .replace(/^university of\s+/i, "")
-      .replace(/\s+university(?:\s+college)?$/i, "")
-      .trim();
-    const localShortened = shortened.replace(/\s+australia$/i, "").trim();
-    const generated = [
-      name,
-      name.replace(/\buniversity\b/gi, "uni"),
-      provider.id.length >= 3 ? provider.id.toLowerCase() : "",
-      shortened && !ignoredShortNames.has(cleanSearchText(shortened)) ? shortened : "",
-      localShortened && !ignoredShortNames.has(cleanSearchText(localShortened)) ? localShortened : ""
-    ];
-    current.aliases = [...new Set([...current.aliases, ...generated]
-      .map(cleanSearchText)
-      .filter(Boolean))];
-    groups.set(provider.id, current);
-  });
-
-  return [...groups.values()];
-}
+];
 
 const rankCodeMeanings = {
   NC: "New course; no published selection-rank profile yet.",
@@ -266,12 +219,6 @@ const searchAliases = {
   developer: ["software", "programming", "computer science", "information technology"],
   programming: ["programming", "coding", "software", "computer", "information technology"],
   "computer science": ["computer science", "computing", "software", "information technology"],
-  "software engineering": ["software engineering", "software", "computing", "computer science", "information technology"],
-  "business analytics": ["business analytics", "business analysis", "data analytics", "information systems", "commerce"],
-  "data analytics": ["data analytics", "data science", "statistics", "business analytics"],
-  "primary education": ["education primary", "primary education", "primary teaching", "teaching"],
-  "secondary education": ["education secondary", "secondary education", "secondary teaching", "teaching"],
-  accounting: ["accounting", "accountancy", "commerce", "business"],
   computers: ["computer", "computing", "computer science", "information technology"],
   cybersecurity: ["cybersecurity", "cyber security", "cyber", "information security"],
   "cyber security": ["cybersecurity", "cyber security", "cyber", "information security"],
@@ -296,74 +243,9 @@ const searchAliases = {
   police: ["policing", "police", "criminology", "justice", "public safety"],
   social: ["social work", "community", "human services", "welfare"],
   "social work": ["social work", "community", "human services", "welfare"]
-  ,
-  tafe: ["tafe", "vocational training", "certificate", "diploma", "trade"],
-  trade: ["trade", "apprenticeship", "traineeship", "vocational training"],
-  apprenticeship: ["apprenticeship", "trade", "traineeship"],
-  traineeship: ["traineeship", "apprenticeship", "workplace training"],
-  electrician: ["electrician", "electrical", "electrotechnology"],
-  electrical: ["electrical", "electrician", "electrotechnology"],
-  plumber: ["plumber", "plumbing"],
-  plumbing: ["plumbing", "plumber"],
-  carpenter: ["carpenter", "carpentry", "joinery"],
-  carpentry: ["carpentry", "carpenter", "joinery"],
-  mechanic: ["mechanic", "automotive", "vehicle"],
-  automotive: ["automotive", "mechanic", "vehicle"],
-  welder: ["welding", "fabrication", "engineering"],
-  welding: ["welding", "fabrication", "engineering"],
-  chef: ["chef", "commercial cookery", "cooking", "hospitality"],
-  hairdresser: ["hairdressing", "hairdresser", "salon"],
-  barber: ["barbering", "barber", "hairdressing"],
-  childcare: ["early childhood education", "child care", "education support"],
-  "aged care": ["aged care", "individual support", "community services"],
-  disability: ["disability support", "individual support", "community services"],
-  "vet nurse": ["veterinary nursing", "animal care"],
-  "teacher aide": ["education support", "teacher aide", "school based education support"]
 };
 
 const searchIntentAliases = [
-  ["software developer", "software engineering"],
-  ["software engineer", "software engineering"],
-  ["web developer", "software engineering"],
-  ["app developer", "software engineering"],
-  ["business analyst", "business analytics"],
-  ["data analyst", "data analytics"],
-  ["primary school teacher", "primary education"],
-  ["primary teacher", "primary education"],
-  ["primary teaching", "primary education"],
-  ["high school teacher", "secondary education"],
-  ["secondary teacher", "secondary education"],
-  ["secondary teaching", "secondary education"],
-  ["medical doctor", "medicine"],
-  ["police officer", "criminology"],
-  ["physiotherapist", "physiotherapy"],
-  ["accountant", "accounting"],
-  ["solicitor", "law"],
-  ["lawyer", "law"],
-  ["architect", "architecture"],
-  ["nurse", "nursing"],
-  ["doctor", "medicine"],
-  ["sparky", "electrotechnology electrician"],
-  ["electrician", "electrotechnology electrician"],
-  ["plumber", "plumbing"],
-  ["chippy", "carpentry"],
-  ["carpenter", "carpentry"],
-  ["car mechanic", "automotive"],
-  ["auto mechanic", "automotive"],
-  ["welder", "engineering fabrication trade"],
-  ["chef", "commercial cookery"],
-  ["cook", "commercial cookery"],
-  ["hairdresser", "hairdressing"],
-  ["barber", "barbering"],
-  ["childcare", "early childhood education and care"],
-  ["daycare", "early childhood education and care"],
-  ["aged care worker", "individual support ageing"],
-  ["disability support worker", "individual support disability"],
-  ["vet nurse", "veterinary nursing"],
-  ["teacher aide", "school based education support"],
-  ["uni prep", "tertiary preparation"],
-  ["university prep", "tertiary preparation"],
-  ["hsc pathway", "tertiary preparation"],
   ["comp sci", "computer science"],
   ["computer sciences", "computer science"],
   ["compsci", "computer science"],
@@ -423,10 +305,6 @@ const broadTopicQueries = new Set([
   "design",
   "education",
   "science"
-  ,
-  "trade",
-  "apprenticeship",
-  "tafe"
 ]);
 
 const storageKeys = {
@@ -491,26 +369,11 @@ const courseTypeOptions = [
   "Bachelor",
   "Double degree",
   "Honours",
-  "Certificate I",
-  "Certificate II",
-  "Certificate III",
-  "Certificate IV",
   "Diploma",
   "Advanced Diploma",
   "Associate Degree",
   "Undergraduate Certificate",
-  "Statement of Attainment",
-  "Short course",
   "Other"
-];
-const educationTypeOptions = ["All education types", "University / higher education", "TAFE / vocational"];
-const tafeRouteOptions = ["Any TAFE route", "Trade / apprenticeship", "Job-ready qualification", "University pathway"];
-const tafeStudyLevelOptions = [
-  "All levels",
-  "Entry and foundation",
-  "Certificate III and IV",
-  "Diploma and degree",
-  "Statements and short courses"
 ];
 const studyAreaOptions = ["All study areas", ...topicOptions.filter((topic) => topic.label !== "All interests").map((topic) => topic.label)];
 const searchSortOptions = ["Relevance", "Closest campus", "Study area fit", "Lowest selection rank", "Highest selection rank", "Income potential"];
@@ -725,8 +588,6 @@ migrateLegacySavedCompareState();
 const state = {
   draft: "",
   query: "",
-  educationType: "All education types",
-  tafeRoute: "Any TAFE route",
   level: "All levels",
   courseType: "All course types",
   area: "All study areas",
@@ -744,7 +605,7 @@ const state = {
   degreeStructure: "Any degree structure",
   advancedFiltersOpen: false,
   allowAtarStretch: false,
-  visible: 24,
+  visible: coursePageSize(),
   atar: 75,
   matcherProvider: "All providers",
   matcherSubjects: [],
@@ -771,16 +632,21 @@ const state = {
   advisorChat: []
 };
 
-applyCourseSearchParams();
-
-const navigationSectionIds = ["courses", "tools", "providers", "saved", "about"];
-let sectionScrollSpyBound = false;
-let sectionScrollFrame = 0;
-let activeNavigationHash = "";
-let navigationChangeTimer = 0;
-
+const levels = ["All levels", ...Object.keys(levelLabels).filter((level) => allCourses.some((course) => course.level === level)).map((level) => levelLabels[level])];
+const providers = [
+  "All providers",
+  ...allProviders
+    .map((provider) => provider.name)
+    .sort((a, b) => providerOptionLabel(a).localeCompare(providerOptionLabel(b)))
+];
+const rankedProviders = [...allProviders].sort((a, b) => providerOverallScore(b) - providerOverallScore(a) || a.name.localeCompare(b.name));
 const courseById = new Map(allCourses.map((course) => [course.id, course]));
 const duplicateRowsHidden = Number(meta.duplicateRowsRemoved ?? importedCourses.length - allCourses.length);
+const showLevelFilter = levels.length > 2;
+const modes = ["All modes", ...new Set(allCourses.flatMap((course) => course.modes || []))].sort((a, b) =>
+  a.startsWith("All") ? -1 : b.startsWith("All") ? 1 : a.localeCompare(b)
+);
+const allCampuses = sortedCampusOptions(allCourses);
 
 const infoSummary = {
   atar: allCourses.filter((course) => numericRank(course.atar) !== null).length,
@@ -789,324 +655,28 @@ const infoSummary = {
   fees: allCourses.filter((course) => hasSpecificInfo(course.fees)).length
 };
 
-function applyCourseSearchParams() {
-  const params = new URLSearchParams(location.search);
-  const education = cleanSearchText(params.get("education"));
-  const route = cleanSearchText(params.get("route"));
-  const query = String(params.get("q") || "").trim();
-  if (query) {
-    state.draft = query;
-    state.query = query;
-  }
-  if (education === "tafe" || education === "vocational") {
-    state.educationType = "TAFE / vocational";
-    state.provider = "TAFE NSW";
-    state.tafeRoute = route === "trade"
-      ? "Trade / apprenticeship"
-      : route === "job"
-        ? "Job-ready qualification"
-        : route === "university"
-          ? "University pathway"
-          : "Any TAFE route";
-  } else if (education === "university" || education === "higher education") {
-    state.educationType = "University / higher education";
-  }
-}
-
 function sortedCampusOptions(courses) {
   return ["All campuses", ...new Set(courses.map((course) => course.campus).filter(Boolean))].sort((a, b) =>
     a.startsWith("All") ? -1 : b.startsWith("All") ? 1 : a.localeCompare(b)
   );
 }
 
-function courseMatchesLevelFilter(course, option) {
-  if (!option || option === "All levels") return true;
-  const type = courseTypeLabel(course);
-  if (option === "Entry and foundation") {
-    return isTafeCourse(course) && ["Certificate I", "Certificate II", "Other"].includes(type);
-  }
-  if (option === "Certificate III and IV") {
-    return isTafeCourse(course) && ["Certificate III", "Certificate IV"].includes(type);
-  }
-  if (option === "Diploma and degree") {
-    return isTafeCourse(course) && ["Diploma", "Advanced Diploma", "Associate Degree", "Bachelor", "Honours"].includes(type);
-  }
-  if (option === "Statements and short courses") {
-    return isTafeCourse(course) && ["Statement of Attainment", "Short course"].includes(type);
-  }
-  return courseLevels(course).some((level) => levelLabels[level] === option);
+function campusOptionsForProvider(providerName = state.provider) {
+  if (!providerName || providerName === "All providers") return allCampuses;
+  return sortedCampusOptions(allCourses.filter((course) => course.university === providerName));
 }
 
-function facetCoursePool(excludedKeys = []) {
-  const excluded = new Set(excludedKeys);
-  const query = cleanSearchText(state.query);
-  const queryPlan = query ? searchQueryPlan(query) : null;
-  return allCourses.filter((course) => {
-    if (query && !courseSearchMatch(course, queryPlan)) return false;
-    if (!excluded.has("educationType") && !courseMatchesEducationType(course, state.educationType)) return false;
-    if (!excluded.has("tafeRoute") && !courseMatchesTafeRoute(course, state.tafeRoute)) return false;
-    if (!excluded.has("area") && !courseMatchesStudyArea(course, state.area)) return false;
-    if (!excluded.has("level") && !courseMatchesLevelFilter(course, state.level)) return false;
-    if (!excluded.has("courseType") && state.courseType !== "All course types" && courseTypeLabel(course) !== state.courseType) return false;
-    if (!excluded.has("provider") && state.provider !== "All providers" && course.university !== state.provider) return false;
-    if (!excluded.has("campus") && state.campus !== "All campuses" && course.campus !== state.campus) return false;
-    if (!excluded.has("mode") && state.mode !== "All modes" && !(course.modes || []).includes(state.mode)) return false;
-    if (!excluded.has("duration") && !courseMatchesDuration(course, state.duration)) return false;
-    if (!excluded.has("estimatedAtar") && !courseMatchesEstimatedAtar(course)) return false;
-    return true;
-  });
-}
-
-function levelOptionsForCourses(courses) {
-  if (state.educationType === "TAFE / vocational") {
-    return tafeStudyLevelOptions.filter((option) =>
-      option === "All levels" || courses.some((course) => courseMatchesLevelFilter(course, option))
-    );
-  }
-  return [
-    "All levels",
-    ...Object.keys(levelLabels)
-      .filter((level) => courses.some((course) => courseLevels(course).includes(level)))
-      .map((level) => levelLabels[level])
-  ];
-}
-
-function courseFacetOptions() {
-  const areaPool = facetCoursePool(["area", "campus"]);
-  const levelPool = facetCoursePool(["level", "campus"]);
-  const typePool = facetCoursePool(["courseType", "campus"]);
-  const providerPool = facetCoursePool(["provider", "campus"]);
-  const campusPool = facetCoursePool(["campus"]);
-  const modePool = facetCoursePool(["mode"]);
-  const durationPool = facetCoursePool(["duration"]);
-  const tafeRoutePool = facetCoursePool(["tafeRoute"]);
-
-  return {
-    areas: studyAreaOptions.filter((option) =>
-      option === "All study areas" || areaPool.some((course) => courseMatchesStudyArea(course, option))
-    ),
-    levels: levelOptionsForCourses(levelPool),
-    courseTypes: courseTypeOptions.filter((option) =>
-      option === "All course types" || typePool.some((course) => courseTypeLabel(course) === option)
-    ),
-    providers: [
-      "All providers",
-      ...allProviders
-        .map((provider) => provider.name)
-        .filter((name) => providerPool.some((course) => course.university === name))
-        .sort((a, b) => providerOptionLabel(a).localeCompare(providerOptionLabel(b)))
-    ],
-    campuses: sortedCampusOptions(campusPool),
-    modes: [
-      "All modes",
-      ...new Set(modePool.flatMap((course) => course.modes || []))
-    ].sort((a, b) => a.startsWith("All") ? -1 : b.startsWith("All") ? 1 : a.localeCompare(b)),
-    durations: durationOptions.filter((option) =>
-      option === "Any duration" || durationPool.some((course) => courseMatchesDuration(course, option))
-    ),
-    tafeRoutes: tafeRouteOptions.filter((option) =>
-      option === "Any TAFE route" || tafeRoutePool.some((course) => courseMatchesTafeRoute(course, option))
-    )
-  };
-}
-
-function syncDependentCourseFilters() {
-  const tafeOnly = state.educationType === "TAFE / vocational";
-  const universityOnly = state.educationType === "University / higher education";
-
-  if (tafeOnly) {
-    state.estimatedAtar = "";
-    state.allowAtarStretch = false;
-    state.degreeStructure = "Any degree structure";
-    state.prerequisite = "Any prerequisite status";
-    state.pathway = "Any pathway status";
-    state.guaranteedEntry = "Any guaranteed-entry status";
-    state.locationQuery = "";
-  } else if (universityOnly) {
-    state.tafeRoute = "Any TAFE route";
-  }
-
-  const allowedSorts = tafeOnly
-    ? ["Relevance", "Study area fit", "Income potential"]
-    : searchSortOptions;
-  if (!allowedSorts.includes(state.sort)) state.sort = "Relevance";
-
-  let options = courseFacetOptions();
-  for (let pass = 0; pass < 4; pass += 1) {
-    let changed = false;
-    const ensure = (key, allowed, fallback) => {
-      if (allowed.includes(state[key])) return;
-      state[key] = fallback;
-      changed = true;
-    };
-    ensure("area", options.areas, "All study areas");
-    ensure("level", options.levels, "All levels");
-    ensure("courseType", options.courseTypes, "All course types");
-    ensure("provider", options.providers, "All providers");
-    ensure("campus", options.campuses, "All campuses");
-    ensure("mode", options.modes, "All modes");
-    ensure("duration", options.durations, "Any duration");
-    ensure("tafeRoute", options.tafeRoutes, "Any TAFE route");
-    if (!changed) break;
-    options = courseFacetOptions();
-  }
-  return options;
-}
-
-function renderFilterContextNote() {
-  if (state.educationType === "TAFE / vocational") {
-    return `
-      <div class="filter-context-note" role="note">
-        <strong>TAFE filters</strong>
-        <span>ATAR and degree-only filters are hidden. Qualification, pathway and provider choices now only show available TAFE options; confirm location and delivery on the course page.</span>
-      </div>
-    `;
-  }
-  if (state.educationType === "University / higher education") {
-    return `
-      <div class="filter-context-note" role="note">
-        <strong>University filters</strong>
-        <span>TAFE-only routes are hidden. Course type, provider, campus and study options update from the university choices above.</span>
-      </div>
-    `;
-  }
-  return `
-    <div class="filter-context-note is-neutral" role="note">
-      <strong>Mixed course search</strong>
-      <span>Choose an education type to switch to filters made specifically for university or TAFE.</span>
-    </div>
-  `;
-}
-
-function courseSearchViewModel() {
-  const filterOptions = syncDependentCourseFilters();
-  const tafeOnly = state.educationType === "TAFE / vocational";
-  return {
-    filterOptions,
-    tafeOnly,
-    sortOptions: tafeOnly ? ["Relevance", "Study area fit", "Income potential"] : searchSortOptions,
-    results: filteredCourses(),
-    searchActive: hasActiveCourseSearch()
-  };
-}
-
-function renderCourseSearchSection(view = courseSearchViewModel()) {
-  const { filterOptions, tafeOnly, sortOptions, results, searchActive } = view;
-  return `
-    <section id="courses" class="panel course-search-panel" aria-labelledby="course-search-title">
-      <div class="panel-head">
-        <div>
-          <h2 id="course-search-title">Search courses</h2>
-          <p>Start with a course, career or university, then narrow the results. Filters work even when the search box is empty.</p>
-        </div>
-        <span class="result-count" role="status" aria-live="polite">${searchActive ? `${number(results.length)} results` : "Ready to search"}</span>
-      </div>
-      <form class="search-form" data-form="search">
-        <label>
-          <span class="sr-only">Course, career or university</span>
-          ${icon("search")}
-          <input name="search" type="search" autocomplete="off" value="${escapeHtml(state.draft)}" placeholder="Try computer science, nursing, UTS or law" />
-        </label>
-        <button type="submit">Search courses</button>
-      </form>
-      ${renderSearchInterpretation()}
-      <button class="mobile-filter-toggle" type="button" data-action="toggle-course-filters" aria-expanded="${state.mobileFiltersOpen}">
-        <span>${icon("filter")} Filters${activeCourseFilterCount() ? ` (${activeCourseFilterCount()})` : ""}</span>
-        <strong>${searchActive ? `${number(results.length)} results` : "Choose filters"}</strong>
-      </button>
-      <button class="course-filter-scrim" type="button" data-action="close-course-filters" aria-label="Close filters" tabindex="${state.mobileFiltersOpen ? "0" : "-1"}"></button>
-      <div class="course-filter-panel ${state.mobileFiltersOpen ? "is-open" : ""}" data-course-filter-panel>
-        <div class="mobile-filter-head">
-          <div>
-            <strong>Filter courses</strong>
-            <span>${activeCourseFilterCount()} active</span>
-          </div>
-          <button type="button" data-action="clear">Reset</button>
-        </div>
-        <div class="filters essential-filters">
-          ${select("educationType", "Education type", educationTypeOptions, state.educationType)}
-          ${select("area", "Study area", filterOptions.areas, state.area)}
-          ${select("level", tafeOnly ? "Qualification level" : "Study level", filterOptions.levels, state.level)}
-          ${select("courseType", "Course type", filterOptions.courseTypes, state.courseType)}
-          ${tafeOnly ? select("tafeRoute", "TAFE pathway", filterOptions.tafeRoutes, state.tafeRoute) : ""}
-          ${tafeOnly ? "" : numberControl("estimatedAtar", "Estimated ATAR", state.estimatedAtar, "Optional", 0, 99.95, 0.05)}
-          ${select("provider", tafeOnly ? "Training provider" : "Provider", filterOptions.providers, state.provider)}
-          ${!tafeOnly && filterOptions.campuses.length > 1 ? select("campus", "Campus", filterOptions.campuses, state.campus) : ""}
-          ${filterOptions.durations.length > 1 ? select("duration", "Course duration", filterOptions.durations, state.duration) : ""}
-          ${filterOptions.modes.length > 1 ? select("mode", "Mode", filterOptions.modes, state.mode) : ""}
-        </div>
-        ${renderFilterContextNote()}
-        <details class="advanced-filter-disclosure" ${state.advancedFiltersOpen ? "open" : ""}>
-          <summary>Advanced filters <span>${advancedCourseFilterCount() ? `${advancedCourseFilterCount()} active` : "Optional"}</span></summary>
-          <div class="filters advanced-filters">
-            ${state.educationType === "All education types" ? select("tafeRoute", "TAFE route", filterOptions.tafeRoutes, state.tafeRoute) : ""}
-            ${tafeOnly ? "" : select("degreeStructure", "Degree structure", degreeStructureOptions, state.degreeStructure)}
-            ${tafeOnly ? "" : select("prerequisite", "Prerequisites", prerequisiteOptions, state.prerequisite)}
-            ${tafeOnly ? "" : select("pathway", "Pathways", pathwayFilterOptions, state.pathway)}
-            ${tafeOnly ? "" : select("guaranteedEntry", "Guaranteed entry", guaranteedEntryOptions, state.guaranteedEntry)}
-            ${select("income", "Income goal", incomeOptions, state.income)}
-            ${select("sort", "Sort by", sortOptions, state.sort)}
-            ${tafeOnly ? "" : textControl("locationQuery", "Distance from", state.locationQuery, "Sydney suburb or postcode")}
-          </div>
-          ${tafeOnly ? "" : renderDistanceNote()}
-        </details>
-        <div class="filter-foot">
-          <button class="clear-btn" type="button" data-action="clear">Reset all filters</button>
-          <small>Admission figures are historical and may change each intake.</small>
-        </div>
-        <button class="mobile-filter-done" type="button" data-action="close-course-filters">Show ${number(results.length)} results</button>
-      </div>
-      <div class="search-trust-note">
-        <strong>Read entry figures carefully.</strong>
-        <span>University selection ranks may include adjustments. TAFE courses do not use an ATAR, but can still have age, literacy, licence, portfolio, workplace or prior-study requirements.</span>
-      </div>
-      <div class="course-results-region" aria-busy="${state.processing === "search"}">
-        ${searchActive && results.length ? renderSearchFieldLeaders(results) : ""}
-        <div class="course-list">
-          ${renderProcessStrip("search", "Searching courses")}
-          ${searchActive && results.length ? results.slice(0, state.visible).map((course, index) => renderCourse(course, "", index, true)).join("") : ""}
-          ${searchActive && !results.length ? renderNoResults() : ""}
-          ${!searchActive ? renderCourseSearchStart() : ""}
-          ${results.length > state.visible ? `<button class="load-more" type="button" data-action="more">Show more</button>` : ""}
-        </div>
-      </div>
-    </section>
-  `;
-}
-
-function renderCourseSearchOnly() {
-  const current = app.querySelector("#courses");
-  if (!current) {
-    render();
-    return;
-  }
-  const activeElement = current.contains(document.activeElement) ? document.activeElement : null;
-  const activeAction = activeElement?.getAttribute("data-action") || "";
-  const activeName = activeElement?.getAttribute("name") || "";
-  const filterScrollTop = current.querySelector("[data-course-filter-panel]")?.scrollTop || 0;
-  const template = document.createElement("template");
-  template.innerHTML = renderCourseSearchSection().trim();
-  const next = template.content.firstElementChild;
-  if (!next) return;
-  current.replaceWith(next);
-  bindEvents({ searchOnly: true });
-  window.courseFinderTheme?.bindPartial?.(next);
-  updateHashNavCurrent();
-  const nextFilterPanel = next.querySelector("[data-course-filter-panel]");
-  if (nextFilterPanel && filterScrollTop) nextFilterPanel.scrollTop = filterScrollTop;
-  const focusSelector = activeAction
-    ? `[data-action="${CSS.escape(activeAction)}"]`
-    : activeName
-      ? `[name="${CSS.escape(activeName)}"]`
-      : "";
-  const nextFocus = focusSelector ? next.querySelector(focusSelector) : null;
-  nextFocus?.focus?.({ preventScroll: true });
+function syncCampusWithProvider() {
+  if (campusOptionsForProvider(state.provider).includes(state.campus)) return;
+  state.campus = "All campuses";
 }
 
 function render() {
   if (renderPass > 0) app.classList.add("is-state-update");
-  const courseSearchView = courseSearchViewModel();
-  const { filterOptions, tafeOnly, sortOptions, results, searchActive } = courseSearchView;
+  syncCampusWithProvider();
+  const results = filteredCourses();
+  const searchActive = hasActiveCourseSearch();
+  const campusOptions = campusOptionsForProvider(state.provider);
   const savedCourses = savedCourseList();
   const compareCourses = compareCourseList();
   app.innerHTML = `
@@ -1118,7 +688,7 @@ function render() {
       </a>
       <nav class="topnav" aria-label="Main">
         <a href="#courses" ${navCurrent("#courses")}>Courses</a>
-        <a href="./tools">Tools</a>
+        <a href="#tools" ${navCurrent("#tools")}>Tools</a>
         <a href="#providers" ${navCurrent("#providers")}>Universities</a>
         <a href="#saved" ${navCurrent("#saved")}>Saved${state.savedIds.length ? ` (${state.savedIds.length})` : ""}</a>
         <a href="#about" ${navCurrent("#about")}>About</a>
@@ -1130,118 +700,59 @@ function render() {
     <main id="main-content">
       <section class="hero course-finder-hero" aria-labelledby="page-title">
         <div class="hero-copy">
-          <h1 id="page-title">Find the right Sydney course</h1>
-          <p>Compare university degrees and TAFE qualifications by entry, pathway, length, location and study options.</p>
+          <h1 id="page-title"><span class="desktop-only">Find the right Sydney university course</span><span class="mobile-only">Find your Sydney course</span></h1>
+          <p><span class="desktop-only">Compare entry requirements, pathways, course length, campuses, and study options across Sydney universities.</span><span class="mobile-only">Compare courses, entry options and universities in one place.</span></p>
           <div class="hero-actions">
             <a class="primary-action" href="#courses">Search courses</a>
             <a class="secondary-action" href="./atar-calculator">Estimate my ATAR</a>
           </div>
         </div>
         <div class="hero-trust" aria-label="Course data summary">
-          <strong>${number(allCourses.length)} Sydney course options</strong>
-          <span>University, higher education and ${number(window.tafeCourses?.length || 0)} TAFE NSW courses</span>
-          <small>UAC updated ${escapeHtml(formatImportDate())} · TAFE catalogue checked ${escapeHtml(formatTafeImportDate())}</small>
+          <strong><i class="mobile-trust-icon mobile-only">${icon("courses")}</i><span class="desktop-only">${number(allCourses.length)} Sydney course options</span><span class="mobile-only">${number(allCourses.length)} courses</span></strong>
+          <span><i class="mobile-trust-icon mobile-only">${icon("university")}</i><span class="desktop-only">From ${number(meta.uniqueProviders || allProviders.length)} universities and providers</span><span class="mobile-only">${number(meta.uniqueProviders || allProviders.length)} providers</span></span>
+          <small><i class="mobile-trust-icon mobile-only">${icon("calendar")}</i><span class="desktop-only">UAC import updated ${escapeHtml(formatImportDate())}</span><span class="mobile-only">Updated ${escapeHtml(formatImportDate())}</span></small>
         </div>
       </section>
 
-      <section id="courses" class="panel course-search-panel" aria-labelledby="course-search-title">
+      ${renderCourseSearchPanel(results, searchActive, campusOptions)}
+
+      <section id="tools" class="panel tools-panel">
         <div class="panel-head">
           <div>
-            <h2 id="course-search-title">Search courses</h2>
-            <p>Start with a course, career or university, then narrow the results. Filters work even when the search box is empty.</p>
+            <span class="section-kicker">Your planning workspace</span>
+            <h2>Choose the decision you need to make</h2>
+            <p>Each tool has one clear job and a useful outcome. Start with the large cards, or jump straight to an application task.</p>
           </div>
-          <span class="result-count" role="status" aria-live="polite">${searchActive ? `${number(results.length)} results` : "Ready to search"}</span>
+          ${window.courseFinderTheme?.hasGuidePlanSnapshot?.() ? `<a class="tool-plan-resume" href="./my-plan">Continue My Plan</a>` : ""}
         </div>
-        <form class="search-form" data-form="search">
-          <label>
-            <span class="sr-only">Course, career or university</span>
-            ${icon("search")}
-            <input name="search" type="search" autocomplete="off" value="${escapeHtml(state.draft)}" placeholder="Try computer science, nursing, UTS or law" />
-          </label>
-          <button type="submit">Search courses</button>
-        </form>
-        ${renderSearchInterpretation()}
-        <button class="mobile-filter-toggle" type="button" data-action="toggle-course-filters" aria-expanded="${state.mobileFiltersOpen}">
-          <span>${icon("filter")} Filters${activeCourseFilterCount() ? ` (${activeCourseFilterCount()})` : ""}</span>
-          <strong>${searchActive ? `${number(results.length)} results` : "Choose filters"}</strong>
-        </button>
-        <button class="course-filter-scrim" type="button" data-action="close-course-filters" aria-label="Close filters" tabindex="${state.mobileFiltersOpen ? "0" : "-1"}"></button>
-        <div class="course-filter-panel ${state.mobileFiltersOpen ? "is-open" : ""}" data-course-filter-panel>
-          <div class="mobile-filter-head">
-            <div>
-              <strong>Filter courses</strong>
-              <span>${activeCourseFilterCount()} active</span>
-            </div>
-            <button type="button" data-action="clear">Reset</button>
-          </div>
-          <div class="filters essential-filters">
-            ${select("educationType", "Education type", educationTypeOptions, state.educationType)}
-            ${select("area", "Study area", filterOptions.areas, state.area)}
-            ${select("level", tafeOnly ? "Qualification level" : "Study level", filterOptions.levels, state.level)}
-            ${select("courseType", "Course type", filterOptions.courseTypes, state.courseType)}
-            ${tafeOnly ? select("tafeRoute", "TAFE pathway", filterOptions.tafeRoutes, state.tafeRoute) : ""}
-            ${tafeOnly ? "" : numberControl("estimatedAtar", "Estimated ATAR", state.estimatedAtar, "Optional", 0, 99.95, 0.05)}
-            ${select("provider", tafeOnly ? "Training provider" : "Provider", filterOptions.providers, state.provider)}
-            ${!tafeOnly && filterOptions.campuses.length > 1 ? select("campus", "Campus", filterOptions.campuses, state.campus) : ""}
-            ${filterOptions.durations.length > 1 ? select("duration", "Course duration", filterOptions.durations, state.duration) : ""}
-            ${filterOptions.modes.length > 1 ? select("mode", "Mode", filterOptions.modes, state.mode) : ""}
-          </div>
-          ${renderFilterContextNote()}
-          <details class="advanced-filter-disclosure" ${state.advancedFiltersOpen ? "open" : ""}>
-            <summary>Advanced filters <span>${advancedCourseFilterCount() ? `${advancedCourseFilterCount()} active` : "Optional"}</span></summary>
-            <div class="filters advanced-filters">
-              ${state.educationType === "All education types" ? select("tafeRoute", "TAFE route", filterOptions.tafeRoutes, state.tafeRoute) : ""}
-              ${tafeOnly ? "" : select("degreeStructure", "Degree structure", degreeStructureOptions, state.degreeStructure)}
-              ${tafeOnly ? "" : select("prerequisite", "Prerequisites", prerequisiteOptions, state.prerequisite)}
-              ${tafeOnly ? "" : select("pathway", "Pathways", pathwayFilterOptions, state.pathway)}
-              ${tafeOnly ? "" : select("guaranteedEntry", "Guaranteed entry", guaranteedEntryOptions, state.guaranteedEntry)}
-              ${select("income", "Income goal", incomeOptions, state.income)}
-              ${select("sort", "Sort by", sortOptions, state.sort)}
-              ${tafeOnly ? "" : textControl("locationQuery", "Distance from", state.locationQuery, "Sydney suburb or postcode")}
-            </div>
-            ${tafeOnly ? "" : renderDistanceNote()}
-          </details>
-          <div class="filter-foot">
-            <button class="clear-btn" type="button" data-action="clear">Reset all filters</button>
-            <small>Admission figures are historical and may change each intake.</small>
-          </div>
-          <button class="mobile-filter-done" type="button" data-action="close-course-filters">Show ${number(results.length)} results</button>
+        <div class="tool-feature-grid">
+          ${renderToolCard("./guide", "Build a full plan", "Guide", "Turn your year group, goals and school results into one personalised route from subjects to UAC and careers.", "Personal plan", "5 min", "guide", true)}
+          ${renderToolCard("./advisor", "Explore and shortlist", "Course direction & ATAR match", "Find relevant fields and courses, then sort them into reach, target and safer options using your estimated ATAR.", "Course shortlist", "3 min", "direction", true)}
+          ${renderToolCard("./subject-helper", "Choose Year 11/12 subjects", "Subject helper", "Start with a degree or job and see prerequisite, assumed-knowledge and useful HSC subjects separately.", "Subject plan", "2 min", "subjects")}
+          ${renderToolCard("./atar-calculator", "Estimate from marks", "ATAR calculator", "Use historical UAC scaling data to test a valid 10-unit subject pattern and get an indicative range.", "ATAR range", "5 min", "calculator")}
+          ${renderToolCard("./uac-planner#preferences", "Build an application list", "UAC preference planner", "Create a five-course draft in genuine preference order, with entry context and safer backups.", "Preference draft", "5 min", "list")}
+          ${renderToolCard("./uac-planner#early-entry", "Check 2026 schemes", "Early-entry finder", "Compare verified direct and UAC early-offer routes with exact application and requirements links.", "Early-entry routes", "3 min", "star")}
+          ${renderToolCard("./pathways", "Plan a backup route", "Alternative pathways", "Compare TAFE, diploma, preparation, portfolio and transfer routes for your exact situation.", "Backup pathway", "3 min", "path")}
+          ${renderToolCard("./university-forms", "Prepare documents", "University forms", "Find official provider documents and complete supported PDFs privately in your browser.", "Ready-to-use form", "2 min", "forms")}
         </div>
-        <div class="search-trust-note">
-          <strong>Read entry figures carefully.</strong>
-          <span>University selection ranks may include adjustments. TAFE courses do not use an ATAR, but can still have age, literacy, licence, portfolio, workplace or prior-study requirements.</span>
-        </div>
-        <div class="course-results-region">
-          ${searchActive && results.length ? renderSearchFieldLeaders(results) : ""}
-          <div class="course-list">
-            ${renderProcessStrip("search", "Searching courses")}
-            ${searchActive && results.length ? results.slice(0, state.visible).map((course, index) => renderCourse(course, "", index, true)).join("") : ""}
-            ${searchActive && !results.length ? renderNoResults() : ""}
-            ${!searchActive ? renderCourseSearchStart() : ""}
-            ${results.length > state.visible ? `<button class="load-more" type="button" data-action="more">Show more</button>` : ""}
-          </div>
-        </div>
+        <aside class="tool-help-row">
+          <span class="tool-help-icon" aria-hidden="true">?</span>
+          <div><strong>Not sure where to start?</strong><p>Use Course direction &amp; ATAR match for a shortlist, or Guide for the complete sequence.</p></div>
+          <a href="./advisor">Find a direction <span aria-hidden="true">→</span></a>
+        </aside>
       </section>
 
-      <section id="tools" class="panel tools-panel tools-home-preview">
+      <section id="providers" class="panel">
         <div class="panel-head">
           <div>
-            <span class="eyebrow">Planning toolkit</span>
-            <h2>Go deeper only when you need to</h2>
-            <p>Keep course search focused, then open a dedicated tool for planning, ATAR, subjects, pathways, TAFE or general questions.</p>
+            <h2>Universities</h2>
+            <p>Browse Sydney universities and providers, with an overall site profile and a separate score for the area each provider is strongest in.</p>
           </div>
-          <a class="panel-head-action" href="./tools">View all tools</a>
+          <span>${allProviders.length} providers</span>
         </div>
-        <div class="tools-home-grid">
-          ${renderToolLink("./advisor", "Course direction", "Work out which fields and courses fit you.")}
-          ${renderToolLink("./atar-calculator", "ATAR and entry", "Estimate an ATAR and understand entry figures.")}
-          ${renderToolLink("./tafe-tools", "TAFE routes", "Choose a trade, job-ready or university pathway.")}
-          ${renderToolLink("./help", "General help", "Ask a plain-English course or UAC question.")}
-        </div>
-      </section>
-
-      <section id="providers" class="panel providers-home-panel">
-        ${renderProviderDirectoryContent()}
+        ${renderProviderScoreExplainer()}
+        ${renderTopProviderBlock()}
+        <div class="provider-grid">${rankedProviders.map(renderProvider).join("")}</div>
       </section>
 
       <section id="saved" class="panel saved-panel">
@@ -1272,14 +783,13 @@ function render() {
         <div class="panel-head">
           <div>
             <h2>About the data</h2>
-            <p>This tool organises imported UAC records and official TAFE NSW catalogue links. It does not make admission, funding or credit decisions.</p>
+            <p>This tool organises imported UAC course records for comparison. It does not make admission decisions.</p>
           </div>
         </div>
         <div class="trust-grid">
           <div><strong>Data year</strong><span>Each result shows its published rank year and the date this site imported the record.</span></div>
           <div><strong>Correct terminology</strong><span>Selection rank, ATAR, prerequisites and additional criteria are shown separately wherever the data allows.</span></div>
-          <div><strong>Provider verification</strong><span>${number(meta.providerAdmissionOverrides || 0)} course records currently include a separately verified university-published figure. When one has not been verified, this site shows the UAC status and sends you to the official course page instead of inventing a number.</span></div>
-          <div><strong>Official confirmation</strong><span>Every result links to UAC, a provider or TAFE NSW. Previous entry results never guarantee a future offer; TAFE entry, funding, availability and credit can also change by intake.</span></div>
+          <div><strong>Official confirmation</strong><span>Every result links to UAC or the provider. Previous entry results never guarantee a future offer.</span></div>
         </div>
       </section>
     </main>
@@ -1287,7 +797,7 @@ function render() {
     <footer class="site-footer" id="faq">
       <div>
         <strong>Sydney Course Finder</strong>
-        <p>Planning support only. Confirm current admission, delivery, fees, funding, credit and offer rules with UAC, the provider or TAFE NSW.</p>
+        <p>Planning support only. Confirm current admission criteria, fees, CSP status and offer rules with UAC and the university.</p>
       </div>
       <details class="footer-faq">
         <summary>Frequently asked questions</summary>
@@ -1295,8 +805,6 @@ function render() {
       </details>
       <nav aria-label="Footer">
         <a href="#courses">Courses</a>
-        <a href="./tools">Tools</a>
-        <a href="./help">Help</a>
         <a href="#about">About the data</a>
         <a href="${escapeHtml(meta.source || "https://www.uac.edu.au/course-search/")}">UAC source</a>
       </nav>
@@ -1304,77 +812,91 @@ function render() {
   `;
   bindEvents();
   window.courseFinderTheme?.bind?.(app);
-  scheduleProviderDirectoryHydration();
   renderPass += 1;
 }
 
-function renderProviderDirectoryContent() {
+function renderCourseSearchPanel(
+  results = filteredCourses(),
+  searchActive = hasActiveCourseSearch(),
+  campusOptions = campusOptionsForProvider(state.provider)
+) {
   return `
-    <div class="panel-head">
-      <div>
-        <h2>Universities</h2>
-        <p>Browse Sydney universities and providers, with an overall site profile and a separate score for the area each provider is strongest in.</p>
+    <section id="courses" class="panel course-search-panel" aria-labelledby="course-search-title">
+      <div class="panel-head">
+        <div>
+          <h2 id="course-search-title">Search courses</h2>
+          <p>Start with a course, career or university, then narrow the results. Filters work even when the search box is empty.</p>
+        </div>
+        <span class="result-count" role="status" aria-live="polite">${searchActive ? `${number(results.length)} results` : "Ready to search"}</span>
       </div>
-      <span>${allProviders.length} providers</span>
-    </div>
-    ${providerDirectoryReady ? `
-      ${renderProviderScoreExplainer()}
-      ${renderTopProviderBlock()}
-      <div class="provider-grid">${rankedProviders.map(renderProvider).join("")}</div>
-    ` : `
-      <div class="provider-directory-loading" role="status">
-        <strong>University profiles are preparing</strong>
-        <span>Course search is ready now. Detailed overall and specialised scores load when the browser is idle.</span>
+      <form class="search-form" data-form="search">
+        <span class="mobile-search-label mobile-only">Course, career or university</span>
+        <label>
+          <span class="sr-only">Course, career or university</span>
+          ${icon("search")}
+          <input name="search" type="search" autocomplete="off" value="${escapeHtml(state.draft)}" placeholder="Search courses, careers or unis" />
+        </label>
+        <button type="submit" aria-label="Search courses"><span class="desktop-only" aria-hidden="true">Search courses</span><span class="mobile-only" aria-hidden="true">Search</span></button>
+        <button class="mobile-filter-toggle" type="button" data-action="toggle-course-filters" aria-expanded="${state.mobileFiltersOpen}">
+          <span>${icon("filter")} Filters${activeCourseFilterCount() ? ` (${activeCourseFilterCount()})` : ""}</span>
+          <strong>${searchActive ? `${number(results.length)} results` : "Choose filters"}</strong>
+        </button>
+      </form>
+      ${renderSearchInterpretation()}
+      <button class="course-filter-scrim" type="button" data-action="close-course-filters" aria-label="Close filters" tabindex="${state.mobileFiltersOpen ? "0" : "-1"}"></button>
+      <div class="course-filter-panel ${state.mobileFiltersOpen ? "is-open" : ""}" data-course-filter-panel>
+        <div class="mobile-filter-head">
+          <div>
+            <strong>Filter courses</strong>
+            <span>${activeCourseFilterCount()} active</span>
+          </div>
+          <button type="button" data-action="clear">Reset</button>
+        </div>
+        <div class="filters essential-filters">
+          ${select("area", "Study area", studyAreaOptions, state.area)}
+          ${numberControl("estimatedAtar", "Estimated ATAR", state.estimatedAtar, "Optional", 0, 99.95, 0.05)}
+          ${select("provider", "Provider", providers, state.provider)}
+          ${select("campus", "Campus", campusOptions, state.campus)}
+          ${select("duration", "Course duration", durationOptions, state.duration)}
+          ${select("mode", "Mode", modes, state.mode)}
+        </div>
+        <details class="advanced-filter-disclosure" ${state.advancedFiltersOpen ? "open" : ""}>
+          <summary>Advanced filters <span>${advancedCourseFilterCount() ? `${advancedCourseFilterCount()} active` : "Optional"}</span></summary>
+          <div class="filters advanced-filters">
+            ${showLevelFilter ? select("level", "Study level", levels, state.level) : ""}
+            ${select("courseType", "Course type", courseTypeOptions, state.courseType)}
+            ${select("degreeStructure", "Degree structure", degreeStructureOptions, state.degreeStructure)}
+            ${select("prerequisite", "Prerequisites", prerequisiteOptions, state.prerequisite)}
+            ${select("pathway", "Pathways", pathwayFilterOptions, state.pathway)}
+            ${select("guaranteedEntry", "Guaranteed entry", guaranteedEntryOptions, state.guaranteedEntry)}
+            ${select("income", "Income goal", incomeOptions, state.income)}
+            ${select("sort", "Sort by", searchSortOptions, state.sort)}
+            ${textControl("locationQuery", "Distance from", state.locationQuery, "Sydney suburb or postcode")}
+          </div>
+          ${renderDistanceNote()}
+        </details>
+        <div class="filter-foot">
+          <button class="clear-btn" type="button" data-action="clear">Reset all filters</button>
+          <small>Admission figures are historical and may change each intake.</small>
+        </div>
+        <button class="mobile-filter-done" type="button" data-action="close-course-filters">${searchActive ? `Show ${number(results.length)} courses` : "Done"}</button>
       </div>
-    `}
+      <div class="search-trust-note">
+        <strong>Read entry figures carefully.</strong>
+        <span>A selection rank may include adjustments and is not always the same as an ATAR. Prerequisites and additional criteria can still affect admission.</span>
+      </div>
+      <div class="course-results-region">
+        ${searchActive && results.length ? renderSearchFieldLeaders(results) : ""}
+        <div class="course-list">
+          ${renderProcessStrip("search", "Searching courses")}
+          ${searchActive && results.length ? results.slice(0, state.visible).map((course, index) => renderCourse(course, "", index, true)).join("") : ""}
+          ${searchActive && !results.length ? renderNoResults() : ""}
+          ${!searchActive ? renderCourseSearchStart() : ""}
+          ${results.length > state.visible ? `<button class="load-more" type="button" data-action="more">Show more</button>` : ""}
+        </div>
+      </div>
+    </section>
   `;
-}
-
-function scheduleProviderDirectoryHydration() {
-  if (providerDirectoryReady || providerHydrationScheduled) return;
-  if (isMobileViewport() && !providerHydrationActivated && "IntersectionObserver" in window) {
-    if (providerVisibilityObserver) return;
-    const section = app.querySelector("#providers");
-    if (!section) return;
-    providerVisibilityObserver = new IntersectionObserver((entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return;
-      providerVisibilityObserver?.disconnect();
-      providerVisibilityObserver = null;
-      providerHydrationActivated = true;
-      scheduleProviderDirectoryHydration();
-    }, { rootMargin: "480px 0px" });
-    providerVisibilityObserver.observe(section);
-    return;
-  }
-  providerHydrationActivated = true;
-  providerHydrationScheduled = true;
-  const runChunk = (deadline = { timeRemaining: () => 8, didTimeout: true }) => {
-    providerHydrationScheduled = false;
-    const startedAt = performance.now();
-    while (providerHydrationIndex < allProviders.length) {
-      providerProfile(allProviders[providerHydrationIndex]);
-      providerHydrationIndex += 1;
-      const outOfBudget = performance.now() - startedAt > 12;
-      const idleBudgetLow = !deadline.didTimeout && deadline.timeRemaining() < 3;
-      if (outOfBudget || idleBudgetLow) break;
-    }
-    if (providerHydrationIndex < allProviders.length) {
-      scheduleProviderDirectoryHydration();
-      return;
-    }
-    rankedProviders = [...allProviders].sort((a, b) => providerOverallScore(b) - providerOverallScore(a) || a.name.localeCompare(b.name));
-    providerDirectoryReady = true;
-    const section = app.querySelector("#providers");
-    if (!section) return;
-    section.innerHTML = renderProviderDirectoryContent();
-    bindProviderTopicControl(section);
-    window.courseFinderTheme?.bindPartial?.(section);
-  };
-  if ("requestIdleCallback" in window) {
-    window.requestIdleCallback(runChunk, { timeout: 1200 });
-  } else {
-    window.setTimeout(() => runChunk(), 48);
-  }
 }
 
 function formatImportDate() {
@@ -1384,88 +906,44 @@ function formatImportDate() {
   return new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" }).format(date);
 }
 
-function formatTafeImportDate() {
-  const value = String(tafeMeta.importedAt || "");
-  const date = value ? new Date(value) : null;
-  if (!date || Number.isNaN(date.getTime())) return "date unavailable";
-  return new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" }).format(date);
-}
-
-function renderToolLink(href, title, text) {
+function renderToolCard(href, stage, title, text, outcome, time = "2 min", iconName = "guide", featured = false) {
   return `
-    <a class="tool-link" href="${escapeHtml(href)}">
-      <span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(text)}</small></span>
-      <span aria-hidden="true">→</span>
+    <a class="tool-feature-card${featured ? " is-featured" : ""}" data-tool-card="${escapeHtml(iconName)}" href="${escapeHtml(href)}">
+      <header>
+        <span class="tool-feature-icon" aria-hidden="true">${toolIcon(iconName)}</span>
+        <span class="tool-feature-stage">${escapeHtml(stage)}</span>
+        <em aria-label="Usually takes ${escapeHtml(time)}">${escapeHtml(time)}</em>
+      </header>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(text)}</p>
+      <footer><span>${escapeHtml(outcome)}</span><strong>Open tool <i aria-hidden="true">→</i></strong></footer>
     </a>
   `;
 }
 
-function renderTafeToolkit() {
-  return `
-    <section class="tafe-toolkit" aria-labelledby="tafe-toolkit-title">
-      <div class="tafe-toolkit-head">
-        <div>
-          <span class="eyebrow">TAFE course tools</span>
-          <h3 id="tafe-toolkit-title">Choose the route before the exact qualification</h3>
-          <p>TAFE entry usually does not use an ATAR. Start with your goal, then confirm the current offering, fees and any workplace requirements.</p>
-        </div>
-        <a href="https://www.tafensw.edu.au/courses/course-types" target="_blank" rel="noreferrer">Qualification guide ${icon("external")}</a>
-      </div>
-      <div class="tafe-route-actions" aria-label="TAFE course shortcuts">
-        <button type="button" data-tafe-route-shortcut="all">
-          <strong>Browse all TAFE</strong>
-          <span>${number(window.tafeCourses?.length || 0)} current official course pages</span>
-        </button>
-        <button type="button" data-tafe-route-shortcut="trade">
-          <strong>Trade or apprenticeship</strong>
-          <span>Find practical trade qualifications and check employment requirements.</span>
-        </button>
-        <button type="button" data-tafe-route-shortcut="job">
-          <strong>Job-ready training</strong>
-          <span>Focus on certificates and vocational qualifications for a specific field.</span>
-        </button>
-        <button type="button" data-tafe-route-shortcut="university">
-          <strong>TAFE to university</strong>
-          <span>Find tertiary preparation and qualifications that may support further study or credit.</span>
-        </button>
-      </div>
-      <div class="tafe-tool-grid">
-        <details class="tafe-qualification-guide">
-          <summary>Which qualification level should I check?</summary>
-          <dl>
-            <div><dt>Certificate I–II</dt><dd>Foundation and entry-level skills. Useful when you are starting a field or rebuilding study skills.</dd></div>
-            <div><dt>Certificate III</dt><dd>Common job-entry or trade level. Many apprenticeships lead to a Certificate III.</dd></div>
-            <div><dt>Certificate IV</dt><dd>More specialised technical, supervisory or pathway preparation.</dd></div>
-            <div><dt>Diploma / Advanced Diploma</dt><dd>Higher-level vocational study. It may support credit into a related degree, but credit is never automatic.</dd></div>
-          </dl>
-        </details>
-        <details class="tafe-funding-tool">
-          <summary>Quick Smart and Skilled eligibility check</summary>
-          <form data-form="tafe-funding-check">
-            <label><input type="checkbox" name="nsw" /> I live or work in NSW (or an eligible border area)</label>
-            <label><input type="checkbox" name="age" /> I am at least 15</label>
-            <label><input type="checkbox" name="school" /> I am no longer at secondary school</label>
-            <label><input type="checkbox" name="status" /> I meet the citizenship or eligible visa rules</label>
-            <label><input type="checkbox" name="usi" /> I have or can obtain a USI</label>
-            <button type="submit">Check the basics</button>
-            <p data-tafe-funding-result aria-live="polite">This is a preliminary checklist only. Subsidies and fee-free places are limited and course-specific.</p>
-          </form>
-        </details>
-      </div>
-      <div class="tafe-official-links">
-        <a href="https://www.tafensw.edu.au/study/fees/government-funded-training" target="_blank" rel="noreferrer">Smart and Skilled funding ${icon("external")}</a>
-        <a href="https://www.tafensw.edu.au/courses/apprenticeships-traineeships" target="_blank" rel="noreferrer">Apprenticeships and traineeships ${icon("external")}</a>
-        <a href="https://www.tafensw.edu.au/study/pathways" target="_blank" rel="noreferrer">TAFE to university pathways ${icon("external")}</a>
-        <a href="https://www.tafensw.edu.au/study/fees/vet-student-loans" target="_blank" rel="noreferrer">VET Student Loans ${icon("external")}</a>
-      </div>
-    </section>
-  `;
+function toolIcon(name) {
+  const paths = {
+    decide: '<circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.2 2.2 4.8-5"/>',
+    estimate: '<path d="M5 18a8 8 0 1 1 14 0"/><path d="m12 14 4-4"/><path d="M4 20h16"/>',
+    apply: '<path d="M7 3h8l4 4v14H7z"/><path d="M15 3v5h5M10 13h6M10 17h6"/>',
+    guide: '<path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v18H7.5A3.5 3.5 0 0 0 4 23z"/><path d="M20 5.5A3.5 3.5 0 0 0 16.5 2H13v18h3.5A3.5 3.5 0 0 1 20 23z"/>',
+    direction: '<path d="M4 7h9M4 17h9M13 7l3-3m-3 3 3 3M13 17l3-3m-3 3 3 3"/>',
+    subjects: '<path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+    compass: '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2.2 4.8-4.8 2.2 2.2-4.8z"/>',
+    calculator: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M14 11h2M8 15h2M14 15h2M8 19h2M14 19h2"/>',
+    list: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="m4 6 .8.8L6.5 5M4 12l.8.8L6.5 11M4 18l.8.8L6.5 17"/>',
+    star: '<path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+    path: '<path d="M5 19c0-6 3-6 7-6s7 0 7-6"/><path d="m16 7 3-3 3 3"/><circle cx="5" cy="19" r="2"/>',
+    forms: '<path d="M7 3h8l4 4v14H7z"/><path d="M15 3v5h5M10 12h6M10 16h6"/>'
+  };
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[name] || paths.guide}</svg>`;
 }
 
 function renderCourseSearchStart() {
   return `
     <div class="course-search-start">
-      <strong>Start with what matters most</strong>
+      <strong class="desktop-only">Start with what matters most</strong>
+      <strong class="mobile-only">Popular searches</strong>
       <p>Search a degree, career or university—or choose filters such as study area, campus and estimated ATAR.</p>
       <div>
         <button type="button" data-search-example="computer science">Computer science</button>
@@ -1495,15 +973,16 @@ function renderNoResults() {
 
 function renderCompareTray(compareCourses) {
   if (!compareCourses.length || window.location.hash === "#saved") return "";
+  const mobileStatus = `${compareCourses.length} selected`;
   return `
-    <aside class="compare-tray" aria-label="Courses being compared">
+    <aside class="compare-tray" data-compare-count="${compareCourses.length}" aria-label="Courses being compared">
       <div>
-        <strong>${compareCourses.length} of 3 comparing</strong>
+        <strong><span class="desktop-only">${compareCourses.length} of 3 comparing</span><span class="mobile-only">${mobileStatus}</span></strong>
         <span>${compareCourses.map((course) => escapeHtml(shortCourseName(course.name))).join(" · ")}</span>
       </div>
       <div class="compare-tray-actions">
         ${compareCourses.map((course) => `<button type="button" data-remove-compare="${escapeHtml(course.id)}" aria-label="Remove ${escapeHtml(course.name)} from comparison">×</button>`).join("")}
-        <a href="#saved">Compare ${compareCourses.length}</a>
+        <a href="#saved" aria-label="Compare ${compareCourses.length} courses"><span class="desktop-only">Compare ${compareCourses.length}</span><span class="mobile-only">Compare</span></a>
       </div>
       <p class="sr-only" aria-live="polite">${escapeHtml(state.compareMessage)}</p>
     </aside>
@@ -1538,51 +1017,34 @@ function renderProcessStrip(key, label) {
 function runProcessing(key, action, after = null) {
   const x = window.scrollX;
   const y = window.scrollY;
-  const renderUpdate = key === "search" ? renderCourseSearchOnly : render;
+  const commit = () => {
+    action();
+    state.processing = "";
+    if (key === "search") renderCourseSearchSurface();
+    else render();
+  };
   const restore = () => {
     window.scrollTo(x, y);
     if (after) after();
   };
 
-  if (key === "search") {
-    action();
-    state.processing = "";
-    const generation = ++searchRenderGeneration;
-    if (searchRenderFrame) cancelAnimationFrame(searchRenderFrame);
+  if (key === "search" && !prefersReducedMotion() && !isMobileViewport() && typeof document.startViewTransition === "function") {
     app.classList.add("is-results-updating");
     document.documentElement.classList.add("is-course-results-transition");
-    searchRenderFrame = requestAnimationFrame(() => {
-      searchRenderFrame = 0;
-      if (generation !== searchRenderGeneration) return;
-      const cleanUpTransition = () => {
-        if (generation !== searchRenderGeneration) return;
-        app.classList.remove("is-results-updating");
-        document.documentElement.classList.remove("is-course-results-transition");
-        activeCourseSearchTransition = null;
-      };
-      if (!isMobileViewport() && !prefersReducedMotion() && typeof document.startViewTransition === "function") {
-        activeCourseSearchTransition?.skipTransition?.();
-        const transition = document.startViewTransition(renderUpdate);
-        activeCourseSearchTransition = transition;
-        transition.updateCallbackDone.then(
-          () => requestAnimationFrame(restore),
-          () => requestAnimationFrame(restore)
-        );
-        transition.finished.then(cleanUpTransition, cleanUpTransition);
-        return;
-      }
-      renderUpdate();
-      requestAnimationFrame(() => {
-        restore();
-        cleanUpTransition();
-      });
-    });
+    const transition = document.startViewTransition(commit);
+    transition.updateCallbackDone.then(
+      () => requestAnimationFrame(restore),
+      () => requestAnimationFrame(restore)
+    );
+    const cleanUpTransition = () => {
+      app.classList.remove("is-results-updating");
+      document.documentElement.classList.remove("is-course-results-transition");
+    };
+    transition.finished.then(cleanUpTransition, cleanUpTransition);
     return;
   }
 
-  action();
-  state.processing = "";
-  renderUpdate();
+  commit();
   requestAnimationFrame(restore);
 }
 
@@ -1615,6 +1077,48 @@ function renderPreservingViewport(anchorSelector = "") {
   });
 }
 
+function renderCourseSearchSurface() {
+  syncCampusWithProvider();
+  const current = app.querySelector("#courses");
+  if (!current) {
+    render();
+    return app.querySelector("#courses");
+  }
+  const template = document.createElement("template");
+  template.innerHTML = renderCourseSearchPanel(
+    filteredCourses(),
+    hasActiveCourseSearch(),
+    campusOptionsForProvider(state.provider)
+  ).trim();
+  const next = template.content.firstElementChild;
+  if (!next) return current;
+  current.replaceWith(next);
+  bindCourseSearchSurface(next);
+  window.courseFinderTheme?.bind?.(next);
+  renderPass += 1;
+  return next;
+}
+
+function renderCourseSearchPreservingViewport(anchorSelector = "") {
+  const x = window.scrollX;
+  const y = window.scrollY;
+  const anchorBefore = anchorSelector ? app.querySelector(anchorSelector) : null;
+  const anchorBeforeRect = anchorBefore?.getBoundingClientRect();
+  const anchorOffset = anchorBeforeRect ? anchorBeforeRect.top : null;
+  renderCourseSearchSurface();
+  requestAnimationFrame(() => {
+    if (anchorSelector && anchorOffset !== null) {
+      const nextAnchor = app.querySelector(anchorSelector);
+      if (nextAnchor) {
+        const nextOffset = nextAnchor.getBoundingClientRect().top;
+        window.scrollTo(x, Math.max(0, y + nextOffset - anchorOffset));
+        return;
+      }
+    }
+    window.scrollTo(x, y);
+  });
+}
+
 function animateRemoval(target, action) {
   if (!target || prefersReducedMotion()) {
     action();
@@ -1629,9 +1133,7 @@ function hasIncomeOnlySearch() {
 }
 
 function hasActiveCourseFilters() {
-  return state.educationType !== "All education types"
-    || state.tafeRoute !== "Any TAFE route"
-    || state.level !== "All levels"
+  return (showLevelFilter && state.level !== "All levels")
     || state.courseType !== "All course types"
     || state.area !== "All study areas"
     || state.provider !== "All providers"
@@ -1653,9 +1155,7 @@ function hasActiveCourseSearch() {
 
 function activeCourseFilterCount() {
   return [
-    state.educationType !== "All education types",
-    state.tafeRoute !== "Any TAFE route",
-    state.level !== "All levels",
+    showLevelFilter && state.level !== "All levels",
     state.courseType !== "All course types",
     state.area !== "All study areas",
     state.provider !== "All providers",
@@ -1675,7 +1175,8 @@ function activeCourseFilterCount() {
 
 function advancedCourseFilterCount() {
   return [
-    state.educationType !== "TAFE / vocational" && state.tafeRoute !== "Any TAFE route",
+    showLevelFilter && state.level !== "All levels",
+    state.courseType !== "All course types",
     state.degreeStructure !== "Any degree structure",
     state.prerequisite !== "Any prerequisite status",
     state.pathway !== "Any pathway status",
@@ -1688,8 +1189,6 @@ function advancedCourseFilterCount() {
 
 function relaxOneCourseFilter() {
   const resetOrder = [
-    ["tafeRoute", "Any TAFE route"],
-    ["educationType", "All education types"],
     ["guaranteedEntry", "Any guaranteed-entry status"],
     ["prerequisite", "Any prerequisite status"],
     ["pathway", "Any pathway status"],
@@ -1712,7 +1211,7 @@ function relaxOneCourseFilter() {
     state.query = state.query.split(/\s+/).slice(0, -1).join(" ");
     state.draft = state.query;
   }
-  state.visible = 24;
+  state.visible = coursePageSize();
   state.openCourseIds.clear();
 }
 
@@ -1724,8 +1223,6 @@ function filteredCourses() {
   const origin = resolveKnownLocation(state.locationQuery);
   const cacheKey = [
     queryPlan?.cacheKey || query,
-    state.educationType,
-    state.tafeRoute,
     state.level,
     state.courseType,
     state.area,
@@ -1744,42 +1241,96 @@ function filteredCourses() {
     origin ? origin.label : cleanSearchText(state.locationQuery)
   ].join("|");
   if (filteredCourseCache.key === cacheKey) return filteredCourseCache.results;
-  const needsAreaScore = state.sort === "Study area fit"
-    || (state.sort === "Relevance" && state.area !== "All study areas");
-  const needsIncomeScore = state.sort === "Income potential"
-    || (incomeOnly && state.sort === "Relevance");
   const ranked = allCourses
     .filter((course) => {
-      if (query && !courseSearchMatch(course, queryPlan)) return false;
-      if (!courseMatchesEducationType(course, state.educationType)) return false;
-      if (!courseMatchesTafeRoute(course, state.tafeRoute)) return false;
-      if (!courseMatchesLevelFilter(course, state.level)) return false;
-      if (state.courseType !== "All course types" && courseTypeLabel(course) !== state.courseType) return false;
-      if (!courseMatchesStudyArea(course, state.area)) return false;
-      if (state.provider !== "All providers" && course.university !== state.provider) return false;
-      if (state.campus !== "All campuses" && course.campus !== state.campus) return false;
-      if (state.mode !== "All modes" && !(course.modes || []).includes(state.mode)) return false;
-      if (!courseMeetsIncome(course, state.income)) return false;
-      if (!courseMatchesEstimatedAtar(course)) return false;
-      if (!courseMatchesDuration(course, state.duration)) return false;
-      if (!courseMatchesPrerequisiteFilter(course, state.prerequisite)) return false;
-      if (!courseMatchesPathwayFilter(course, state.pathway)) return false;
-      if (!courseMatchesGuaranteedEntryFilter(course, state.guaranteedEntry)) return false;
-      return courseMatchesDegreeStructure(course, state.degreeStructure);
+      const queryMatch = !query || courseSearchMatch(course, queryPlan);
+      const levelMatch = state.level === "All levels" || courseLevels(course).some((level) => levelLabels[level] === state.level);
+      const typeMatch = state.courseType === "All course types" || courseTypeLabel(course) === state.courseType;
+      const areaMatch = courseMatchesStudyArea(course, state.area);
+      const providerMatch = state.provider === "All providers" || course.university === state.provider;
+      const campusMatch = state.campus === "All campuses" || course.campus === state.campus;
+      const modeMatch = state.mode === "All modes" || (course.modes || []).includes(state.mode);
+      const incomeMatch = courseMeetsIncome(course, state.income);
+      const atarMatch = courseMatchesEstimatedAtar(course);
+      const durationMatch = courseMatchesDuration(course, state.duration);
+      const prerequisiteMatch = courseMatchesPrerequisiteFilter(course, state.prerequisite);
+      const pathwayMatch = courseMatchesPathwayFilter(course, state.pathway);
+      const guaranteedMatch = courseMatchesGuaranteedEntryFilter(course, state.guaranteedEntry);
+      const structureMatch = courseMatchesDegreeStructure(course, state.degreeStructure);
+      return queryMatch
+        && levelMatch
+        && typeMatch
+        && areaMatch
+        && providerMatch
+        && campusMatch
+        && modeMatch
+        && incomeMatch
+        && atarMatch
+        && durationMatch
+        && prerequisiteMatch
+        && pathwayMatch
+        && guaranteedMatch
+        && structureMatch;
     })
     .map((course) => ({
       course,
       score: searchScore(course, queryPlan),
-      areaScore: needsAreaScore ? studyAreaSortScore(course) : 0,
+      areaScore: studyAreaSortScore(course),
       distance: origin ? courseDistanceKm(course, origin) : null,
-      incomeScore: needsIncomeScore ? (courseIncomeOutcomes(course)[0]?.max || 0) : 0
+      incomeScore: courseIncomeOutcomes(course)[0]?.max || 0
     }))
     .sort((a, b) => compareSearchEntries(a, b))
     .map((entry) => entry.course);
-  const results = dedupeVisibleCourseResults(ranked);
+  const results = dedupeVisibleCourseResults(promoteFieldLeaderCourses(ranked, queryPlan));
   filteredCourseCache.key = cacheKey;
   filteredCourseCache.results = results;
   return results;
+}
+
+function promoteFieldLeaderCourses(courses, queryPlan) {
+  if (state.sort !== "Relevance" || state.provider !== "All providers" || queryPlan?.provider) return courses;
+  const topic = state.area !== "All study areas"
+    ? topicOptions.find((item) => item.label === state.area)
+    : queryPlan?.contentQuery
+      ? topicForQuery(queryPlan.contentQuery)
+      : null;
+  const qualityRows = topic ? providerQuality[topic.label] : null;
+  if (!qualityRows) return courses;
+
+  const leaderIds = Object.entries(qualityRows)
+    .sort(([, left], [, right]) => right.score - left.score)
+    .slice(0, 3)
+    .map(([providerId]) => providerId);
+  const promoted = leaderIds
+    .map((providerId) => courses
+      .filter((course) => course.providerId === providerId)
+      .map((course, index) => ({
+        course,
+        index,
+        fit: fieldLeaderCourseFitScore(course, queryPlan?.contentQuery || "")
+      }))
+      .filter((entry) => entry.fit > 0)
+      .sort((left, right) => right.fit - left.fit || left.index - right.index)[0]?.course)
+    .filter(Boolean);
+  if (!promoted.length) return courses;
+  const promotedIds = new Set(promoted.map((course) => course.id));
+  return [...promoted, ...courses.filter((course) => !promotedIds.has(course.id))];
+}
+
+function fieldLeaderCourseFitScore(course, query) {
+  const cleanQuery = cleanSearchText(query);
+  if (!cleanQuery) return 0;
+  const title = courseSearchFields(course).title;
+  const aliases = [cleanQuery, ...(searchAliases[cleanQuery] || [])]
+    .map(cleanSearchText)
+    .filter((alias, index, values) => alias && values.indexOf(alias) === index);
+  const aliasScore = aliases.reduce((score, alias, index) => {
+    if (!phraseMatch(title, alias)) return score;
+    return score + Math.max(1, aliases.length - index) * 1000;
+  }, 0);
+  if (!aliasScore && !phraseMatch(title, cleanQuery)) return 0;
+  const structureScore = courseTypeLabel(course) === "Double degree" ? -700 : 200;
+  return aliasScore + structureScore - Math.min(180, title.length);
 }
 
 function courseMatchesEstimatedAtar(course) {
@@ -1789,28 +1340,6 @@ function courseMatchesEstimatedAtar(course) {
   if (rank === null) return true;
   const allowance = state.allowAtarStretch ? 5 : 0;
   return rank <= Math.min(99.95, estimate + allowance);
-}
-
-function isTafeCourse(course) {
-  return course?.sourceType === "tafe" || course?.providerType === "tafe" || course?.providerId === "TAFENSW";
-}
-
-function courseMatchesEducationType(course, option) {
-  if (!option || option === "All education types") return true;
-  if (option === "TAFE / vocational") return isTafeCourse(course);
-  return !isTafeCourse(course);
-}
-
-function courseMatchesTafeRoute(course, option) {
-  if (!option || option === "Any TAFE route") return true;
-  if (!isTafeCourse(course)) return false;
-  if (option === "Trade / apprenticeship") return course.tafePathwayType === "trade" || course.isTrade;
-  if (option === "University pathway") return Boolean(course.isUniversityPathway);
-  if (option === "Job-ready qualification") {
-    return course.tafePathwayType === "job-ready"
-      || ["Certificate II", "Certificate III", "Certificate IV"].includes(courseTypeLabel(course));
-  }
-  return true;
 }
 
 function courseMatchesDuration(course, option) {
@@ -1938,16 +1467,10 @@ function studyAreaSortScore(course) {
 function courseTypeLabel(course) {
   const title = cleanSearchText(course.name);
   if (courseQualificationComponents(course).length > 1) return "Double degree";
-  if (title.startsWith("certificate iv")) return "Certificate IV";
-  if (title.startsWith("certificate iii")) return "Certificate III";
-  if (title.startsWith("certificate ii")) return "Certificate II";
-  if (title.startsWith("certificate i")) return "Certificate I";
   if (title.startsWith("advanced diploma")) return "Advanced Diploma";
   if (title.startsWith("diploma")) return "Diploma";
   if (title.startsWith("associate degree") || title.startsWith("assocdeg")) return "Associate Degree";
   if (title.startsWith("undergraduate certificate")) return "Undergraduate Certificate";
-  if (title.startsWith("statement of attainment")) return "Statement of Attainment";
-  if (title.startsWith("course in") || title.startsWith("short course")) return "Short course";
   if (/bachelor/.test(title) && (/\/.*bachelor|bachelor of .+ and bachelor|double degree/.test(title))) return "Double degree";
   if (title.startsWith("bachelor") && /\bhonours\b/.test(title)) return "Honours";
   if (title.startsWith("bachelor")) return "Bachelor";
@@ -1957,7 +1480,7 @@ function courseTypeLabel(course) {
 function courseQualificationComponents(course) {
   const title = decodeHtmlEntities(course?.name || "").replace(/\s+/g, " ").trim();
   if (!title) return [];
-  const qualificationPattern = /\b(?:Bachelor|Master|Doctor|Advanced Diploma|Diploma|Associate Degree|Undergraduate Certificate|Graduate Certificate|Certificate IV|Certificate III|Certificate II|Certificate I|Statement of Attainment)\b/gi;
+  const qualificationPattern = /\b(?:Bachelor|Master|Doctor|Diploma|Associate Degree|Undergraduate Certificate|Graduate Certificate)\b/gi;
   const matches = [...title.matchAll(qualificationPattern)];
   if (matches.length < 2) return [title];
   return matches
@@ -2002,7 +1525,7 @@ function courseDegreeStructureExplanation(course) {
   if (type === "Honours") {
     return "One honours qualification with advanced study or research. Check whether honours is embedded, guaranteed or performance-dependent.";
   }
-  if (["Certificate I", "Certificate II", "Certificate III", "Certificate IV", "Diploma", "Advanced Diploma", "Associate Degree", "Undergraduate Certificate", "Statement of Attainment", "Short course"].includes(type)) {
+  if (["Diploma", "Advanced Diploma", "Associate Degree", "Undergraduate Certificate"].includes(type)) {
     return "A shorter standalone qualification that may also provide credit or a pathway into a bachelor degree. Confirm the linked-course and credit rules.";
   }
   return "One main qualification with a more focused course structure. Compare its majors, electives and accreditation with broader combined programs.";
@@ -2107,12 +1630,12 @@ function renderCourse(course, matchLine = "", index = 0, showFieldSignal = false
   const pathways = coursePathwaySummary(course);
   const guaranteed = courseGuaranteedEntrySummary(course);
   const csp = courseCspSummary(course);
-  const fieldSignal = showFieldSignal && !isTafeCourse(course) ? providerFieldSignal(course) : null;
+  const fieldSignal = showFieldSignal ? providerFieldSignal(course) : null;
   return `
-    <article class="course-item course-result-card" style="--item-delay:${Math.min(index, 8) * 26}ms" data-course-id="${escapeHtml(course.id)}">
+    <article class="course-item course-result-card ${open ? "is-expanded" : ""}" style="--item-delay:${Math.min(index, 8) * 26}ms" data-course-id="${escapeHtml(course.id)}">
       <div class="course-card-head">
         <div class="course-provider">
-          <img src="${escapeHtml(course.providerLogo)}" alt="" loading="lazy" />
+          <img src="${escapeHtml(course.providerLogo)}" alt="" loading="lazy" decoding="async" />
           <span>${escapeHtml(course.university)}</span>
           ${fieldSignal && fieldSignal.score >= 80 ? `
             <small class="course-field-signal">
@@ -2131,19 +1654,32 @@ function renderCourse(course, matchLine = "", index = 0, showFieldSignal = false
           </dl>
           ${distanceLine ? `<p class="distance-preview">${escapeHtml(distanceLine)}</p>` : ""}
         </div>
-        ${renderCourseAdmissionSummary(course, selectionRank, rawAtar, guaranteed, matchLine)}
+        <div class="course-admission">
+          <div class="admission-number">
+            <span><span class="desktop-only">${escapeHtml(courseRankLabel(course))}</span><span class="mobile-only">${escapeHtml(courseMobileRankLabel(course))}</span></span>
+            <strong class="atar-requirement">${escapeHtml(selectionRank)}</strong>
+          </div>
+          <div class="admission-number">
+            <span><span class="desktop-only">${escapeHtml(courseRawAtarLabel(course))}</span><span class="mobile-only">Raw ATAR</span></span>
+            <strong class="atar-requirement">${escapeHtml(rawAtar)}</strong>
+          </div>
+          ${matchLine ? `<small>${escapeHtml(matchLine)}</small>` : ""}
+          <small>${escapeHtml(guaranteed)}</small>
+          <small class="admission-definition">Selection rank can include adjustments; lowest ATAR is the raw ATAR of an offer-holder.</small>
+          <a href="${escapeHtml(course.admissionProfileUrl || course.uacUrl)}" target="_blank" rel="noreferrer">${escapeHtml(course.admissionProfileSource || primaryCourseLinkLabel(course))} source ${icon("external")}</a>
+        </div>
       </div>
       <dl class="course-decision-grid">
         <div><dt>Prerequisites</dt><dd>${compactCourseField(course.prerequisites, "None listed in imported data")}</dd></div>
         <div><dt>Assumed knowledge</dt><dd>${compactCourseField(course.assumed, "None listed in imported data")}</dd></div>
-        <div><dt>${isTafeCourse(course) ? "TAFE pathway" : "Available pathways"}</dt><dd>${escapeHtml(pathways)}</dd></div>
-        <div><dt>${isTafeCourse(course) ? "Fees and funding" : "CSP status"}</dt><dd>${escapeHtml(csp)}</dd></div>
+        <div><dt>Available pathways</dt><dd>${escapeHtml(pathways)}</dd></div>
+        <div><dt>CSP status</dt><dd>${escapeHtml(csp)}</dd></div>
       </dl>
       <div class="course-card-foot">
         <div class="course-source-line">
-          <span>${isTafeCourse(course) ? "Official TAFE NSW catalogue" : `Published profile: ${escapeHtml(String(year))}`}</span>
-          <span>Site data updated ${escapeHtml(isTafeCourse(course) ? formatTafeImportDate() : formatImportDate())}</span>
-          <span>${isTafeCourse(course) ? "Availability, entry and funding vary by offering." : "Previous entry results do not guarantee admission."}</span>
+          <span>Published profile: ${escapeHtml(String(year))}</span>
+          <span>Site data updated ${escapeHtml(formatImportDate())}</span>
+          <span>Previous entry results do not guarantee admission.</span>
         </div>
         <div class="course-card-actions">
           <button type="button" data-save-course="${escapeHtml(course.id)}" aria-pressed="${saved}">${saved ? "Saved" : "Save"}</button>
@@ -2156,89 +1692,24 @@ function renderCourse(course, matchLine = "", index = 0, showFieldSignal = false
   `;
 }
 
-function renderCourseAdmissionSummary(course, selectionRank, rawAtar, guaranteed, matchLine) {
-  if (isTafeCourse(course)) {
-    return `
-      <div class="course-admission is-tafe-admission">
-        <div class="admission-number">
-          <span>Entry basis</span>
-          <strong class="atar-requirement">No ATAR</strong>
-        </div>
-        <div class="admission-number">
-          <span>Qualification</span>
-          <strong>${escapeHtml(courseTypeLabel(course))}</strong>
-        </div>
-        ${matchLine ? `<small>${escapeHtml(matchLine)}</small>` : ""}
-        <small>Entry criteria, delivery and duration vary by location and offering.</small>
-        <small class="admission-definition">Check the official page for current places, workplace requirements and fees.</small>
-        <a href="${escapeHtml(course.officialUrl || course.uacUrl)}" target="_blank" rel="noreferrer">TAFE NSW course page ${icon("external")}</a>
-      </div>
-    `;
-  }
-  const compactFigureLayout = [selectionRank, rawAtar].every((value) => /^\d{1,3}(?:\.\d{1,2})?$/.test(String(value).trim()));
-  return `
-    <div class="course-admission${compactFigureLayout ? " has-compact-figures" : ""}">
-      <div class="admission-number admission-uac-figure">
-        <span>${escapeHtml(courseRankLabel(course))}</span>
-        <strong class="atar-requirement">${escapeHtml(selectionRank)}</strong>
-      </div>
-      <div class="admission-number admission-uac-figure">
-        <span>${escapeHtml(courseRawAtarLabel(course))}</span>
-        <strong class="atar-requirement">${escapeHtml(rawAtar)}</strong>
-      </div>
-      ${renderProviderAdmissionFigure(course)}
-      ${matchLine ? `<small>${escapeHtml(matchLine)}</small>` : ""}
-      <small>${escapeHtml(guaranteed)}</small>
-      <small class="admission-definition">UAC selection rank can include adjustments; UAC lowest ATAR is the raw ATAR of an offer-holder. A provider-published ATAR is separate and does not replace either UAC figure.</small>
-      <div class="admission-source-links">
-        <a href="${escapeHtml(course.admissionProfileUrl || course.uacUrl)}" target="_blank" rel="noreferrer">UAC profile ${icon("external")}</a>
-        ${course.officialUrl ? `<a href="${escapeHtml(course.officialUrl)}" target="_blank" rel="noreferrer">Official course page ${icon("external")}</a>` : ""}
-      </div>
-    </div>
-  `;
-}
-
-function renderProviderAdmissionFigure(course) {
-  const value = course.providerPublishedAtar
-    || course.providerPublishedSelectionRank
-    || course.providerGuaranteedRank
-    || "";
-  if (!value) return "";
-  const label = course.providerFigureLabel
-    || (course.providerGuaranteedRank
-      ? "Provider guaranteed rank"
-      : course.providerPublishedSelectionRank
-        ? "Provider-published selection rank"
-        : "University-published ATAR");
-  const year = course.providerFigureYear ? ` (${course.providerFigureYear})` : "";
-  const source = course.providerFigureSourceUrl || course.officialUrl || "";
-  return `
-    <div class="admission-number admission-provider-figure">
-      <span>${escapeHtml(`${label}${year}`)}</span>
-      <strong class="atar-requirement">${escapeHtml(value)}</strong>
-      ${course.providerFigureNote ? `<small>${escapeHtml(course.providerFigureNote)}</small>` : ""}
-      ${source ? `<a href="${escapeHtml(source)}" target="_blank" rel="noreferrer">${escapeHtml(course.providerFigureSourceName || course.university || "Provider")} source ${icon("external")}</a>` : ""}
-    </div>
-  `;
-}
-
 function courseAdmissionYear(course) {
-  if (isTafeCourse(course)) return "Current catalogue";
   if (course.admissionProfileCode === "PROVIDER") return course.atarYear || "Provider criteria";
   const importedYear = Number(String(meta.importedAt || "").slice(0, 4));
   return Number(course.atarYear) || (Number.isFinite(importedYear) ? importedYear : new Date().getFullYear());
 }
 
 function courseRankLabel(course) {
-  if (isTafeCourse(course)) return "Entry basis";
   if (course.admissionProfileCode === "PROVIDER") return "Selection basis (provider)";
-  return `UAC lowest selection rank (${courseAdmissionYear(course)})`;
+  return `Lowest selection rank (${courseAdmissionYear(course)})`;
+}
+
+function courseMobileRankLabel(course) {
+  return course.admissionProfileCode === "PROVIDER" ? "Selection basis" : "Selection rank";
 }
 
 function courseRawAtarLabel(course) {
-  if (isTafeCourse(course)) return "Qualification level";
   if (course.admissionProfileCode === "PROVIDER") return "Lowest raw ATAR";
-  return `UAC lowest raw ATAR (${courseAdmissionYear(course)})`;
+  return `Lowest raw ATAR (${courseAdmissionYear(course)})`;
 }
 
 function courseSelectionRankValue(course) {
@@ -2246,7 +1717,6 @@ function courseSelectionRankValue(course) {
 }
 
 function compactSelectionRankDisplay(course) {
-  if (isTafeCourse(course)) return "No ATAR required";
   if (course.admissionProfileCode === "PROVIDER") {
     return course.selectionRank || "Provider entry criteria";
   }
@@ -2254,7 +1724,6 @@ function compactSelectionRankDisplay(course) {
 }
 
 function compactRawAtarDisplay(course) {
-  if (isTafeCourse(course)) return courseTypeLabel(course);
   if (course.admissionProfileCode === "PROVIDER") return "Not used";
   return compactRankDisplay(course.lowestAtar);
 }
@@ -2282,18 +1751,6 @@ function compactCourseField(value, fallback) {
 }
 
 function coursePathwaySummary(course) {
-  if (isTafeCourse(course)) {
-    if (course.tafePathwayType === "university-preparation") {
-      return "Tertiary preparation route; confirm which universities accept the result";
-    }
-    if (course.tafePathwayType === "qualification-credit") {
-      return "May support further study or credit; confirm the linked degree and credit";
-    }
-    if (course.tafePathwayType === "trade") {
-      return "Trade route; an apprenticeship, traineeship or workplace may be required";
-    }
-    return "Job-focused vocational qualification; further-study options may also exist";
-  }
   if (courseHasPathwayMention(course)) {
     if (/diploma/.test(coursePathwayText(course))) return "Diploma or linked pathway mentioned";
     if (/foundation|preparation program|bridging/.test(coursePathwayText(course))) return "Foundation or preparation route mentioned";
@@ -2304,16 +1761,12 @@ function coursePathwaySummary(course) {
 }
 
 function courseGuaranteedEntrySummary(course) {
-  if (isTafeCourse(course)) return "TAFE entry is not based on a UAC guaranteed selection rank";
   return courseHasGuaranteedEntryMention(course)
     ? "Guaranteed-entry information mentioned—confirm the exact current rank"
     : "No guaranteed rank published in this imported record";
 }
 
 function courseCspSummary(course) {
-  if (isTafeCourse(course)) {
-    return "Check Smart and Skilled, current fee-free places and VET Student Loans where eligible";
-  }
   const text = cleanSearchText(`${course.fees || ""} ${course.summary || ""}`);
   if (/\b(commonwealth supported place|csp)\b/.test(text)) return "CSP information mentioned—confirm availability";
   return "Not confirmed in imported data; check the official page";
@@ -2381,12 +1834,7 @@ function renderCourseDetail(course, saved, comparing) {
         ${row("Campus", course.campus)}
         ${row(courseRankLabel(course), compactSelectionRankDisplay(course), "atar-requirement")}
         ${row(courseRawAtarLabel(course), compactRawAtarDisplay(course), "atar-requirement")}
-        ${row(
-          "How to read this",
-          isTafeCourse(course)
-            ? "TAFE courses do not use an ATAR. Check the current offering for entry, delivery, duration, funding and any workplace requirements."
-            : "Selection rank may include adjustment factors. Lowest raw ATAR does not include those adjustments."
-        )}
+        ${row("How to read these figures", "Selection rank may include adjustment factors. Lowest raw ATAR does not include those adjustments.")}
         ${row("Guaranteed entry rank", courseGuaranteedEntrySummary(course))}
         ${row("Duration", course.duration)}
         ${row("Study mode", (course.modes || []).join(", "))}
@@ -2400,14 +1848,14 @@ function renderCourseDetail(course, saved, comparing) {
         ${row("Careers", course.careers)}
         ${row("Practical experience", course.practicalExperience)}
         ${row("Information source", course.source || primaryCourseLinkLabel(course))}
-        ${row(isTafeCourse(course) ? "Catalogue status" : "Published profile year", String(courseAdmissionYear(course)))}
-        ${row("Site data last updated", isTafeCourse(course) ? formatTafeImportDate() : formatImportDate())}
+        ${row("Published profile year", String(courseAdmissionYear(course)))}
+        ${row("Site data last updated", formatImportDate())}
       </dl>
       ${renderIncomeOutlook(course)}
       <p>${highlight(course.summary)}</p>
       <div class="actions">
         <a href="${escapeHtml(course.uacUrl)}" target="_blank" rel="noreferrer">${escapeHtml(primaryCourseLinkLabel(course))} ${icon("external")}</a>
-        ${course.officialUrl && course.officialUrl !== course.uacUrl ? `<a href="${escapeHtml(course.officialUrl)}" target="_blank" rel="noreferrer">Course website ${icon("external")}</a>` : ""}
+        ${course.officialUrl ? `<a href="${escapeHtml(course.officialUrl)}" target="_blank" rel="noreferrer">Course website ${icon("external")}</a>` : ""}
         <button type="button" data-save-course="${escapeHtml(course.id)}">${saved ? "Remove from saved" : "Save course"}</button>
         <button type="button" data-compare-course="${escapeHtml(course.id)}">${comparing ? "Remove from compare" : "Add to compare"}</button>
       </div>
@@ -2957,7 +2405,7 @@ function renderTopProviders() {
   return rows.map((row, index) => `
     <a class="top-provider-card" style="--item-delay:${Math.min(index, 8) * 22}ms" href="${escapeHtml(row.provider.website)}" target="_blank" rel="noreferrer">
       <span>${index + 1}</span>
-      <img src="${escapeHtml(row.provider.logo)}" alt="${escapeHtml(row.provider.name)} logo" loading="lazy" />
+      <img src="${escapeHtml(row.provider.logo)}" alt="${escapeHtml(row.provider.name)} logo" loading="lazy" decoding="async" />
       <strong>${escapeHtml(row.provider.name)}</strong>
       <small>${escapeHtml(row.note)}</small>
       <em>Specialised fit ${Math.round(row.score)}/100</em>
@@ -2971,7 +2419,7 @@ function renderProvider(provider, index = 0) {
   return `
     <a class="provider-card" style="--item-delay:${Math.min(index, 8) * 22}ms" href="${escapeHtml(link)}" ${provider.website ? 'target="_blank" rel="noreferrer"' : ""}>
       <div class="provider-card-heading">
-        <img src="${escapeHtml(provider.logo)}" alt="${escapeHtml(provider.name)} logo" loading="lazy" />
+        <img src="${escapeHtml(provider.logo)}" alt="${escapeHtml(provider.name)} logo" loading="lazy" decoding="async" />
         <div>
           <strong>${escapeHtml(provider.name)}</strong>
           <span>${escapeHtml(profile.band)}</span>
@@ -3588,9 +3036,6 @@ function questionMentionsCourse(question) {
 
 function formatAskCourses(entries) {
   return entries.map(({ course }) => {
-    if (isTafeCourse(course)) {
-      return `${course.name} (TAFE NSW, no ATAR; check current offering)`;
-    }
     const rank = displayRank(course.atar);
     return `${course.name} (${course.university}, ${course.campus}, ATAR ${rank})`;
   }).join("; ");
@@ -3598,22 +3043,237 @@ function formatAskCourses(entries) {
 
 function formatAskCoursesWithIncome(entries) {
   return entries.map(({ course }) => {
-    if (isTafeCourse(course)) {
-      const job = courseIncomeOutcomes(course)[0];
-      return `${course.name} (TAFE NSW, no ATAR, likely path: ${job.title} ${job.range})`;
-    }
     const rank = displayRank(course.atar);
     const job = courseIncomeOutcomes(course)[0];
     return `${course.name} (${course.university}, ATAR ${rank}, likely path: ${job.title} ${job.range})`;
   }).join("; ");
 }
 
-function bindEvents(options = {}) {
-  const searchOnly = Boolean(options.searchOnly);
-  if (!searchOnly) {
-    bindHashNavLinks();
-    setupSectionScrollSpy();
-  }
+function bindCourseSearchSurface(scope) {
+  if (!scope) return;
+  bindHashNavLinks(scope);
+
+  scope.querySelector('[data-form="search"]')?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    state.draft = event.target.search.value.trim();
+    runProcessing("search", () => {
+      state.query = state.draft;
+  state.visible = coursePageSize();
+      state.openCourseIds.clear();
+    }, () => {
+      if (!isMobileViewport()) return;
+      const results = app.querySelector("#courses .course-list, #courses .course-empty-state");
+      if (!results) return;
+      const headerOffset = document.querySelector(".site-header")?.getBoundingClientRect().height || 72;
+      const targetTop = results.getBoundingClientRect().top + window.scrollY - headerOffset - 12;
+      window.scrollTo({ top: Math.max(0, targetTop), behavior: "auto" });
+    });
+  });
+
+  scope.querySelector('[name="search"]')?.addEventListener("input", (event) => {
+    state.draft = event.target.value;
+  });
+
+  const syncMobileFilterPanel = (open) => {
+    state.mobileFiltersOpen = open;
+    const panel = scope.querySelector("[data-course-filter-panel]");
+    panel?.classList.toggle("is-open", open);
+    if (open && panel) panel.scrollTop = 0;
+    scope.querySelector('[data-action="toggle-course-filters"]')?.setAttribute("aria-expanded", String(open));
+  };
+  scope.querySelector('[data-action="toggle-course-filters"]')?.addEventListener("click", () => {
+    syncMobileFilterPanel(!state.mobileFiltersOpen);
+  });
+  scope.querySelectorAll('[data-action="close-course-filters"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      syncMobileFilterPanel(false);
+      if (button.classList.contains("mobile-filter-done") && hasActiveCourseSearch()) {
+        scope.querySelector(".course-list")?.scrollIntoView({
+          block: "start",
+          behavior: prefersReducedMotion() || isMobileViewport() ? "auto" : "smooth"
+        });
+      }
+    });
+  });
+
+  [
+    "level",
+    "courseType",
+    "area",
+    "provider",
+    "mode",
+    "campus",
+    "income",
+    "sort",
+    "duration",
+    "prerequisite",
+    "pathway",
+    "guaranteedEntry",
+    "degreeStructure"
+  ].forEach((key) => {
+    scope.querySelector(`[data-action="${key}"]`)?.addEventListener("change", (event) => {
+      state[key] = event.target.value;
+      if (key === "provider") syncCampusWithProvider();
+      runProcessing("search", () => {
+  state.visible = coursePageSize();
+        state.openCourseIds.clear();
+      });
+    });
+  });
+
+  const estimatedAtarInput = scope.querySelector('[data-action="estimatedAtar"]');
+  const commitEstimatedAtar = (value) => {
+    runProcessing("search", () => {
+      const numberValue = Number(value);
+      state.estimatedAtar = value === "" || !Number.isFinite(numberValue)
+        ? ""
+        : String(Math.max(0, Math.min(99.95, numberValue)));
+      state.allowAtarStretch = false;
+  state.visible = coursePageSize();
+      state.openCourseIds.clear();
+    });
+  };
+  estimatedAtarInput?.addEventListener("change", (event) => commitEstimatedAtar(event.target.value));
+  estimatedAtarInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    commitEstimatedAtar(event.target.value);
+  });
+
+  scope.querySelector(".advanced-filter-disclosure")?.addEventListener("toggle", (event) => {
+    state.advancedFiltersOpen = event.currentTarget.open;
+  });
+
+  const locationInput = scope.querySelector('[data-action="locationQuery"]');
+  const commitLocationInput = (value) => {
+    state.locationQuery = String(value || "").trim();
+    runProcessing("search", () => {
+  state.visible = coursePageSize();
+      state.openCourseIds.clear();
+    });
+  };
+  locationInput?.addEventListener("input", (event) => {
+    state.locationQuery = event.target.value;
+  });
+  locationInput?.addEventListener("change", (event) => commitLocationInput(event.target.value));
+  locationInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    commitLocationInput(event.target.value);
+  });
+
+  scope.querySelectorAll("[data-income-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.income = button.dataset.incomeFilter || "Any income";
+      if (!state.query && state.income !== "Any income") state.sort = "Income potential";
+      runProcessing("search", () => {
+  state.visible = coursePageSize();
+        state.openCourseIds.clear();
+      });
+    });
+  });
+
+  scope.querySelectorAll('[data-action="clear"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      runProcessing("search", () => {
+        state.draft = "";
+        state.query = "";
+        state.level = "All levels";
+        state.courseType = "All course types";
+        state.area = "All study areas";
+        state.provider = "All providers";
+        state.mode = "All modes";
+        state.campus = "All campuses";
+        state.income = "Any income";
+        state.sort = "Relevance";
+        state.locationQuery = "";
+        state.estimatedAtar = "";
+        state.duration = "Any duration";
+        state.prerequisite = "Any prerequisite status";
+        state.pathway = "Any pathway status";
+        state.guaranteedEntry = "Any guaranteed-entry status";
+        state.degreeStructure = "Any degree structure";
+        state.advancedFiltersOpen = false;
+        state.allowAtarStretch = false;
+  state.visible = coursePageSize();
+        state.mobileFiltersOpen = false;
+        state.openCourseIds.clear();
+      });
+    });
+  });
+
+  scope.querySelector('[data-action="more"]')?.addEventListener("click", () => {
+    runProcessing("search", () => {
+  state.visible += coursePageSize();
+    });
+  });
+
+  scope.querySelectorAll("[data-search-example]").forEach((button) => {
+    button.addEventListener("click", () => {
+      runProcessing("search", () => {
+        state.draft = button.dataset.searchExample || "";
+        state.query = state.draft;
+  state.visible = coursePageSize();
+        state.openCourseIds.clear();
+      }, () => scheduleHashScroll("auto"));
+    });
+  });
+
+  scope.querySelectorAll("[data-field-provider]").forEach((button) => {
+    button.addEventListener("click", () => {
+      runProcessing("search", () => {
+        state.provider = button.dataset.fieldProvider || "All providers";
+        syncCampusWithProvider();
+  state.visible = coursePageSize();
+        state.openCourseIds.clear();
+      });
+    });
+  });
+
+  scope.querySelector('[data-action="relax-filter"]')?.addEventListener("click", () => {
+    runProcessing("search", relaxOneCourseFilter);
+  });
+  scope.querySelector('[data-action="show-atar-stretch"]')?.addEventListener("click", () => {
+    runProcessing("search", () => {
+      if (!state.estimatedAtar) state.estimatedAtar = "75";
+      state.allowAtarStretch = true;
+      state.sort = "Lowest selection rank";
+    });
+  });
+  scope.querySelector('[data-action="show-pathways"]')?.addEventListener("click", () => {
+    runProcessing("search", () => {
+      state.pathway = "Pathway mentioned";
+      state.advancedFiltersOpen = true;
+      state.estimatedAtar = "";
+      state.allowAtarStretch = false;
+    });
+  });
+  scope.querySelector('[data-action="browse-study-areas"]')?.addEventListener("click", () => {
+    runProcessing("search", () => {
+      state.query = "";
+      state.draft = "";
+      state.area = "All study areas";
+    });
+  });
+
+  bindCourseActionButtons(scope);
+  scope.querySelectorAll(".course-item[data-course-id]").forEach((courseItem) => {
+    const initialCourse = courseById.get(courseItem.dataset.courseId);
+    courseItem.querySelector("[data-toggle-course]")?.addEventListener("click", () => {
+      const id = courseItem.dataset.courseId;
+      if (!id) return;
+      if (state.openCourseIds.has(id)) state.openCourseIds.delete(id);
+      else state.openCourseIds.add(id);
+      renderCourseSearchPreservingViewport(`[data-course-id="${CSS.escape(id)}"]`);
+    });
+    if (state.openCourseIds.has(courseItem.dataset.courseId) && initialCourse) {
+      hydrateCourseDetail(courseItem, initialCourse);
+    }
+  });
+}
+
+function bindEvents() {
+  bindHashNavLinks();
 
   app.querySelector('[data-form="search"]')?.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -3621,15 +3281,15 @@ function bindEvents(options = {}) {
     state.draft = value;
     runProcessing("search", () => {
       state.query = state.draft;
-      state.visible = 24;
+  state.visible = coursePageSize();
       state.openCourseIds.clear();
     }, () => {
       if (!isMobileViewport()) return;
-      const results = app.querySelector("#courses .course-list, #courses .course-empty-state");
+      const results = app.querySelector(".course-list, .course-empty-state");
       if (!results) return;
-      const headerOffset = document.querySelector(".topbar")?.getBoundingClientRect().height || 54;
-      const top = results.getBoundingClientRect().top + window.scrollY - headerOffset - 8;
-      window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+      const headerOffset = document.querySelector(".site-header")?.getBoundingClientRect().height || 72;
+      const targetTop = results.getBoundingClientRect().top + window.scrollY - headerOffset - 12;
+      window.scrollTo({ top: Math.max(0, targetTop), behavior: "auto" });
     });
   });
 
@@ -3639,7 +3299,9 @@ function bindEvents(options = {}) {
 
   const syncMobileFilterPanel = (open) => {
     state.mobileFiltersOpen = open;
-    app.querySelector("[data-course-filter-panel]")?.classList.toggle("is-open", open);
+    const panel = app.querySelector("[data-course-filter-panel]");
+    panel?.classList.toggle("is-open", open);
+    if (open && panel) panel.scrollTop = 0;
     app.querySelector('[data-action="toggle-course-filters"]')?.setAttribute("aria-expanded", String(open));
   };
   app.querySelector('[data-action="toggle-course-filters"]')?.addEventListener("click", () => {
@@ -3648,15 +3310,13 @@ function bindEvents(options = {}) {
   app.querySelectorAll('[data-action="close-course-filters"]').forEach((button) => {
     button.addEventListener("click", () => {
       syncMobileFilterPanel(false);
-      if (button.classList.contains("mobile-filter-done")) {
+      if (button.classList.contains("mobile-filter-done") && hasActiveCourseSearch()) {
         app.querySelector("#courses .course-list")?.scrollIntoView({ block: "start", behavior: prefersReducedMotion() || isMobileViewport() ? "auto" : "smooth" });
       }
     });
   });
 
   [
-    "educationType",
-    "tafeRoute",
     "level",
     "courseType",
     "area",
@@ -3674,8 +3334,9 @@ function bindEvents(options = {}) {
     app.querySelector(`[data-action="${key}"]`)?.addEventListener("change", (event) => {
       const value = event.target.value;
       state[key] = value;
+      if (key === "provider") syncCampusWithProvider();
       const update = () => {
-        state.visible = 24;
+  state.visible = coursePageSize();
         state.openCourseIds.clear();
       };
       runProcessing("search", update);
@@ -3690,7 +3351,7 @@ function bindEvents(options = {}) {
         ? ""
         : String(Math.max(0, Math.min(99.95, numberValue)));
       state.allowAtarStretch = false;
-      state.visible = 24;
+  state.visible = coursePageSize();
       state.openCourseIds.clear();
     });
   };
@@ -3709,7 +3370,7 @@ function bindEvents(options = {}) {
   const commitLocationInput = (value) => {
     state.locationQuery = String(value || "").trim();
     const update = () => {
-      state.visible = 24;
+  state.visible = coursePageSize();
       state.openCourseIds.clear();
     };
     runProcessing("search", update);
@@ -3718,9 +3379,6 @@ function bindEvents(options = {}) {
     state.locationQuery = event.target.value;
   });
   locationInput?.addEventListener("change", (event) => {
-    commitLocationInput(event.target.value);
-  });
-  locationInput?.addEventListener("blur", (event) => {
     commitLocationInput(event.target.value);
   });
   locationInput?.addEventListener("keydown", (event) => {
@@ -3736,7 +3394,7 @@ function bindEvents(options = {}) {
       state.income = value;
       if (!state.query && value !== "Any income") state.sort = "Income potential";
       const update = () => {
-        state.visible = 24;
+  state.visible = coursePageSize();
         state.openCourseIds.clear();
       };
       runProcessing("search", update);
@@ -3748,8 +3406,6 @@ function bindEvents(options = {}) {
       runProcessing("search", () => {
         state.draft = "";
         state.query = "";
-        state.educationType = "All education types";
-        state.tafeRoute = "Any TAFE route";
         state.level = "All levels";
         state.courseType = "All course types";
         state.area = "All study areas";
@@ -3767,7 +3423,7 @@ function bindEvents(options = {}) {
         state.degreeStructure = "Any degree structure";
         state.advancedFiltersOpen = false;
         state.allowAtarStretch = false;
-        state.visible = 24;
+  state.visible = coursePageSize();
         state.mobileFiltersOpen = false;
         state.openCourseIds.clear();
       });
@@ -3776,7 +3432,7 @@ function bindEvents(options = {}) {
 
   app.querySelector('[data-action="more"]')?.addEventListener("click", () => {
     runProcessing("search", () => {
-      state.visible += 24;
+  state.visible += coursePageSize();
     }, null, 180);
   });
 
@@ -3785,55 +3441,18 @@ function bindEvents(options = {}) {
       runProcessing("search", () => {
         state.draft = button.dataset.searchExample || "";
         state.query = state.draft;
-        state.visible = 24;
+  state.visible = coursePageSize();
         state.openCourseIds.clear();
       }, () => scheduleHashScroll("auto"));
     });
-  });
-
-  app.querySelectorAll("[data-tafe-route-shortcut]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const route = button.dataset.tafeRouteShortcut || "all";
-      runProcessing("search", () => {
-        state.draft = route === "all" ? "TAFE" : "";
-        state.query = state.draft;
-        state.educationType = "TAFE / vocational";
-        state.tafeRoute = route === "trade"
-          ? "Trade / apprenticeship"
-          : route === "job"
-            ? "Job-ready qualification"
-            : route === "university"
-              ? "University pathway"
-              : "Any TAFE route";
-        state.provider = "TAFE NSW";
-        state.campus = "All campuses";
-        state.visible = 24;
-        state.openCourseIds.clear();
-      }, () => app.querySelector("#courses")?.scrollIntoView({
-        block: "start",
-        behavior: prefersReducedMotion() || isMobileViewport() ? "auto" : "smooth"
-      }));
-    });
-  });
-
-  app.querySelector('[data-form="tafe-funding-check"]')?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const result = form.querySelector("[data-tafe-funding-result]");
-    const boxes = [...form.querySelectorAll('input[type="checkbox"]')];
-    const checked = boxes.filter((box) => box.checked).length;
-    if (!result) return;
-    result.classList.toggle("is-positive", checked === boxes.length);
-    result.textContent = checked === boxes.length
-      ? "You may meet the basic Smart and Skilled eligibility rules. Funding, fee-free places and course availability are still not guaranteed—check the exact course or contact TAFE NSW."
-      : `You checked ${checked} of ${boxes.length} basics. Review the missing items on the official Smart and Skilled page or contact TAFE NSW before relying on subsidised fees.`;
   });
 
   app.querySelectorAll("[data-field-provider]").forEach((button) => {
     button.addEventListener("click", () => {
       runProcessing("search", () => {
         state.provider = button.dataset.fieldProvider || "All providers";
-        state.visible = 24;
+        syncCampusWithProvider();
+  state.visible = coursePageSize();
         state.openCourseIds.clear();
       });
     });
@@ -3865,22 +3484,19 @@ function bindEvents(options = {}) {
     });
   });
 
-  const courseInteractionScope = searchOnly ? app.querySelector("#courses") : app;
-  bindCourseActionButtons(courseInteractionScope || app);
+  bindCourseActionButtons(app);
 
-  (courseInteractionScope || app).querySelectorAll(".course-item[data-course-id]").forEach((courseItem) => {
+  app.querySelectorAll(".course-item[data-course-id]").forEach((courseItem) => {
     const initialCourse = courseById.get(courseItem.dataset.courseId);
     courseItem.querySelector("[data-toggle-course]")?.addEventListener("click", () => {
       const id = courseItem.dataset.courseId;
       if (!id) return;
       if (state.openCourseIds.has(id)) state.openCourseIds.delete(id);
       else state.openCourseIds.add(id);
-      renderPreservingViewport();
+      renderCourseSearchPreservingViewport(`[data-course-id="${CSS.escape(id)}"]`);
     });
     if (state.openCourseIds.has(courseItem.dataset.courseId) && initialCourse) hydrateCourseDetail(courseItem, initialCourse);
   });
-
-  if (searchOnly) return;
 
   app.querySelectorAll("[data-remove-compare]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -3939,7 +3555,10 @@ function bindEvents(options = {}) {
     });
   });
 
-  bindProviderTopicControl(app);
+  app.querySelector('[data-action="providerTopic"]')?.addEventListener("change", (event) => {
+    state.providerTopic = event.target.value;
+    render();
+  });
 
   app.querySelector('[data-action="add-subject"]')?.addEventListener("change", (event) => {
     if (event.target.value) {
@@ -4023,17 +3642,6 @@ function bindEvents(options = {}) {
   });
 }
 
-function bindProviderTopicControl(root) {
-  root.querySelector('[data-action="providerTopic"]')?.addEventListener("change", (event) => {
-    state.providerTopic = event.target.value;
-    const section = app.querySelector("#providers");
-    if (!section || !providerDirectoryReady) return;
-    section.innerHTML = renderProviderDirectoryContent();
-    bindProviderTopicControl(section);
-    window.courseFinderTheme?.bindPartial?.(section);
-  });
-}
-
 function bindCourseActionButtons(root) {
   root.querySelectorAll("[data-save-course]").forEach((button) => {
     button.addEventListener("click", (event) => {
@@ -4092,49 +3700,6 @@ function scrollAskToBottom() {
   });
 }
 
-function sectionAtCurrentScrollPosition() {
-  const topbarHeight = app.querySelector(".topbar")?.getBoundingClientRect().height || 0;
-  const marker = topbarHeight + Math.min(180, Math.max(84, window.innerHeight * 0.22));
-  let activeId = "courses";
-  let activeTop = Number.NEGATIVE_INFINITY;
-
-  navigationSectionIds.forEach((id) => {
-    const section = document.getElementById(id);
-    const top = section?.getBoundingClientRect().top;
-    if (Number.isFinite(top) && top <= marker && top > activeTop) {
-      activeId = id;
-      activeTop = top;
-    }
-  });
-
-  const pageBottom = window.scrollY + window.innerHeight;
-  const documentBottom = document.documentElement.scrollHeight;
-  if (pageBottom >= documentBottom - 4) {
-    activeId = [...navigationSectionIds].reverse().find((id) => document.getElementById(id)) || activeId;
-  }
-  return activeId;
-}
-
-function scheduleSectionScrollSpy() {
-  if (sectionScrollFrame) return;
-  sectionScrollFrame = requestAnimationFrame(() => {
-    sectionScrollFrame = 0;
-    const hash = `#${sectionAtCurrentScrollPosition()}`;
-    const currentHash = window.location.hash || "#courses";
-    if (currentHash !== hash) history.replaceState(null, "", hash);
-    updateHashNavCurrent(hash);
-  });
-}
-
-function setupSectionScrollSpy() {
-  if (!sectionScrollSpyBound) {
-    sectionScrollSpyBound = true;
-    window.addEventListener("scroll", scheduleSectionScrollSpy, { passive: true });
-    window.addEventListener("resize", scheduleSectionScrollSpy, { passive: true });
-  }
-  scheduleSectionScrollSpy();
-}
-
 function scheduleHashScroll(behavior = "auto") {
   const hash = window.location.hash;
   if (!hash) return;
@@ -4143,8 +3708,8 @@ function scheduleHashScroll(behavior = "auto") {
   requestAnimationFrame(() => requestAnimationFrame(() => scrollToHashTarget(id, behavior)));
 }
 
-function bindHashNavLinks() {
-  app.querySelectorAll('a[href^="#"]').forEach((link) => {
+function bindHashNavLinks(scope = app) {
+  scope.querySelectorAll('a[href^="#"]').forEach((link) => {
     link.addEventListener("click", (event) => {
       const hash = link.getAttribute("href");
       if (!hash || hash === "#") return;
@@ -4179,42 +3744,11 @@ function scrollToHashTarget(id, behavior = "smooth") {
 
 function updateHashNavCurrent(hash = window.location.hash || "#courses") {
   const activeHash = hash || "#courses";
-  const canonicalLabel = ({
-    "#courses": "courses",
-    "#tools": "tools",
-    "#providers": "universities",
-    "#saved": "saved",
-    "#about": "about",
-    "#faq": "about"
-  })[activeHash] || "";
-  const navigationChanged = Boolean(activeNavigationHash) && activeNavigationHash !== activeHash;
-  activeNavigationHash = activeHash;
   document.documentElement.classList.toggle("compare-view-active", activeHash === "#saved");
-  document.querySelectorAll(".topnav a[href], .mobile-primary-nav a[href], .mobile-page-menu a[href]").forEach((link) => {
-    const href = link.getAttribute("href") || "";
-    const target = new URL(href, window.location.href);
-    const targetHash = target.hash;
-    const currentPath = window.location.pathname.replace(/\/index\.html$/i, "/");
-    const targetPath = target.pathname.replace(/\/index\.html$/i, "/");
-    const sameDocument = currentPath === targetPath;
-    const isActiveHashLink = Boolean(targetHash) && sameDocument && targetHash === activeHash;
-    const isHomeCoursesLink = !targetHash && sameDocument && activeHash === "#courses" && /^\.?\/?(?:index\.html)?$/i.test(href);
-    const linkLabel = (link.getAttribute("aria-label") || link.textContent || "")
-      .replace(/\s*\(\d+\)\s*$/, "")
-      .trim()
-      .toLowerCase();
-    const isCanonicalSectionLink = Boolean(canonicalLabel) && linkLabel === canonicalLabel;
-    if (isActiveHashLink || isHomeCoursesLink || isCanonicalSectionLink) link.setAttribute("aria-current", "page");
+  app.querySelectorAll('.topnav a[href^="#"]').forEach((link) => {
+    if (link.getAttribute("href") === activeHash) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   });
-
-  if (navigationChanged && !prefersReducedMotion()) {
-    document.documentElement.classList.add("is-section-nav-changing");
-    window.clearTimeout(navigationChangeTimer);
-    navigationChangeTimer = window.setTimeout(() => {
-      document.documentElement.classList.remove("is-section-nav-changing");
-    }, 260);
-  }
 }
 
 function prefersReducedMotion() {
@@ -4222,7 +3756,11 @@ function prefersReducedMotion() {
 }
 
 function isMobileViewport() {
-  return window.matchMedia?.("(max-width: 760px)")?.matches || window.innerWidth <= 760;
+  return window.matchMedia?.("(max-width: 820px)")?.matches || window.innerWidth <= 820;
+}
+
+function coursePageSize() {
+  return isMobileViewport() ? 10 : 16;
 }
 
 function preferredHashScrollBehavior() {
@@ -4579,10 +4117,9 @@ function searchScore(course, queryOrPlan) {
   const orderedTitleMatch = words.length > 1 && new RegExp(words.map(escapeRegExp).join(".*")).test(title);
   const topic = topicForQuery(cleanQuery);
   const incomeMinimum = incomeMinimumFromQuery(cleanQuery);
-  const vocationalIntent = isVocationalSearchIntent(plan);
   let score = plan.provider ? 60000 : 0;
 
-  if (!cleanQuery) return score + providerOnlyCourseScore(course);
+  if (!cleanQuery) return score + (course.level === "undergraduate" ? 250 : 0);
   if (title === cleanQuery) score += 90000;
   if (exactDegreeTitle(title, cleanQuery)) score += topic ? 32000 : 85000;
   if (title.startsWith(cleanQuery)) score += 42000;
@@ -4596,57 +4133,19 @@ function searchScore(course, queryOrPlan) {
   if (phraseMatch(careers, cleanQuery) || aliasMatch(careers, cleanQuery)) score += 2600;
   if (phraseMatch(summary, cleanQuery) || aliasMatch(summary, cleanQuery)) score += 80;
   if (topic) score += topicWeightedScore(course, topic) * 120;
-  score += words.filter((word) => tokenMatch(title, word)).length * 3500;
-  score += words.filter((word) => tokenMatch(primary, word)).length * 70;
+  const fields = courseSearchFields(course);
+  score += words.filter((word) => tokenSetMatch(fields.titleTokens, word)).length * 3500;
+  score += words.filter((word) => tokenSetMatch(fields.primaryTokens, word)).length * 70;
   if (course.level === "undergraduate") score += 250;
   if (numericRank(course.atar) !== null) score += 20;
-  if (vocationalIntent) {
-    if (isTafeCourse(course)) score += 9000;
-    if (course.tafePathwayType === "trade" && /\b(trade|apprentice|apprenticeship|electrician|plumb|carpent|mechanic|weld)\b/.test(cleanQuery)) score += 6500;
-    if (course.isUniversityPathway && /\b(pathway|university|uni prep|tertiary preparation)\b/.test(cleanQuery)) score += 6000;
-    score += vocationalOccupationBoost(course, cleanQuery);
-  } else if (!/\b(diploma|certificate|pathway|foundation)\b/.test(cleanQuery)) {
+  if (!/\b(diploma|certificate|pathway|foundation)\b/.test(cleanQuery)) {
     const qualification = courseTypeLabel(course);
     if (qualification === "Bachelor" || qualification === "Honours" || qualification === "Double degree") score += 6000;
-    if (["Certificate I", "Certificate II", "Certificate III", "Certificate IV", "Diploma", "Advanced Diploma", "Undergraduate Certificate", "Statement of Attainment", "Short course"].includes(qualification)) score -= 6000;
-    if (isTafeCourse(course)) score -= 2500;
+    if (qualification === "Diploma" || qualification === "Advanced Diploma" || qualification === "Undergraduate Certificate") score -= 6000;
   }
   if (incomeMinimum && courseIncomeOutcomes(course).some((job) => job.max >= incomeMinimum)) score += 3200;
   score += searchProviderQuality(course, cleanQuery);
   return score;
-}
-
-function vocationalOccupationBoost(course, query) {
-  if (!isTafeCourse(course)) return 0;
-  const title = cleanSearchText(course.name);
-  const profiles = [
-    { query: /\b(electrician|electrical)\b/, title: /\b(electrician|electrotechnology|electrical)\b/ },
-    { query: /\b(plumber|plumbing)\b/, title: /\b(plumbing|plumber)\b/ },
-    { query: /\b(carpenter|carpentry|chippy)\b/, title: /\b(carpentry|carpenter)\b/ },
-    { query: /\b(mechanic|automotive)\b/, title: /\b(automotive|light vehicle|mechanic)\b/ },
-    { query: /\b(welder|welding)\b/, title: /\b(welding|fabrication)\b/ },
-    { query: /\b(chef|cook|cookery)\b/, title: /\b(commercial cookery|kitchen operations|chef)\b/ },
-    { query: /\b(hairdresser|hairdressing)\b/, title: /\b(hairdressing|hairdresser)\b/ },
-    { query: /\b(barber|barbering)\b/, title: /\b(barbering|barber)\b/ }
-  ];
-  const profile = profiles.find((item) => item.query.test(query));
-  if (!profile || !profile.title.test(title)) return 0;
-  let score = 5000;
-  if (title.startsWith("certificate iii")) score += 18000;
-  if (title.startsWith("certificate iv")) score += 8000;
-  if (/\b(re licensing|refresher|statement of attainment|tafe statement|skill set)\b/.test(title)
-    && !/\b(re licensing|relicensing|refresher|already licensed|skill set)\b/.test(query)) {
-    score -= 22000;
-  }
-  return score;
-}
-
-function isVocationalSearchIntent(plan) {
-  const text = cleanSearchText(`${plan?.cleanQuery || ""} ${plan?.expandedQuery || ""} ${plan?.contentQuery || ""}`);
-  return plan?.provider?.id === "TAFENSW"
-    || state.educationType === "TAFE / vocational"
-    || state.tafeRoute !== "Any TAFE route"
-    || /\b(tafe|vet|vocational|trade|apprentice|apprenticeship|trainee|traineeship|certificate|diploma|electrician|plumb|carpent|mechanic|weld|commercial cookery|hairdress|barber|tertiary preparation)\b/.test(text);
 }
 
 function courseSearchMatch(course, queryOrPlan) {
@@ -4657,24 +4156,15 @@ function courseSearchMatch(course, queryOrPlan) {
   if (!plan.contentQuery) return Boolean(plan.provider);
   const fields = courseSearchFields(course);
   const primaryText = fields.primary;
-  const focusedText = cleanSearchText([fields.title, fields.area, fields.careers, fields.searchTerms].join(" "));
   const query = plan.contentQuery;
   const words = plan.contentTokens;
   const topic = topicForQuery(query);
   const incomeMinimum = incomeMinimumFromQuery(query);
-  if (plan.provider) {
-    if (phraseMatch(focusedText, query)) return true;
-    if (focusedAliasMatch(focusedText, query)) return true;
-    if (words.length > 1 && words.every((word) => tokenMatch(focusedText, word))) return true;
-    if (words.length === 1 && tokenMatch(focusedText, words[0])) return true;
-    if (incomeMinimum && courseIncomeOutcomes(course).some((job) => job.max >= incomeMinimum)) return true;
-    return false;
-  }
   if (phraseMatch(primaryText, query)) return true;
   if (aliasMatch(primaryText, query)) return true;
-  if (words.length > 1 && words.every((word) => tokenMatch(primaryText, word))) return true;
-  if (words.length === 1 && tokenMatch(primaryText, words[0])) return true;
-  if (topic && isBroadTopicQuery(query) && topicWeightedScore(course, topic) >= 35) return true;
+  if (words.length > 1 && words.every((word) => tokenSetMatch(fields.primaryTokens, word))) return true;
+  if (words.length === 1 && tokenSetMatch(fields.primaryTokens, words[0])) return true;
+  if (topic && topicWeightedScore(course, topic) >= 35) return true;
   if (incomeMinimum && courseIncomeOutcomes(course).some((job) => job.max >= incomeMinimum)) return true;
   return false;
 }
@@ -4739,7 +4229,7 @@ function renderSearchFieldLeaders(results) {
         ${leaders.map(({ course, signal }, index) => `
           <button type="button" class="field-leader" data-field-provider="${escapeHtml(course.university)}">
             <span class="field-leader-rank">${index + 1}</span>
-            <img src="${escapeHtml(course.providerLogo)}" alt="" loading="lazy" />
+            <img src="${escapeHtml(course.providerLogo)}" alt="" loading="lazy" decoding="async" />
             <span>
               <strong>${escapeHtml(course.university)}</strong>
               <small>${escapeHtml(signal.note)}</small>
@@ -4782,13 +4272,11 @@ function topicWeightedScore(course, topic) {
   const area = cleanSearchText(course.area);
   const careers = cleanSearchText(course.careers);
   const summary = cleanSearchText(course.summary);
-  const searchTerms = cleanSearchText(course.searchTerms);
   const score = topic.keywords.reduce((sum, keyword) => {
     const word = cleanSearchText(keyword);
     if (phraseMatch(title, word)) return sum + 60;
     if (phraseMatch(area, word)) return sum + 35;
     if (phraseMatch(careers, word)) return sum + 18;
-    if (phraseMatch(searchTerms, word)) return sum + 12;
     if (phraseMatch(summary, word)) return sum + 6;
     return sum;
   }, 0);
@@ -4822,8 +4310,7 @@ function courseText(course) {
     course.prerequisites,
     course.assumed,
     course.careers,
-    course.practicalExperience,
-    course.searchTerms
+    course.practicalExperience
   ].join(" "));
   courseTextCache.set(course, text);
   return text;
@@ -4839,8 +4326,7 @@ function primaryCourseText(course) {
     course.area,
     course.summary,
     course.careers,
-    course.practicalExperience,
-    course.searchTerms
+    course.practicalExperience
   ].join(" "));
   primaryCourseTextCache.set(course, text);
   return text;
@@ -4848,16 +4334,19 @@ function primaryCourseText(course) {
 
 function courseSearchFields(course) {
   if (searchFieldCache.has(course)) return searchFieldCache.get(course);
+  const title = cleanSearchText(course.name);
+  const primary = primaryCourseText(course);
   const fields = {
-    title: cleanSearchText(course.name),
+    title,
     code: cleanSearchText(course.courseCode),
     provider: cleanSearchText(course.university),
     campus: cleanSearchText(course.campus),
     area: cleanSearchText(course.area),
     summary: cleanSearchText(course.summary),
     careers: cleanSearchText(course.careers),
-    searchTerms: cleanSearchText(course.searchTerms),
-    primary: primaryCourseText(course)
+    primary,
+    titleTokens: new Set(title.split(" ").filter(Boolean)),
+    primaryTokens: new Set(primary.split(" ").filter(Boolean))
   };
   searchFieldCache.set(course, fields);
   return fields;
@@ -4873,7 +4362,6 @@ function courseLevels(course) {
 }
 
 function levelDisplay(course) {
-  if (isTafeCourse(course)) return `TAFE / vocational · ${courseTypeLabel(course)}`;
   return courseLevels(course).map((level) => levelLabels[level] || level).join(" + ");
 }
 
@@ -4904,6 +4392,9 @@ function icon(name) {
   const paths = {
     search: '<path d="m21 21-4.2-4.2"/><circle cx="11" cy="11" r="7"/>',
     filter: '<path d="M4 6h16"/><path d="M7 12h10"/><path d="M10 18h4"/>',
+    courses: '<path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+    university: '<path d="m3 9 9-5 9 5"/><path d="M5 10v8M9 10v8M15 10v8M19 10v8M3 20h18"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
     external: '<path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>'
   };
   return `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ""}</svg>`;
@@ -4975,9 +4466,7 @@ function searchQueryPlan(value) {
 function expandSearchIntentQuery(value) {
   const original = cleanSearchText(value);
   let query = original;
-  const orderedAliases = [...searchIntentAliases]
-    .sort((left, right) => tokenise(right[0]).length - tokenise(left[0]).length || right[0].length - left[0].length);
-  for (const [alias, replacement] of orderedAliases) {
+  for (const [alias, replacement] of searchIntentAliases) {
     const pattern = new RegExp(`(^|\\s)${escapeRegExp(alias)}(?=\\s|$)`, "g");
     query = query.replace(pattern, (_, leadingSpace) => `${leadingSpace}${replacement}`);
   }
@@ -5083,6 +4572,27 @@ function scheduleSearchLexiconWarmup() {
   }
 }
 
+function scheduleSearchIndexWarmup() {
+  if (searchIndexWarmupScheduled || searchIndexWarmupIndex >= allCourses.length) return;
+  searchIndexWarmupScheduled = true;
+  const warm = (deadline) => {
+    searchIndexWarmupScheduled = false;
+    let processed = 0;
+    while (searchIndexWarmupIndex < allCourses.length) {
+      courseSearchFields(allCourses[searchIndexWarmupIndex]);
+      searchIndexWarmupIndex += 1;
+      processed += 1;
+      if (processed >= 80 && (!deadline || deadline.timeRemaining() < 4)) break;
+    }
+    if (searchIndexWarmupIndex < allCourses.length) scheduleSearchIndexWarmup();
+  };
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(warm);
+  } else {
+    window.setTimeout(() => warm(null), 420);
+  }
+}
+
 function tokenise(value) {
   return cleanSearchText(value).split(" ").filter(Boolean);
 }
@@ -5101,6 +4611,10 @@ function tokenVariants(word) {
 
 function tokenMatch(text, word) {
   const tokens = new Set(tokenise(text));
+  return tokenSetMatch(tokens, word);
+}
+
+function tokenSetMatch(tokens, word) {
   return [...tokenVariants(cleanSearchText(word))].some((variant) => tokens.has(variant));
 }
 
@@ -5114,12 +4628,6 @@ function phraseMatch(text, phrase) {
 
 function aliasMatch(text, query) {
   return (searchAliases[cleanSearchText(query)] || []).some((alias) => phraseMatch(text, alias));
-}
-
-function focusedAliasMatch(text, query) {
-  return (searchAliases[cleanSearchText(query)] || [])
-    .slice(0, 2)
-    .some((alias) => phraseMatch(text, alias));
 }
 
 function weightedAliasMatchScore(text, query, maximum = 32000) {
@@ -5232,23 +4740,6 @@ function providerOverallScore(provider) {
 function providerProfile(provider) {
   if (providerProfileCache.has(provider.id)) return providerProfileCache.get(provider.id);
   const courses = allCourses.filter((course) => course.providerId === provider.id);
-  if (provider.id === "TAFENSW") {
-    const result = {
-      overall: 82,
-      band: "Public vocational training provider",
-      overallWhy: `${courses.length} official TAFE NSW course pages across trades, certificates, diplomas, foundation study and vocational fields. This score reflects catalogue breadth, not a university league-table position.`,
-      specialty: {
-        label: "Vocational education and trades",
-        count: courses.length,
-        score: 96,
-        note: "NSW's public TAFE provider with broad job-focused, trade and further-study options."
-      },
-      topicRows: [],
-      currentStanding: null
-    };
-    providerProfileCache.set(provider.id, result);
-    return result;
-  }
   const topicRows = topicOptions
     .filter((topic) => topic.keywords.length)
     .map((topic) => {
@@ -5287,11 +4778,9 @@ function providerProfile(provider) {
     modeScore * 0.1
   )));
   const currentStanding = providerCurrentStanding[provider.id] || null;
-  let overall = currentStanding
+  const overall = currentStanding
     ? Math.max(40, Math.min(98, Math.round(baseOverall * 0.75 + currentStanding.score * 0.25)))
     : baseOverall;
-  if (provider.id === "UNSW") overall = Math.max(overall, 96);
-  if (provider.id === "USYD") overall = Math.min(Math.max(overall, 94), 95);
   const topicCount = topicRows.length;
   const modeCopy = [
     modes.has("Online") || modes.has("Distance") ? "online study" : "",
@@ -5397,32 +4886,10 @@ function courseProviderScore(course) {
 
 function searchProviderQuality(course, query) {
   const topic = topicForQuery(query);
-  if (!topic) return courseProviderScore(course) * 12;
+  if (!topic) return courseProviderScore(course) * 0.5;
   const signal = providerFieldSignal(course, topic);
-  return signal ? signal.score * 65 : courseProviderScore(course) * 25;
-}
-
-function providerOnlyCourseScore(course) {
-  const qualification = courseTypeLabel(course);
-  const title = cleanSearchText(course.name);
-  if (isTafeCourse(course)) {
-    let vocationalScore = 0;
-    if (qualification === "Certificate III") vocationalScore += 1200;
-    if (qualification === "Certificate IV") vocationalScore += 1100;
-    if (qualification === "Diploma") vocationalScore += 900;
-    if (qualification === "Advanced Diploma") vocationalScore += 700;
-    if (qualification === "Certificate II") vocationalScore += 500;
-    if (qualification === "Statement of Attainment" || qualification === "Short course") vocationalScore -= 600;
-    if (course.tafePathwayType === "university-preparation") vocationalScore += 450;
-    return vocationalScore + Math.max(0, 720 - title.length * 7);
-  }
-  let score = course.level === "undergraduate" ? 900 : 0;
-  if (qualification === "Bachelor" || qualification === "Honours") score += 900;
-  if (qualification === "Double degree") score += 240;
-  if (qualification === "Diploma" || qualification === "Advanced Diploma" || qualification === "Undergraduate Certificate") score -= 350;
-  if (numericRank(course.atar) !== null) score += 180;
-  score += Math.max(0, 720 - title.length * 7);
-  return score;
+  const overall = courseProviderScore(course);
+  return signal ? signal.score * 520 + overall * 35 : overall * 140;
 }
 
 function decodeHtmlEntities(value) {
@@ -5455,7 +4922,9 @@ if ("scrollRestoration" in history) {
 
 render();
 scheduleHashScroll();
+loadAiStatus();
 scheduleSearchLexiconWarmup();
+scheduleSearchIndexWarmup();
 window.setTimeout(scheduleIncomeWarmup, 1400);
 
 window.addEventListener("hashchange", () => {
