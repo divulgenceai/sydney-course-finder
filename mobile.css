@@ -396,55 +396,6 @@
     display: none !important;
   }
 
-  .course-search-start {
-    min-height: 0 !important;
-    gap: 12px !important;
-    padding: 28px 0 4px !important;
-    border-top: 0 !important;
-  }
-
-  .course-search-start > strong.mobile-only {
-    display: block !important;
-    color: var(--product-ink);
-    font-size: 15px !important;
-  }
-
-  .course-search-start > p {
-    display: none !important;
-  }
-
-  .course-search-start > div {
-    display: flex !important;
-    width: calc(100% + var(--mobile-gutter-right));
-    gap: 8px !important;
-    padding: 0 var(--mobile-gutter-right) 5px 0;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-    scrollbar-width: none;
-    scroll-snap-type: x proximity;
-  }
-
-  .course-search-start > div::-webkit-scrollbar {
-    display: none;
-  }
-
-  .course-search-start > div button:nth-child(n + 4) {
-    display: none !important;
-  }
-
-  .course-search-start button {
-    width: auto !important;
-    min-width: max-content;
-    min-height: 46px !important;
-    padding: 0 16px !important;
-    border-color: color-mix(in srgb, var(--accent) 28%, var(--line)) !important;
-    border-radius: 999px !important;
-    background: var(--accent-soft) !important;
-    color: var(--accent) !important;
-    text-align: center !important;
-    scroll-snap-align: start;
-  }
-
   /* Results stay scannable without turning every fact into another nested card. */
   .course-list {
     gap: 18px !important;

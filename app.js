@@ -891,7 +891,6 @@ function renderCourseSearchPanel(
           ${renderProcessStrip("search", "Searching courses")}
           ${searchActive && results.length ? results.slice(0, state.visible).map((course, index) => renderCourse(course, "", index, true)).join("") : ""}
           ${searchActive && !results.length ? renderNoResults() : ""}
-          ${!searchActive ? renderCourseSearchStart() : ""}
           ${results.length > state.visible ? `<button class="load-more" type="button" data-action="more">Show more</button>` : ""}
         </div>
       </div>
@@ -937,22 +936,6 @@ function toolIcon(name) {
     forms: '<path d="M7 3h8l4 4v14H7z"/><path d="M15 3v5h5M10 12h6M10 16h6"/>'
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[name] || paths.guide}</svg>`;
-}
-
-function renderCourseSearchStart() {
-  return `
-    <div class="course-search-start">
-      <strong class="desktop-only">Start with what matters most</strong>
-      <strong class="mobile-only">Popular searches</strong>
-      <p>Search a degree, career or university—or choose filters such as study area, campus and estimated ATAR.</p>
-      <div>
-        <button type="button" data-search-example="computer science">Computer science</button>
-        <button type="button" data-search-example="nursing">Nursing</button>
-        <button type="button" data-search-example="law">Law</button>
-        <button type="button" data-search-example="UTS">UTS</button>
-      </div>
-    </div>
-  `;
 }
 
 function renderNoResults() {
@@ -3208,17 +3191,6 @@ function bindCourseSearchSurface(scope) {
     });
   });
 
-  scope.querySelectorAll("[data-search-example]").forEach((button) => {
-    button.addEventListener("click", () => {
-      runProcessing("search", () => {
-        state.draft = button.dataset.searchExample || "";
-        state.query = state.draft;
-  state.visible = coursePageSize();
-        state.openCourseIds.clear();
-      }, () => scheduleHashScroll("auto"));
-    });
-  });
-
   scope.querySelectorAll("[data-field-provider]").forEach((button) => {
     button.addEventListener("click", () => {
       runProcessing("search", () => {
@@ -3434,17 +3406,6 @@ function bindEvents() {
     runProcessing("search", () => {
   state.visible += coursePageSize();
     }, null, 180);
-  });
-
-  app.querySelectorAll("[data-search-example]").forEach((button) => {
-    button.addEventListener("click", () => {
-      runProcessing("search", () => {
-        state.draft = button.dataset.searchExample || "";
-        state.query = state.draft;
-  state.visible = coursePageSize();
-        state.openCourseIds.clear();
-      }, () => scheduleHashScroll("auto"));
-    });
   });
 
   app.querySelectorAll("[data-field-provider]").forEach((button) => {

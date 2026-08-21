@@ -1,6 +1,6 @@
 (function () {
   const storageKey = "sydneyCourseFinder.assetShellVersion";
-  const assetVersion = "65";
+  const assetVersion = "67";
 
   try {
     if (localStorage.getItem(storageKey) === assetVersion) return;

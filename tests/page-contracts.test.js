@@ -196,6 +196,7 @@ test("Mobile layout uses an app-style shell with bottom navigation", () => {
   const css = read("styles.css");
   const mobileCss = read("mobile.css");
   const theme = read("theme.js");
+  const toolkit = read("toolkit.js");
 
   assert.match(theme, /mobileNavIcons/);
   assert.match(theme, /decorateMobileNav/);
@@ -211,11 +212,38 @@ test("Mobile layout uses an app-style shell with bottom navigation", () => {
   assert.match(css, /\.mobile-primary-nav\s*{[\s\S]*bottom:\s*0/);
   assert.match(mobileCss, /\.mobile-filter-head button\s*{[\s\S]*min-height:\s*44px/);
   assert.match(mobileCss, /\.uac-planner-source a\s*{[\s\S]*min-height:\s*44px/);
-  assert.match(mobileCss, /\.tool-launcher-dialog > header button\s*{[\s\S]*min-height:\s*44px/);
-  assert.match(mobileCss, /data-app-surface="android"[\s\S]*\.tool-context-stage,[\s\S]*\.tool-context-actions > a\s*{\s*display:\s*none/);
+  assert.doesNotMatch(toolkit, /tool-context-bar|tool-launcher|data-open-tool-launcher/);
   assert.match(css, /\.mobile-nav-peek\s*{\s*display:\s*none\s*!important/);
   assert.doesNotMatch(theme, /mobile-nav-peek/);
   assert.doesNotMatch(theme, /handleMobileNavScroll/);
+});
+
+test("Course search starts with the search controls instead of a redundant suggestion block", () => {
+  const source = read("app.js");
+  assert.doesNotMatch(source, /renderCourseSearchStart|data-search-example|Start with what matters most/);
+});
+
+test("Guide subject changes update one row without rebuilding the full page", () => {
+  const source = read("guide.js");
+  const changeBranch = source.match(/if \(target\.dataset\.guideSubjectRow\) \{[\s\S]*?return;\s*\}/)?.[0] || "";
+  assert.match(source, /function syncGuideSubjectRow/);
+  assert.match(source, /let guideReadinessFrame = 0/);
+  assert.match(changeBranch, /syncGuideSubjectRow/);
+  assert.match(changeBranch, /scheduleGuideProgressSave/);
+  assert.doesNotMatch(changeBranch, /renderGuide|persistGuideProgress/);
+});
+
+test("La Trobe early entry is explicitly scoped to verified Sydney study options", () => {
+  const data = read("early-entry-data.js");
+  const planner = read("uac-planner.js");
+  assert.match(data, /Sydney CBD campus/);
+  assert.match(data, /Bachelor of Business/);
+  assert.match(data, /Bachelor of Cybersecurity/);
+  assert.match(data, /Bachelor of Information Technology/);
+  assert.match(data, /applyaspire\.latrobe\.edu\.au/);
+  assert.match(data, /latrobe\.edu\.au\/sydney\/study\/courses/);
+  assert.match(planner, /early-provider-logo/);
+  assert.match(planner, /Sydney courses/);
 });
 
 test("Course search keeps every record while full details load lazily", () => {
@@ -248,7 +276,7 @@ test("Site is installable as an Android-friendly PWA", () => {
   const htmlFiles = ["index.html", "guide.html", "pathways.html", "no-atar.html", "atar-compass.html", "atar-calculator.html", "calculator.html", "subject-helper.html", "subjects.html", "my-plan.html", "advisor.html", "university-forms.html", "uac-planner.html"];
   const manifest = JSON.parse(read("manifest.webmanifest"));
   const serviceWorker = read("sw.js");
-  const assetRefresh = read("asset-refresh-v65.js");
+  const assetRefresh = read("asset-refresh-v67.js");
   const theme = read("theme.js");
   const server = read("server.js");
 
@@ -265,7 +293,7 @@ test("Site is installable as an Android-friendly PWA", () => {
   assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192" && icon.type === "image/png"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512" && icon.purpose === "maskable"));
   assert.match(serviceWorker, /CACHE_NAME/);
-  assert.match(serviceWorker, /sydney-course-finder-app-v65/);
+  assert.match(serviceWorker, /sydney-course-finder-app-v67/);
   assert.match(serviceWorker, /async function cacheFirstThenRefresh[\s\S]*cache\.match\(request\)/);
   assert.match(serviceWorker, /request\.mode === "navigate"[\s\S]*networkFirst\(request/);
   assert.match(serviceWorker, /ROUTE_FALLBACKS/);
@@ -345,10 +373,10 @@ test("Pages avoid render-blocking third-party font requests", () => {
   for (const file of htmlFiles) {
     const html = read(file);
     assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
-    assert.match(html, /asset-refresh-v65\.js/);
-    assert.match(html, /mobile\.css\?v=65/);
-    assert.match(html, /theme\.js\?v=65/);
-    assert.match(html, /styles\.css\?v=65/);
+    assert.match(html, /asset-refresh-v67\.js/);
+    assert.match(html, /mobile\.css\?v=67/);
+    assert.match(html, /theme\.js\?v=67/);
+    assert.match(html, /styles\.css\?v=67/);
   }
 });
 
