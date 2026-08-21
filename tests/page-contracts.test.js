@@ -412,6 +412,7 @@ test("Site is installable as an Android-friendly PWA", () => {
   assert.match(theme, /serviceWorker\s*\.\s*register\("\/release-v65\/sw\.js",\s*\{ scope:\s*"\/",\s*updateViaCache:\s*"none" \}/);
   assert.match(vercel, /"cleanUrls":\s*false/);
   assert.match(vercel, /"source":\s*"\/tools"[\s\S]*"destination":\s*"\/tools\.html"/);
+  assert.match(vercel, /"source":\s*"\/guide"[\s\S]*"destination":\s*"\/guide\.html"/);
   assert.match(vercel, /"source":\s*"\/release-v65\/sw\.js"[\s\S]*"Service-Worker-Allowed"[\s\S]*"value":\s*"\/"/);
   assert.match(theme, /scheduleServiceWorkerRegistration/);
   assert.match(theme, /requestIdleCallback/);

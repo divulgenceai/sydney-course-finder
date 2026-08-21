@@ -32,6 +32,10 @@
       "destination": "/tafe-tools.html"
     },
     {
+      "source": "/guide",
+      "destination": "/guide.html"
+    },
+    {
       "source": "/advisor",
       "destination": "/advisor.html"
     },
@@ -41,6 +45,10 @@
     },
     {
       "source": "/my-plan",
+      "destination": "/my-plan.html"
+    },
+    {
+      "source": "/plan",
       "destination": "/my-plan.html"
     },
     {
