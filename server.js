@@ -42,10 +42,12 @@ http.createServer((req, res) => {
   const cacheControl = path.basename(filePath) === "uac-courses-lite.js"
     ? "public, max-age=3600"
     : "no-store";
-  res.writeHead(200, {
+  const responseHeaders = {
     "Content-Type": mimeTypes[ext] || "application/octet-stream",
     "Cache-Control": cacheControl
-  });
+  };
+  if (url.pathname === "/release-v65/sw.js") responseHeaders["Service-Worker-Allowed"] = "/";
+  res.writeHead(200, responseHeaders);
   fs.createReadStream(filePath).pipe(res);
 }).listen(port, host, () => {
   console.log(`Sydney Course Finder running at http://${host}:${port}`);
@@ -74,7 +76,13 @@ function parseEnvValue(value) {
 
 function resolveFile(pathname) {
   const clean = decodeURIComponent(pathname).replace(/\\/g, "/");
-  const route = clean === "/"
+  const releaseAsset = {
+    "/release-v65/app.js": "/app.js",
+    "/release-v65/styles.css": "/styles.css",
+    "/release-v65/theme.js": "/theme.js",
+    "/release-v65/sw.js": "/sw.js"
+  }[clean];
+  const route = releaseAsset || (clean === "/"
     ? "/index.html"
     : clean === "/tools"
       ? "/tools.html"
@@ -100,7 +108,7 @@ function resolveFile(pathname) {
               ? "/subjects.html"
             : clean === "/subject-helper"
               ? "/subject-helper.html"
-        : clean;
+        : clean);
   const candidate = path.resolve(root, `.${route}`);
   const relative = path.relative(root, candidate);
   if (relative.startsWith("..") || path.isAbsolute(relative)) return "";

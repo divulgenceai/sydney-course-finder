@@ -1,8 +1,24 @@
 {
   "version": 2,
-  "cleanUrls": true,
+  "cleanUrls": false,
   "trailingSlash": false,
   "rewrites": [
+    {
+      "source": "/release-v65/app.js",
+      "destination": "/app.js"
+    },
+    {
+      "source": "/release-v65/styles.css",
+      "destination": "/styles.css"
+    },
+    {
+      "source": "/release-v65/theme.js",
+      "destination": "/theme.js"
+    },
+    {
+      "source": "/release-v65/sw.js",
+      "destination": "/sw.js"
+    },
     {
       "source": "/tools",
       "destination": "/tools.html"
@@ -49,6 +65,19 @@
     }
   ],
   "headers": [
+    {
+      "source": "/release-v65/sw.js",
+      "headers": [
+        {
+          "key": "Service-Worker-Allowed",
+          "value": "/"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
     {
       "source": "/uac-courses-lite.js",
       "headers": [

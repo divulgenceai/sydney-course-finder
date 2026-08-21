@@ -372,6 +372,7 @@ test("Site is installable as an Android-friendly PWA", () => {
   const serviceWorker = read("sw.js");
   const theme = read("theme.js");
   const server = read("server.js");
+  const vercel = read("vercel.json");
 
   for (const file of htmlFiles) {
     const html = read(file);
@@ -388,6 +389,8 @@ test("Site is installable as an Android-friendly PWA", () => {
   assert.match(serviceWorker, /CACHE_NAME/);
   assert.match(serviceWorker, /sydney-course-finder-app-v66/);
   assert.match(serviceWorker, /asset-refresh-v65\.js/);
+  assert.match(serviceWorker, /release-v65\/styles\.css/);
+  assert.match(serviceWorker, /release-v65\/app\.js/);
   assert.match(serviceWorker, /async function cacheFirstThenRefresh[\s\S]*cache\.match\(request\)/);
   assert.match(serviceWorker, /request\.mode === "navigate"[\s\S]*navigationCacheFirstExact\(request/);
   assert.match(serviceWorker, /async function navigationCacheFirstExact[\s\S]*cache\.match\(request\)/);
@@ -406,7 +409,10 @@ test("Site is installable as an Android-friendly PWA", () => {
   assert.match(serviceWorker, /async function navigationCacheFirstExact/);
   assert.match(serviceWorker, /async function networkFirst/);
   assert.match(serviceWorker, /ignoreSearch:\s*true/);
-  assert.match(theme, /serviceWorker\s*\.\s*register\("\/sw\.js",\s*\{ scope:\s*"\/",\s*updateViaCache:\s*"none" \}/);
+  assert.match(theme, /serviceWorker\s*\.\s*register\("\/release-v65\/sw\.js",\s*\{ scope:\s*"\/",\s*updateViaCache:\s*"none" \}/);
+  assert.match(vercel, /"cleanUrls":\s*false/);
+  assert.match(vercel, /"source":\s*"\/tools"[\s\S]*"destination":\s*"\/tools\.html"/);
+  assert.match(vercel, /"source":\s*"\/release-v65\/sw\.js"[\s\S]*"Service-Worker-Allowed"[\s\S]*"value":\s*"\/"/);
   assert.match(theme, /scheduleServiceWorkerRegistration/);
   assert.match(theme, /requestIdleCallback/);
   assert.doesNotMatch(theme, /registration\.update\(\)/);
@@ -414,6 +420,8 @@ test("Site is installable as an Android-friendly PWA", () => {
   assert.doesNotMatch(theme, /controllerchange/);
   assert.doesNotMatch(serviceWorker, /"\/uac-courses\.js"/);
   assert.match(server, /\.webmanifest/);
+  assert.match(server, /"\/release-v65\/app\.js":\s*"\/app\.js"/);
+  assert.match(server, /Service-Worker-Allowed/);
 });
 
 test("Android wrapper can build a phone app around the live site", () => {
@@ -463,8 +471,8 @@ test("Pages avoid render-blocking third-party font requests", () => {
     const html = read(file);
     assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
     assert.match(html, /asset-refresh-v65\.js/);
-    assert.match(html, /theme\.js\?v=65/);
-    assert.match(html, /styles\.css\?v=\d+/);
+    assert.match(html, /release-v65\/theme\.js/);
+    assert.match(html, /release-v65\/styles\.css/);
   }
 });
 
