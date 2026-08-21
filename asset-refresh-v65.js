@@ -1,42 +1,22 @@
 (function () {
   const storageKey = "sydneyCourseFinder.assetShellVersion";
-  const assetVersion = "66";
+  const assetVersion = "65";
 
   try {
     if (localStorage.getItem(storageKey) === assetVersion) return;
+    localStorage.setItem(storageKey, assetVersion);
   } catch {
-    return;
+    // Storage is optional. Never delay or reload the page when it is unavailable.
   }
 
-  async function refreshOldShell() {
-    let removedOldAssets = false;
+  if (!("serviceWorker" in navigator) || location.protocol === "file:") return;
 
-    if ("serviceWorker" in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      if (registrations.length) {
-        removedOldAssets = true;
-        await Promise.allSettled(registrations.map((registration) => registration.unregister()));
-      }
-    }
-
-    if ("caches" in window) {
-      const keys = await caches.keys();
-      if (keys.length) {
-        removedOldAssets = true;
-        await Promise.allSettled(keys.map((key) => caches.delete(key)));
-      }
-    }
-
-    try {
-      localStorage.setItem(storageKey, assetVersion);
-    } catch {
-      return;
-    }
-
-    if (removedOldAssets) location.reload();
-  }
-
-  refreshOldShell().catch(() => {
-    // Keep the current page usable if browser privacy settings block cache access.
+  // Activate an already-downloaded worker and check for a newer shell in the
+  // background. Do not delete caches or reload the document during navigation.
+  navigator.serviceWorker.getRegistration().then((registration) => {
+    registration?.waiting?.postMessage({ type: "SKIP_WAITING" });
+    return registration?.update();
+  }).catch(() => {
+    // Offline/privacy modes must not stop the current page from loading.
   });
 })();

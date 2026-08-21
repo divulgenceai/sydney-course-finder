@@ -12,13 +12,14 @@ logo-options.html
 assets/logo-option-*.svg
 .superpowers/
 
-.env*
-!.env.example
-
-# Local tooling and generated Android outputs
-.codex-server/
+# Android build state is generated locally and should never be published.
 android/.gradle/
 android/**/build/
 android/local.properties
-*.apk
-*.aab
+
+.env*
+
+# Local dependency caches and visual QA output.
+.pnpm-store/
+tmp/
+audits/

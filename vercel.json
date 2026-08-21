@@ -1,40 +1,8 @@
 {
   "version": 2,
-  "cleanUrls": false,
+  "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    {
-      "source": "/release-v65/app.js",
-      "destination": "/app.js"
-    },
-    {
-      "source": "/release-v65/styles.css",
-      "destination": "/styles.css"
-    },
-    {
-      "source": "/release-v65/theme.js",
-      "destination": "/theme.js"
-    },
-    {
-      "source": "/release-v65/sw.js",
-      "destination": "/sw.js"
-    },
-    {
-      "source": "/tools",
-      "destination": "/tools.html"
-    },
-    {
-      "source": "/help",
-      "destination": "/help.html"
-    },
-    {
-      "source": "/tafe-tools",
-      "destination": "/tafe-tools.html"
-    },
-    {
-      "source": "/guide",
-      "destination": "/guide.html"
-    },
     {
       "source": "/advisor",
       "destination": "/advisor.html"
@@ -44,16 +12,40 @@
       "destination": "/atar-calculator.html"
     },
     {
-      "source": "/my-plan",
-      "destination": "/my-plan.html"
+      "source": "/atar-compass",
+      "destination": "/advisor.html"
     },
     {
-      "source": "/plan",
+      "source": "/atar-match",
+      "destination": "/advisor.html"
+    },
+    {
+      "source": "/uac-planner",
+      "destination": "/uac-planner.html"
+    },
+    {
+      "source": "/preference-planner",
+      "destination": "/uac-planner.html"
+    },
+    {
+      "source": "/early-entry",
+      "destination": "/uac-planner.html"
+    },
+    {
+      "source": "/my-plan",
       "destination": "/my-plan.html"
     },
     {
       "source": "/pathways",
       "destination": "/pathways.html"
+    },
+    {
+      "source": "/university-forms",
+      "destination": "/university-forms.html"
+    },
+    {
+      "source": "/forms",
+      "destination": "/university-forms.html"
     },
     {
       "source": "/no-atar",
@@ -73,19 +65,6 @@
     }
   ],
   "headers": [
-    {
-      "source": "/release-v65/sw.js",
-      "headers": [
-        {
-          "key": "Service-Worker-Allowed",
-          "value": "/"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=0, must-revalidate"
-        }
-      ]
-    },
     {
       "source": "/uac-courses-lite.js",
       "headers": [

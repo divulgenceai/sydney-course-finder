@@ -40,13 +40,14 @@ const calculatorState = {
   guideField: "All fields",
   guideLimit: defaultGuideLimit(),
   activeSubjectRowId: "",
+  activeSubjectOptionIndex: -1,
   highlightRowId: "",
   processing: ""
 };
 let calculatorRenderPass = 0;
 
 function defaultGuideLimit() {
-  return window.matchMedia?.("(max-width: 760px)")?.matches ? 10 : 18;
+  return window.matchMedia?.("(max-width: 820px)")?.matches ? 10 : 18;
 }
 
 renderCalculator();
@@ -77,106 +78,50 @@ function renderCalculator() {
     </header>
     ${renderCalculatorProgress()}
 
-    <main class="calculator-main">
-      <section class="hero calculator-hero">
+    <main class="calculator-main calculator-uac-page">
+      <section class="hero calculator-hero calculator-uac-hero">
         <div>
           <p class="eyebrow">NSW HSC estimate</p>
-          <h1>ATAR calculator</h1>
-          <p>
-            Add any HSC subject and mark to see the estimated ATAR effect. The calculator focuses on the break-even mark for each subject, so it shows whether your mark is likely helping or hurting your ATAR.
-          </p>
+          <h1>Estimate your ATAR</h1>
+          <p>Add your expected HSC marks. The estimate applies subject scaling, keeps the best 10 eligible units and includes at least 2 units of English.</p>
         </div>
-        <dl class="stats">
-          <div>
-            <dt>Subjects</dt>
-            <dd>${hscSubjects.length}</dd>
-          </div>
-          <div>
-            <dt>Model year</dt>
-            <dd>${escapeHtml(String(calculatorMeta.year || 2025))}</dd>
-          </div>
-          <div>
-            <dt>Rule</dt>
-            <dd>Break-even impact</dd>
-          </div>
-          <p class="data-note">Estimate only. Official ATARs use the full UAC scaling process and your final HSC results.</p>
-        </dl>
+        <aside class="calculator-model-note">
+          <span>Scaling model</span>
+          <strong>UAC ${escapeHtml(String(calculatorMeta.year || 2025))} summary data</strong>
+          <p>This is a planning estimate, not an official ATAR calculation or admission result.</p>
+        </aside>
       </section>
 
       <section class="panel calculator-panel" id="calculator">
-        <div class="panel-head">
+        <div class="panel-head calculator-panel-head">
           <div>
-          <h2>Enter your marks</h2>
-            <p>Use your expected HSC mark. All ${hscSubjects.length} UAC-listed HSC ATAR subjects are available, including Enterprise Computing. Type aliases like ENTC, HMS, CAFS, MX1 or SOR1.</p>
+            <p class="section-kicker">Your subjects</p>
+            <h2>HSC marks</h2>
+            <p>Use expected or trial marks. Search by the full subject name or a common code such as ENTC, HMS, CAFS or MX1.</p>
           </div>
-          <span>${hscSubjects.length} subjects</span>
+          <span>${calculatorState.rows.length} entered</span>
         </div>
 
         <div class="calculator-layout">
           <form class="calculator-form" data-form="calculator">
             ${renderCalculatorProcessStrip("calculator", "Updating estimate")}
-            <div class="calc-toolbar">
-              <button type="button" class="match-btn" data-action="add-row">Add subject</button>
-              <button type="button" class="clear-btn" data-action="reset-example">Reset example</button>
+            <div class="calculator-table-head" aria-hidden="true">
+              <span>Subject</span><span>HSC mark</span><span>Historical contribution</span><span>Action</span>
             </div>
             <div class="subject-rows">
               ${calculatorState.rows.map(renderSubjectRow).join("")}
+            </div>
+            <div class="calc-toolbar">
+              <button type="button" class="match-btn" data-action="add-row">Add subject</button>
+              <button type="button" class="secondary-btn" data-action="boost-all">Test +2 marks each</button>
+              <button type="button" class="clear-btn" data-action="clear-marks">Clear marks</button>
+              <button type="button" class="clear-btn" data-action="reset-example">Restore example</button>
             </div>
           </form>
 
           <aside class="calculator-result" data-role="summary">
             ${renderEstimateSummary(estimate)}
           </aside>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Subject break-even guide</h2>
-            <p>The break-even mark is the approximate HSC mark where the subject reaches 25 scaled marks per unit. Above it usually helps; below it usually drags.</p>
-          </div>
-          <span>${hscSubjects.length} subjects</span>
-        </div>
-        <div class="guide-controls">
-          <label>
-            <span>Search subject</span>
-            <input type="search" value="${escapeHtml(calculatorState.guideQuery)}" placeholder="Physics, English, Hospitality..." data-action="guide-query" />
-          </label>
-          <label>
-            <span>Field</span>
-            <select data-action="guide-field">
-              ${fields.map((field) => `<option ${field === calculatorState.guideField ? "selected" : ""}>${escapeHtml(field)}</option>`).join("")}
-            </select>
-          </label>
-        </div>
-        <div class="subject-guide" data-role="subject-guide">
-          ${renderCalculatorProcessStrip("guide", "Filtering subjects")}
-          ${renderSubjectGuide()}
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>How this estimate works</h2>
-            <p>A simple version of the ATAR scaling idea students actually talk about.</p>
-          </div>
-          <span>Not official</span>
-        </div>
-        <div class="method-grid">
-          <article>
-            <strong>1. Estimate the scaled mark</strong>
-            <p>The app uses public UAC scaling summary data to estimate what your HSC mark becomes after scaling.</p>
-          </article>
-          <article>
-            <strong>2. Compare to break-even</strong>
-            <p>For a 2 unit subject, 50 scaled marks is the simple neutral line. Above that helps, below that drags.</p>
-          </article>
-          <article>
-            <strong>3. Add more subjects</strong>
-            <p>With fewer than 10 units, missing units are temporarily held at break-even so you can test one subject at a time.</p>
-          </article>
         </div>
       </section>
     </main>
@@ -235,25 +180,40 @@ function renderSubjectRow(row, index = 0) {
   const subject = subjectByName.get(row.subject);
   const max = subject ? subject.units * 50 : 100;
   const freshClass = row.id === calculatorState.highlightRowId ? " is-fresh" : "";
+  const suggestionsId = `subject-suggestions-${row.id}`;
+  const suggestionMarkup = row.id === calculatorState.activeSubjectRowId ? renderSubjectSuggestions(row) : "";
+  const suggestionsOpen = Boolean(suggestionMarkup);
   return `
     <div class="calc-subject-row${freshClass}" data-row-id="${escapeHtml(row.id)}">
-      <label class="subject-picker">
-        <span>Subject</span>
+      <div class="subject-picker">
+        <span class="calc-field-label">Subject</span>
         <input
           type="search"
           value="${escapeHtml(subjectInputValue(row))}"
           placeholder="Type subject or alias, e.g. ENTC"
           data-action="subject-change"
           aria-label="Subject"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-haspopup="listbox"
+          aria-expanded="${suggestionsOpen ? "true" : "false"}"
+          aria-controls="${escapeHtml(suggestionsId)}"
           autocomplete="off"
           title="${escapeHtml(subjectInputValue(row))}"
         />
-        <div class="subject-suggestions" data-output="subject-suggestions">
-          ${row.id === calculatorState.activeSubjectRowId ? renderSubjectSuggestions(row) : ""}
+        <div
+          class="subject-suggestions"
+          id="${escapeHtml(suggestionsId)}"
+          data-output="subject-suggestions"
+          role="listbox"
+          aria-label="Matching HSC subjects"
+          ${suggestionsOpen ? "" : "hidden"}
+        >
+          ${suggestionMarkup}
         </div>
-      </label>
+      </div>
       <label>
-        <span>Expected mark <small data-output="mark-max">/${max}</small></span>
+        <span>HSC mark <small data-output="mark-max">/${max}</small></span>
         <input
           type="number"
           min="0"
@@ -274,25 +234,40 @@ function renderSubjectRow(row, index = 0) {
 }
 
 function renderEstimateSummary(estimate) {
-  const atarLabel = estimate.assumedReady ? estimate.assumedAtarLabel : "-";
+  const atarLabel = estimate.ready ? estimate.atarLabel : "—";
+  const target = nextAtarTarget(estimate);
   return `
-    <div class="atar-simple-summary">
-      <article class="atar-main-card">
-        <span>Estimated ATAR</span>
-        <strong>${escapeHtml(atarLabel)}</strong>
-        <p>${estimate.assumedReady ? estimateModeLabel(estimate) : "Add a subject and mark to start."}</p>
-      </article>
-      ${renderSubjectFocusCard(estimate)}
-      <article class="atar-context-card">
-        <span>How to read it</span>
-        <p><strong>Break-even</strong> is the HSC mark where a subject reaches about 25 scaled marks per unit.</p>
-        <p><strong>Strong subjects</strong> are furthest above break-even. <strong>Focus subjects</strong> are below break-even or closest to the line.</p>
-      </article>
+    <div class="atar-uac-summary">
+      <span>Estimated ATAR</span>
+      <strong>${escapeHtml(atarLabel)}</strong>
+      <p>${estimateModeLabel(estimate)}</p>
+      <dl>
+        <div><dt>Estimated aggregate</dt><dd>${estimate.ready ? `${formatNumber(estimate.aggregate, 1)} / 500` : "Complete pattern"}</dd></div>
+        <div><dt>Eligible units entered</dt><dd>${Math.min(10, estimate.previewUnits)} / 10</dd></div>
+        <div><dt>English requirement</dt><dd>${englishUnitCount(estimate) >= 2 ? "Covered" : `${englishUnitCount(estimate)} / 2 units`}</dd></div>
+      </dl>
     </div>
-    ${renderAtarSmartPlanner(estimate)}
+    <div class="atar-next-step">
+      <span>Next useful target</span>
+      <strong>${target ? `Aim for ${formatAtar(target.targetAtar)}` : "Complete the subject pattern"}</strong>
+      <p>${target ? `About ${formatNumber(Math.max(0, target.aggregateGap), 1)} more scaled aggregate points from the best 10 units.` : "Enter marks for English and enough subjects to reach 10 eligible units."}</p>
+    </div>
     ${estimate.warnings.length ? `<ul class="calc-warnings">${estimate.warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>` : ""}
-    ${renderSubjectImpactList(estimate)}
+    <details class="atar-analysis-details">
+      <summary><span><strong>Scaling details and what-if planner</strong><small>See subject strengths, weak points and mark-lift scenarios</small></span><i aria-hidden="true">⌄</i></summary>
+      <div>
+        ${renderSubjectFocusCard(estimate)}
+        ${renderAtarSmartPlanner(estimate)}
+        ${renderSubjectImpactList(estimate)}
+      </div>
+    </details>
   `;
+}
+
+function englishUnitCount(estimate) {
+  return estimate.subjects
+    .filter((entry) => entry.english && entry.eligible)
+    .reduce((sum, entry) => sum + entry.effectiveUnits, 0);
 }
 
 function renderAtarSmartPlanner(estimate) {
@@ -366,15 +341,16 @@ function buildWhatIfScenarios(estimate, focusRows) {
     { label: "+5 to weakest", lift: 5, rowIds: focusIds.slice(0, 1) },
     { label: "+8 to focus", lift: 8, rowIds: focusIds }
   ];
-  const baseAtar = atarNumberFromLabel(estimate.assumedAtarLabel);
+  if (!estimate.ready) return [];
+  const baseAtar = atarNumberFromLabel(estimate.atarLabel);
   return scenarios
     .map((scenario) => {
       const lifted = estimateWithLift(scenario.rowIds, scenario.lift);
-      const nextAtar = atarNumberFromLabel(lifted.assumedAtarLabel);
+      const nextAtar = atarNumberFromLabel(lifted.atarLabel);
       const delta = nextAtar === null || baseAtar === null ? null : nextAtar - baseAtar;
       return {
         label: scenario.label,
-        atarLabel: lifted.assumedAtarLabel,
+        atarLabel: lifted.atarLabel,
         deltaLabel: delta === null ? "rough" : `${delta >= 0 ? "+" : ""}${formatNumber(delta, 2)} ATAR`
       };
     })
@@ -398,8 +374,8 @@ function estimateWithLift(rowIds, lift) {
 }
 
 function nextAtarTarget(estimate) {
-  if (!estimate.assumedReady) return null;
-  const currentAtar = atarNumberFromLabel(estimate.assumedAtarLabel);
+  if (!estimate.ready) return null;
+  const currentAtar = atarNumberFromLabel(estimate.atarLabel);
   if (currentAtar === null) return null;
   const targetAtar = [60, 65, 70, 75, 80, 85, 90, 95, 98]
     .find((target) => target > currentAtar + 0.15) || 99;
@@ -408,7 +384,7 @@ function nextAtarTarget(estimate) {
   return {
     targetAtar,
     targetAggregate,
-    aggregateGap: targetAggregate - estimate.assumedAggregate
+    aggregateGap: targetAggregate - estimate.aggregate
   };
 }
 
@@ -464,7 +440,7 @@ function subjectFocusRows(estimate) {
 
 function renderSubjectFocusCard(estimate) {
   const rows = subjectFocusRows(estimate);
-  if (!estimate.assumedReady || !rows.length) {
+  if (!rows.length) {
     return `
       <article class="atar-focus-card">
         <span>Subject focus</span>
@@ -521,7 +497,7 @@ function renderSubjectImpactList(estimate) {
     <div class="subject-impact-list">
       <div class="subject-impact-head">
         <h3>Subject strengths and focus areas</h3>
-        <p>${estimate.ready ? "Best 10 eligible units are counted." : `Entered ${estimate.previewUnits} unit${estimate.previewUnits === 1 ? "" : "s"}; missing units are held at break-even for the preview.`}</p>
+        <p>${estimate.ready ? "Best 10 eligible units are counted." : `Entered ${estimate.previewUnits} eligible unit${estimate.previewUnits === 1 ? "" : "s"}. Complete the pattern before relying on an ATAR result.`}</p>
       </div>
       ${rows.map((entry) => `
         <article class="subject-impact-card ${scaleClass(entry.listImpact)}">
@@ -530,20 +506,25 @@ function renderSubjectImpactList(estimate) {
             <span>${breakEvenImpactSummary(entry.listImpact)}</span>
           </div>
           <div class="subject-impact-meta">
-            <span>Scaled mark estimate <strong>${formatNumber(entry.listScaled, 1)} / ${entry.listMax}</strong></span>
-            <span>Break-even mark <strong>${formatBreakEven(entry.subject)}</strong></span>
+            <span>Historical contribution <strong>${formatNumber(entry.listScaled, 1)} / ${entry.listMax}</strong></span>
+            <span>Neutral-contribution HSC mark <strong>${formatBreakEven(entry.subject)}</strong></span>
             <span>${entry.listUnits}/${entry.effectiveUnits} unit${entry.effectiveUnits === 1 ? "" : "s"} ${estimate.ready ? "counted" : "entered"}</span>
           </div>
           <p>${subjectImpactSentence(entry)}</p>
         </article>
       `).join("")}
-      ${estimate.assumedMissingUnits > 0 ? `<p class="missing-baseline-note">${estimate.assumedMissingUnits} missing unit${estimate.assumedMissingUnits === 1 ? "" : "s"} are temporarily held at break-even. Add more subjects to replace that baseline.</p>` : ""}
+      ${!estimate.ready ? `<p class="missing-baseline-note">No marks have been invented for missing units. Add the full pattern to calculate an indicative ATAR.</p>` : ""}
     </div>
   `;
 }
 
 function renderSubjectSuggestions(row) {
   const query = normalizeText(row.subjectInput || row.subject || "");
+  const selectedSubject = subjectByName.get(row.subject);
+  const selectedValues = selectedSubject
+    ? [selectedSubject.name, subjectDisplayName(selectedSubject), ...(subjectAliases[selectedSubject.name] || [])].map(normalizeText)
+    : [];
+  if (query && selectedValues.includes(query)) return "";
   const common = ["English Standard", "English Advanced", "Mathematics Standard 2", "Mathematics Advanced", "Enterprise Computing", "Business Studies", "Physics", "Chemistry", "Biology"];
   const matches = query
     ? hscSubjects
@@ -558,8 +539,15 @@ function renderSubjectSuggestions(row) {
     return `<div class="subject-suggestion-empty">No subject found. Try the full HSC subject name.</div>`;
   }
 
-  return matches.map((subject) => `
-    <button type="button" class="subject-suggestion" data-subject-option="${escapeHtml(subject.name)}">
+  return matches.map((subject, index) => `
+    <button
+      type="button"
+      id="subject-option-${escapeHtml(row.id)}-${index}"
+      class="subject-suggestion${index === calculatorState.activeSubjectOptionIndex ? " is-active" : ""}"
+      data-subject-option="${escapeHtml(subject.name)}"
+      role="option"
+      aria-selected="${index === calculatorState.activeSubjectOptionIndex ? "true" : "false"}"
+    >
       <span>
         <strong>${escapeHtml(subject.name)}</strong>
         <small>${escapeHtml(subject.field)} - ${subject.units}u</small>
@@ -582,10 +570,9 @@ function renderRowBreakdown(row) {
   const breakEvenImpact = courseScaled - (subject.units * 25);
   const breakEven = breakEvenMark(subject);
   return `
-    <span class="${scaleClass(breakEvenImpact)}">${breakEvenImpactSummary(breakEvenImpact)}</span>
-    <span>Scaled mark estimate ${formatNumber(courseScaled, 1)} / ${subject.units * 50}</span>
-    <span>Break-even mark ${formatBreakEven(subject)}</span>
-    <span>${markBreakEvenSummary(mark, breakEven)}</span>
+    <span class="calc-scaled-output"><small>Historical aggregate contribution</small><strong>${formatNumber(courseScaled, 1)} / ${subject.units * 50}</strong></span>
+    <span class="calc-scale-impact ${scaleClass(breakEvenImpact)}">${neutralImpactSummary(breakEvenImpact)}</span>
+    <small class="calc-break-even-note">UAC 2025 interpolation · neutral at about ${formatBreakEven(subject)}</small>
   `;
 }
 
@@ -605,8 +592,8 @@ function renderSubjectGuide() {
       <div class="guide-row guide-head" role="row">
         <span>Subject</span>
         <span>Units</span>
-        <span>Break-even</span>
-        <span>Median scaled</span>
+        <span>Neutral mark</span>
+        <span>Median contribution</span>
         <span>Data</span>
       </div>
       ${visible.map(renderGuideRow).join("")}
@@ -649,6 +636,29 @@ function bindCalculatorEvents() {
     });
   });
 
+  calculatorApp.querySelectorAll("[data-action='boost-all']").forEach((button) => {
+    button.addEventListener("click", () => {
+      calculatorState.activeSubjectRowId = "";
+      calculatorState.rows = calculatorState.rows.map((row) => {
+        const subject = subjectByName.get(row.subject);
+        const mark = Number(row.mark);
+        if (!subject || !Number.isFinite(mark)) return row;
+        return { ...row, mark: Math.min(subject.units * 50, mark + 2) };
+      });
+      persistRows();
+      renderCalculatorStable();
+    });
+  });
+
+  calculatorApp.querySelectorAll("[data-action='clear-marks']").forEach((button) => {
+    button.addEventListener("click", () => {
+      calculatorState.activeSubjectRowId = "";
+      calculatorState.rows = calculatorState.rows.map((row) => ({ ...row, mark: "" }));
+      persistRows();
+      renderCalculatorStable();
+    });
+  });
+
   calculatorApp.querySelectorAll("[data-action='remove-row']").forEach((button) => {
     button.addEventListener("click", (event) => {
       const rowElement = event.currentTarget.closest("[data-row-id]");
@@ -665,6 +675,7 @@ function bindCalculatorEvents() {
       const row = calculatorState.rows.find((item) => item.id === rowElement.dataset.rowId);
       if (!row) return;
       calculatorState.activeSubjectRowId = row.id;
+      calculatorState.activeSubjectOptionIndex = -1;
       row.subjectInput = event.currentTarget.value;
       const resolvedSubject = resolveSubjectInput(event.currentTarget.value);
       row.subject = resolvedSubject ? resolvedSubject.name : "";
@@ -681,7 +692,58 @@ function bindCalculatorEvents() {
     input.addEventListener("focus", (event) => {
       const rowElement = event.currentTarget.closest("[data-row-id]");
       calculatorState.activeSubjectRowId = rowElement.dataset.rowId;
+      calculatorState.activeSubjectOptionIndex = -1;
       updateEstimateDom();
+    });
+
+    input.addEventListener("click", (event) => {
+      const rowElement = event.currentTarget.closest("[data-row-id]");
+      if (calculatorState.activeSubjectRowId === rowElement.dataset.rowId) return;
+      calculatorState.activeSubjectRowId = rowElement.dataset.rowId;
+      calculatorState.activeSubjectOptionIndex = -1;
+      updateEstimateDom();
+    });
+
+    input.addEventListener("keydown", (event) => {
+      const rowElement = event.currentTarget.closest("[data-row-id]");
+      const row = calculatorState.rows.find((item) => item.id === rowElement.dataset.rowId);
+      if (!row) return;
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        dismissSubjectSuggestions();
+        return;
+      }
+
+      if (event.key === "Tab") {
+        dismissSubjectSuggestions();
+        return;
+      }
+
+      let options = Array.from(rowElement.querySelectorAll("[data-subject-option]"));
+      if ((event.key === "ArrowDown" || event.key === "ArrowUp") && !options.length) {
+        calculatorState.activeSubjectRowId = row.id;
+        calculatorState.activeSubjectOptionIndex = -1;
+        updateEstimateDom();
+        options = Array.from(rowElement.querySelectorAll("[data-subject-option]"));
+      }
+      if ((event.key === "ArrowDown" || event.key === "ArrowUp") && options.length) {
+        event.preventDefault();
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        const nextIndex = calculatorState.activeSubjectOptionIndex < 0
+          ? (direction > 0 ? 0 : options.length - 1)
+          : (calculatorState.activeSubjectOptionIndex + direction + options.length) % options.length;
+        setActiveSubjectOption(rowElement, nextIndex);
+        return;
+      }
+
+      if (event.key === "Enter" && calculatorState.activeSubjectOptionIndex >= 0) {
+        const option = options[calculatorState.activeSubjectOptionIndex];
+        const subject = option ? subjectByName.get(option.dataset.subjectOption) : null;
+        if (!subject) return;
+        event.preventDefault();
+        chooseSubject(rowElement, row, subject);
+      }
     });
 
     input.addEventListener("change", (event) => {
@@ -691,13 +753,14 @@ function bindCalculatorEvents() {
       const resolvedSubject = resolveSubjectInput(event.currentTarget.value);
       if (resolvedSubject) {
         row.subject = resolvedSubject.name;
-        row.subjectInput = subjectDisplayName(resolvedSubject);
+        row.subjectInput = resolvedSubject.name;
         event.currentTarget.value = subjectInputValue(row);
       } else if (!event.currentTarget.value.trim()) {
         row.subject = "";
         row.subjectInput = "";
       }
       calculatorState.activeSubjectRowId = "";
+      calculatorState.activeSubjectOptionIndex = -1;
       persistRows();
       updateEstimateDom();
     });
@@ -705,26 +768,31 @@ function bindCalculatorEvents() {
 
   if (!calculatorApp.dataset.subjectOptionBound) {
     calculatorApp.dataset.subjectOptionBound = "true";
-    calculatorApp.addEventListener("mousedown", (event) => {
+    calculatorApp.addEventListener("pointerdown", (event) => {
       const button = event.target.closest("[data-subject-option]");
       if (!button) return;
       event.preventDefault();
+    });
+    calculatorApp.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-subject-option]");
+      if (!button) return;
       const rowElement = button.closest("[data-row-id]");
       const row = calculatorState.rows.find((item) => item.id === rowElement.dataset.rowId);
       const subject = subjectByName.get(button.dataset.subjectOption);
       if (!row || !subject) return;
-      row.subject = subject.name;
-      row.subjectInput = subjectDisplayName(subject);
-      calculatorState.activeSubjectRowId = "";
-      const input = rowElement.querySelector("[data-action='subject-change']");
-      if (input) input.value = subjectInputValue(row);
-      persistRows();
-      updateEstimateDom();
-      rowElement.classList.remove("is-fresh");
-      void rowElement.offsetHeight;
-      rowElement.classList.add("is-fresh");
-      window.setTimeout(() => rowElement.classList.remove("is-fresh"), 560);
+      chooseSubject(rowElement, row, subject);
     });
+  }
+
+  if (!calculatorApp.dataset.subjectDismissBound) {
+    calculatorApp.dataset.subjectDismissBound = "true";
+    document.addEventListener("pointerdown", (event) => {
+      if (!calculatorState.activeSubjectRowId) return;
+      const picker = event.target.closest?.(".subject-picker");
+      const rowId = picker?.closest("[data-row-id]")?.dataset.rowId || "";
+      if (rowId === calculatorState.activeSubjectRowId) return;
+      dismissSubjectSuggestions();
+    }, true);
   }
 
   calculatorApp.querySelectorAll("[data-action='mark-change']").forEach((input) => {
@@ -783,8 +851,64 @@ function updateEstimateDom() {
     const subjectInput = rowElement.querySelector("[data-action='subject-change']");
     if (subjectInput) subjectInput.title = subjectInputValue(row);
     const suggestions = rowElement.querySelector("[data-output='subject-suggestions']");
-    if (suggestions) suggestions.innerHTML = row.id === calculatorState.activeSubjectRowId ? renderSubjectSuggestions(row) : "";
+    const suggestionMarkup = row.id === calculatorState.activeSubjectRowId ? renderSubjectSuggestions(row) : "";
+    if (suggestions) {
+      suggestions.innerHTML = suggestionMarkup;
+      suggestions.hidden = !suggestionMarkup;
+    }
+    if (subjectInput) {
+      subjectInput.setAttribute("aria-expanded", suggestionMarkup ? "true" : "false");
+      subjectInput.removeAttribute("aria-activedescendant");
+    }
   });
+}
+
+function dismissSubjectSuggestions() {
+  if (!calculatorState.activeSubjectRowId) return;
+  calculatorState.activeSubjectRowId = "";
+  calculatorState.activeSubjectOptionIndex = -1;
+  calculatorApp.querySelectorAll("[data-output='subject-suggestions']").forEach((list) => {
+    list.innerHTML = "";
+    list.hidden = true;
+  });
+  calculatorApp.querySelectorAll("[data-action='subject-change']").forEach((input) => {
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+  });
+}
+
+function setActiveSubjectOption(rowElement, index) {
+  const options = Array.from(rowElement.querySelectorAll("[data-subject-option]"));
+  if (!options.length) return;
+  calculatorState.activeSubjectOptionIndex = Math.max(0, Math.min(index, options.length - 1));
+  options.forEach((option, optionIndex) => {
+    const isActive = optionIndex === calculatorState.activeSubjectOptionIndex;
+    option.classList.toggle("is-active", isActive);
+    option.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+  const input = rowElement.querySelector("[data-action='subject-change']");
+  const activeOption = options[calculatorState.activeSubjectOptionIndex];
+  if (input && activeOption) input.setAttribute("aria-activedescendant", activeOption.id);
+  activeOption?.scrollIntoView({ block: "nearest" });
+}
+
+function chooseSubject(rowElement, row, subject) {
+  row.subject = subject.name;
+  row.subjectInput = subject.name;
+  calculatorState.activeSubjectRowId = "";
+  calculatorState.activeSubjectOptionIndex = -1;
+  const input = rowElement.querySelector("[data-action='subject-change']");
+  if (input) {
+    input.value = subject.name;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+  }
+  persistRows();
+  updateEstimateDom();
+  rowElement.classList.remove("is-fresh");
+  void rowElement.offsetHeight;
+  rowElement.classList.add("is-fresh");
+  window.setTimeout(() => rowElement.classList.remove("is-fresh"), 560);
 }
 
 function updateSubjectGuide() {
@@ -886,7 +1010,7 @@ function calculateEstimate(rows) {
   const aggregate = countedBlocks.reduce((sum, block) => sum + block.scaled, 0);
 
   if (englishBlocks.length < 2) warnings.push("Add 2 units of English for a full ATAR estimate.");
-  if (blocks.length < 10) warnings.push("Add 10 eligible units for a full estimate. Missing units are temporarily held at break-even.");
+  if (blocks.length < 10) warnings.push("Add 10 eligible units for an ATAR estimate. Missing units are not guessed.");
 
   const countedByRow = countedBlocks.reduce((map, block) => {
     const current = map.get(block.rowId) || { units: 0, contribution: 0 };
@@ -1120,9 +1244,9 @@ function subjectSuggestionScore(subject, query) {
 }
 
 function subjectInputValue(row) {
-  if (row.subjectInput) return row.subjectInput;
   if (row.subject && subjectByName.has(row.subject)) {
-    return subjectDisplayName(subjectByName.get(row.subject));
+    const resolved = resolveSubjectInput(row.subjectInput || row.subject);
+    if (!row.subjectInput || resolved?.name === row.subject) return row.subject;
   }
   return row.subjectInput || "";
 }
@@ -1174,9 +1298,15 @@ function breakEvenImpactSummary(value) {
 }
 
 function estimateModeLabel(estimate) {
-  if (!estimate.assumedReady) return "Add a subject and mark to start.";
+  if (!estimate.previewUnits) return "Add a subject and mark to start.";
   if (estimate.ready) return "Uses your best 10 eligible units, including English.";
-  return `${estimate.previewUnits} entered unit${estimate.previewUnits === 1 ? "" : "s"}; ${estimate.assumedMissingUnits} missing unit${estimate.assumedMissingUnits === 1 ? "" : "s"} held at break-even.`;
+  return `${Math.min(10, estimate.previewUnits)} of 10 eligible units entered. Finish the pattern to see an ATAR estimate.`;
+}
+
+function neutralImpactSummary(value) {
+  if (!Number.isFinite(value)) return "Historical estimate unavailable";
+  if (Math.abs(value) < 0.05) return "Around neutral contribution";
+  return `${formatSigned(value)} vs neutral contribution`;
 }
 
 function impactSentence(value) {

@@ -418,7 +418,19 @@ function renderGuide(options = {}) {
         <img class="site-logo" src="./assets/logo.svg" alt="Sydney Course Finder logo" />
         <span>Sydney Course Finder</span>
       </a>
-      <nav class="topnav" aria-label="Main"></nav>
+      <nav class="topnav" aria-label="Main">
+        <a href="./#courses">Courses</a>
+        <a href="./guide" aria-current="page">Guide</a>
+        ${window.courseFinderTheme?.myPlanNavMarkup?.() || ""}
+        <a href="./pathways">Pathways</a>
+        <a href="./#atar">ATAR</a>
+        <a href="./atar-calculator">Calculator</a>
+        <a href="./subject-helper">Subjects</a>
+        <a href="./advisor">Course help</a>
+        <a href="./#saved">Saved</a>
+        <a href="./#providers">Universities</a>
+        <a href="./#faq">FAQ</a>
+      </nav>
       <div class="topbar-actions">${window.courseFinderTheme?.buttonMarkup?.() || ""}</div>
     </header>
 
@@ -443,10 +455,11 @@ function renderGuide(options = {}) {
             <h2>Build your plan</h2>
             <p>Three useful answers are enough to begin. Everything else is optional refinement.</p>
           </div>
-          <span>${escapeHtml((guideMeta.importedAt || "").slice(0, 10) || "UAC data")}</span>
+          <span>UAC data · ${escapeHtml(formatGuideDate(guideMeta.importedAt))}</span>
         </div>
         <form class="guide-form" data-guide-form>
           ${guideState.processing ? renderGuideProcessStrip("Building plan") : ""}
+          ${renderGuideReadiness()}
           <div class="guide-question-grid guide-core-grid">
             ${renderGuideSelect("year", "What year are you in?", guideYears, guideState.year)}
             ${renderGuideInput("dreamJob", "Career or degree goal", "text", "Example: software engineer, nursing, computer science", guideState.dreamJob)}
@@ -485,12 +498,38 @@ function renderGuide(options = {}) {
   `;
 
   bindGuideEvents();
+  bindGuideProviderFallbacks(guideApp);
   guideRenderPass += 1;
   requestAnimationFrame(() => {
     scrollGuideNavIntoView();
     scheduleGuidePrewarm();
     if (options.preserveScroll) window.scrollTo(x, y);
   });
+}
+
+function renderGuideReadiness() {
+  const hasYear = Boolean(guideState.year);
+  const hasGoal = Boolean(String(guideState.dreamJob || guideState.dreamCourse || "").trim());
+  const hasDetail = guideState.subjectsWithMarks.some((row) => String(row.subject || "").trim() && String(row.mark || "").trim())
+    || (guideState.schoolPerformance && guideState.schoolPerformance !== "Not sure yet")
+    || Boolean(String(guideState.passions || "").trim());
+  const readyCount = [hasYear, hasGoal, hasDetail].filter(Boolean).length;
+  return `
+    <div class="guide-readiness" aria-label="Plan readiness: ${readyCount} of 3 useful details added">
+      <div><strong>${hasGoal ? "Ready to build" : "Add a goal to begin"}</strong><span>${readyCount} of 3 useful details</span></div>
+      <ol>
+        <li class="${hasYear ? "is-ready" : ""}"><span>${hasYear ? "✓" : "1"}</span><b>School year</b></li>
+        <li class="${hasGoal ? "is-ready" : ""}"><span>${hasGoal ? "✓" : "2"}</span><b>Career or degree</b></li>
+        <li class="${hasDetail ? "is-ready" : ""}"><span>${hasDetail ? "✓" : "3"}</span><b>Marks or interests <small>optional</small></b></li>
+      </ol>
+    </div>
+  `;
+}
+
+function formatGuideDate(value) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "date unavailable";
+  return new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" }).format(date);
 }
 
 function renderGuideInput(key, label, type, placeholder, value) {
@@ -529,7 +568,7 @@ function renderGuideDirectionDeck() {
             <h3>Your answer deck is folded away</h3>
             <p>The Guide is using all ${directionCards.length} direction-card answers to rank subjects, courses, universities and careers.</p>
           </div>
-          <strong aria-label="Complete">&#10003;</strong>
+          <strong>✓</strong>
         </div>
         <div class="guide-deck-fold">
           <i></i><i></i><i></i>
@@ -851,14 +890,14 @@ function renderGuideResult(result) {
   const deckNote = guideState.deckAnswers.some(Boolean) ? " Your direction-card choices also influenced this match." : "";
   return `
     <section class="panel guide-result" id="guide-result">
-      <div class="guide-stale-notice" role="status">
-        <strong>Your answers changed.</strong>
-        <span>Select “Update my plan” to refresh every recommendation below.</span>
-      </div>
       <div class="guide-result-head">
-        <div>
+        <div class="guide-result-intro">
+          <div class="guide-result-provider">
+            ${guideProviderLogo(primary, "guide-result-provider-logo")}
+            <div><span>Guide recommendation</span><strong>${escapeHtml(primary.university)}</strong><small>${escapeHtml(primary.campus || "Campus check required")}</small></div>
+          </div>
           <span class="guide-pill">${escapeHtml(result.profile.label)}</span>
-          <h2>Best direction: ${escapeHtml(primary.name)}</h2>
+          <h2>${escapeHtml(primary.name)}</h2>
           <p>${escapeHtml(primary.name)} at ${escapeHtml(primary.university)} is the strongest first plan because it fits your job/course/passion signals, ${escapeHtml(result.entryLine.toLowerCase())}, and the preference you gave.${escapeHtml(providerNote)}${escapeHtml(deckNote)}</p>
         </div>
         <div class="guide-score-card">
@@ -868,14 +907,14 @@ function renderGuideResult(result) {
         </div>
       </div>
 
-      ${renderGuideLinearPlanPreview(guidePlanView.linearStages || [])}
+      ${renderGuideLinearPlanPreview(guidePlanView.linearStages || [], result)}
 
       <div class="guide-plan-grid">
         <article class="guide-plan-card primary">
           <span>Course target</span>
-          <img src="${escapeHtml(primary.providerLogo)}" alt="${escapeHtml(primary.university)} logo" loading="lazy" />
+          <div class="guide-plan-provider">${guideProviderLogo(primary)}<strong>${escapeHtml(primary.university)}</strong></div>
           <h3>${escapeHtml(primary.name)}</h3>
-          <p>${escapeHtml(primary.university)} - ${escapeHtml(primary.campus)}</p>
+          <p>${escapeHtml(primary.campus)}</p>
           <dl>
             <div><dt>ATAR profile</dt><dd class="atar-requirement">${escapeHtml(displayRank(primary.atar))}</dd></div>
             <div><dt>Mode</dt><dd>${escapeHtml((primary.modes || []).join(", ") || primary.studyMode || primary.mode || "Check course page")}</dd></div>
@@ -960,26 +999,92 @@ function renderGuideResult(result) {
   `;
 }
 
-function renderGuideLinearPlanPreview(stages) {
+function renderGuideLinearPlanPreview(stages, result) {
   if (!stages?.length) return "";
   return `
     <section class="guide-linear-preview" aria-label="Personal plan order">
-      <div>
-        <span>Plan order for ${escapeHtml(guideState.year)}</span>
-        <h3>What to do first</h3>
-        <p>This summary changes by year group so the next decision is always at the top.</p>
-      </div>
+      <header>
+        <div><span>Your route for ${escapeHtml(guideState.year)}</span><h3>From the next school decision to your first job</h3></div>
+        <p>Follow this in order. Each stage opens into the detailed plan below.</p>
+      </header>
       <ol>
-        ${stages.map((stage, index) => `
-          <li>
-            <span>${index + 1}</span>
-            <strong>${escapeHtml(stage.phase)}</strong>
-            <small>${escapeHtml(stage.items?.[0]?.title || stage.title || "")}</small>
+        ${stages.map((stage, index) => {
+          const isUacStage = /uac list/i.test(stage.phase || "");
+          return `
+          <li class="${isUacStage ? "is-uac-stage" : ""}">
+            <div class="guide-route-number">${index + 1}</div>
+            <div class="guide-route-copy">
+              <span>${escapeHtml(stage.when || `Step ${index + 1}`)}</span>
+              <strong>${escapeHtml(stage.phase)}</strong>
+              ${isUacStage ? renderGuideUacStagePreview(stage, result) : `<small>${escapeHtml(stage.items?.[0]?.title || stage.title || "")}</small>`}
+            </div>
+            ${isUacStage ? "" : guideStageProviderMark(stage, result)}
           </li>
-        `).join("")}
+        `;
+        }).join("")}
       </ol>
     </section>
   `;
+}
+
+function renderGuideUacStagePreview(stage, result) {
+  const items = (stage.items || []).slice(0, 5);
+  if (!items.length) return `<small>Build the five-course ladder in the detailed UAC section.</small>`;
+  return `
+    <ul class="guide-route-uac-list" aria-label="Full recommended UAC list">
+      ${items.map((item, index) => {
+        const course = guideCourseForStageItem(item, result);
+        return `
+          <li>
+            <span>${index + 1}</span>
+            ${course ? guideProviderLogo(course, "guide-route-uac-logo") : ""}
+            <div><strong>${escapeHtml(String(item.title || "").replace(/^\d+\.\s*/, ""))}</strong><small>${escapeHtml(item.university || course?.university || "Provider to confirm")}</small></div>
+          </li>
+        `;
+      }).join("")}
+    </ul>
+  `;
+}
+
+function guideCourseForStageItem(item, result) {
+  return [result?.primary?.course, ...(result?.options || []).map((entry) => entry.course)]
+    .find((course) => course && (
+      course.id === item.id
+      || (course.name === String(item.title || "").replace(/^\d+\.\s*/, "") && course.university === item.university)
+    ));
+}
+
+function guideStageProviderMark(stage, result) {
+  const courseId = stage.items?.find((item) => item.kind === "course")?.id;
+  const course = [result?.primary?.course, ...(result?.options || []).map((entry) => entry.course)]
+    .find((item) => item && (item.id === courseId || (!courseId && item.university === stage.items?.[0]?.university)));
+  if (!course) return "";
+  return `<div class="guide-route-provider">${guideProviderLogo(course)}<span>${escapeHtml(course.university)}</span></div>`;
+}
+
+function guideProviderLogo(course, className = "") {
+  const initials = String(course?.providerId || course?.university || "University").split(/\s+/).filter(Boolean).slice(0, 3).map((word) => course?.providerId ? word : word[0]).join("").toUpperCase();
+  if (course?.providerLogo) {
+    return `
+      <span class="guide-provider-mark ${escapeHtml(className)}">
+        <span class="guide-provider-fallback" aria-hidden="true">${escapeHtml(initials)}</span>
+        <img src="${escapeHtml(course.providerLogo)}" alt="${escapeHtml(course.university)} logo" loading="lazy" decoding="async" />
+      </span>
+    `;
+  }
+  return `<span class="guide-provider-mark ${escapeHtml(className)}"><span class="guide-provider-fallback" aria-hidden="true">${escapeHtml(initials)}</span></span>`;
+}
+
+function bindGuideProviderFallbacks(root) {
+  root.querySelectorAll(".guide-provider-mark img").forEach((image) => {
+    if (image.dataset.fallbackBound === "true") return;
+    image.dataset.fallbackBound = "true";
+    const reveal = () => image.classList.add("is-loaded");
+    image.addEventListener("load", reveal, { once: true });
+    image.addEventListener("error", () => image.remove(), { once: true });
+    if (image.complete && image.naturalWidth > 0) reveal();
+    else if (image.complete) image.remove();
+  });
 }
 
 function renderPlanSection(title, intro, body, open = false) {
@@ -1041,7 +1146,7 @@ function renderGuideAdjustSelect(key, label, options, value, impact) {
 function renderGuideEstimatePanel(estimate) {
   return `
     <section class="guide-estimate-panel">
-      <div class="guide-estimate-summary">
+      <div>
         <span>Projected ATAR from marks</span>
         <strong>${escapeHtml(estimate.atarLabel)}</strong>
         <small>${escapeHtml(estimate.note)}</small>
@@ -1049,9 +1154,9 @@ function renderGuideEstimatePanel(estimate) {
       <div class="guide-estimate-list">
         ${estimate.subjects.slice(0, 5).map((subject) => `
           <article class="${subject.impact >= 0 ? "up" : "down"}">
-            <strong class="guide-estimate-subject-name">${escapeHtml(subject.name)}</strong>
-            <span aria-label="Scaled contribution ${escapeHtml(formatNumber(subject.scaledTotal, 1))}">${escapeHtml(formatNumber(subject.scaledTotal, 1))}</span>
-            <small><b>${escapeHtml(formatNumber(subject.projectedMark, 1))}/${subject.maxMark}</b> projected · ${subject.impact >= 0 ? "+" : ""}${escapeHtml(formatNumber(subject.impact, 1))} against the neutral scaling baseline</small>
+            <strong>${escapeHtml(subject.name)}</strong>
+            <span>${escapeHtml(formatNumber(subject.scaledTotal, 1))}</span>
+            <small>${escapeHtml(formatNumber(subject.projectedMark, 1))}/${subject.maxMark} projected. ${subject.impact >= 0 ? "+" : ""}${escapeHtml(formatNumber(subject.impact, 1))} vs break-even line</small>
           </article>
         `).join("")}
       </div>
@@ -1062,7 +1167,7 @@ function renderGuideEstimatePanel(estimate) {
 function renderGuideSchoolPanel(estimate) {
   return `
     <section class="guide-estimate-panel guide-school-panel">
-      <div class="guide-estimate-summary">
+      <div>
         <span>School tracking signal</span>
         <strong>${escapeHtml(estimate.atarLabel)}</strong>
         <small>${escapeHtml(estimate.text)}</small>
@@ -1139,7 +1244,7 @@ function renderGuideCourseOption(entry, index) {
   return `
     <article class="guide-course-option">
       <span>${index + 1}</span>
-      <img src="${escapeHtml(course.providerLogo)}" alt="${escapeHtml(course.university)} logo" loading="lazy" />
+      <img src="${escapeHtml(course.providerLogo)}" alt="${escapeHtml(course.university)} logo" loading="lazy" decoding="async" />
       <div>
         <strong>${escapeHtml(course.name)}</strong>
         <small>${escapeHtml(course.university)} - ${escapeHtml(course.campus)} - ATAR ${escapeHtml(rank)}</small>
@@ -1160,23 +1265,18 @@ function bindGuideEvents() {
     if (target.dataset.guideTermRow) {
       const row = guideState.subjectsWithMarks.find((item) => item.id === target.dataset.guideTermRow);
       if (row && target.dataset.guideTermKey) row[target.dataset.guideTermKey] = target.value;
-      guideState.result = null;
-      markGuideResultStale();
       scheduleGuideProgressSave();
       return;
     }
     if (target.dataset.guideMarkRow) {
       const row = guideState.subjectsWithMarks.find((item) => item.id === target.dataset.guideMarkRow);
       if (row) row.mark = target.value;
-      guideState.result = null;
-      markGuideResultStale();
       scheduleGuideProgressSave();
       return;
     }
     if (!target.name) return;
     guideState[target.name] = target.value;
     guideState.result = null;
-    markGuideResultStale();
     scheduleGuideProgressSave();
   });
   form?.addEventListener("change", (event) => {
@@ -1184,7 +1284,6 @@ function bindGuideEvents() {
     if (target.dataset.guideSubjectRow) {
       const row = guideState.subjectsWithMarks.find((item) => item.id === target.dataset.guideSubjectRow);
       if (row) row.subject = target.value;
-      guideState.result = null;
       persistGuideProgress();
       renderGuide({ preserveScroll: true });
       return;
@@ -1199,6 +1298,8 @@ function bindGuideEvents() {
     }
     persistGuideProgress();
   });
+  form?.addEventListener("input", scheduleGuideReadinessSync);
+  form?.addEventListener("change", scheduleGuideReadinessSync);
   form?.addEventListener("submit", (event) => {
     event.preventDefault();
     readGuideForm(form);
@@ -1208,13 +1309,17 @@ function bindGuideEvents() {
       renderGuide({ preserveScroll: true });
       return;
     }
-    guideState.result = buildGuidePlan();
-    guideState.processing = false;
-    persistGuideProgress();
+    guideState.processing = true;
     renderGuide({ preserveScroll: true });
-    requestAnimationFrame(() => {
-      guideApp.querySelector("#guide-result")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    window.setTimeout(() => {
+      guideState.result = buildGuidePlan();
+      guideState.processing = false;
+      persistGuideProgress();
+      renderGuide({ preserveScroll: true });
+      requestAnimationFrame(() => {
+        guideApp.querySelector("#guide-result")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }, 220);
   });
   guideApp.querySelector("[data-guide-reset]")?.addEventListener("click", () => {
     localStorage.removeItem(guideStorageKey);
@@ -1228,7 +1333,6 @@ function bindGuideEvents() {
   });
   guideApp.querySelector("[data-guide-add-subject]")?.addEventListener("click", () => {
     guideState.subjectsWithMarks.push(createGuideSubjectRow());
-    guideState.result = null;
     persistGuideProgress();
     renderGuide({ preserveScroll: true });
   });
@@ -1236,7 +1340,6 @@ function bindGuideEvents() {
     button.addEventListener("click", () => {
       guideState.subjectsWithMarks = guideState.subjectsWithMarks.filter((row) => row.id !== button.dataset.guideRemoveSubject);
       if (!guideState.subjectsWithMarks.length) guideState.subjectsWithMarks.push(createGuideSubjectRow());
-      guideState.result = null;
       persistGuideProgress();
       renderGuide({ preserveScroll: true });
     });
@@ -1267,12 +1370,15 @@ function bindGuideEvents() {
   });
 }
 
-function markGuideResultStale() {
-  const result = guideApp.querySelector("#guide-result");
-  if (!result) return;
-  result.classList.add("is-stale");
-  const submit = guideApp.querySelector('[data-guide-form] button[type="submit"]');
-  if (submit) submit.textContent = "Update my plan";
+function scheduleGuideReadinessSync() {
+  requestAnimationFrame(() => {
+    const current = guideApp.querySelector(".guide-readiness");
+    if (!current) return;
+    const holder = document.createElement("div");
+    holder.innerHTML = renderGuideReadiness().trim();
+    const replacement = holder.firstElementChild;
+    if (replacement) current.replaceWith(replacement);
+  });
 }
 
 function applyGuideAdjustment(field) {
@@ -1310,7 +1416,6 @@ function bindGuideDeckEvents() {
       guideDeckReviewEditing = false;
       guideState.resultRequested = false;
       guideState.result = null;
-      markGuideResultStale();
       persistGuideProgress();
       replaceGuideDeck();
     });

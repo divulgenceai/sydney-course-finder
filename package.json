@@ -6,13 +6,11 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test tests/*.test.js",
-    "check": "node --check asset-refresh-v65.js && node --check theme.js && node --check sw.js && node --check course-details.js && node --check app.js && node --check tools-page.js && node --check help.js && node --check tafe-tools.js && node --check advisor.js && node --check atar-calculator.js && node --check subject-helper-logic.js && node --check subject-helper.js && node --check guide.js && node --check my-plan.js && node --check pathways-logic.js && node --check pathways.js && node --check atar-data.js && node --check tafe-courses.js && node --check server.js && node --check api/ai.js && node --check tools/import-uac-courses.js && node --check tools/import-tafe-courses.js && node --check tools/enrich-admission-profiles.js && node --check tools/build-uac-courses-lite.js && node --check tools/audit-site-data.js && node --check tools/audit-provider-admissions.js",
+    "check": "node --check asset-refresh-v65.js && node --check theme.js && node --check toolkit.js && node --check sw.js && node --check course-details.js && node --check app.js && node --check advisor.js && node --check atar-compass.js && node --check atar-calculator.js && node --check subject-helper-logic.js && node --check subject-helper.js && node --check guide.js && node --check my-plan.js && node --check pathways-logic.js && node --check pathways.js && node --check atar-data.js && node --check early-entry-data.js && node --check uac-planner.js && node --check university-forms-data.js && node --check university-forms.js && node --check server.js && node --check api/ai.js && node --check api/form-proxy.js && node --check tools/import-uac-courses.js && node --check tools/enrich-admission-profiles.js && node --check tools/build-uac-courses-lite.js && node --check tools/audit-site-data.js",
     "audit:data": "node tools/audit-site-data.js",
-    "audit:admission": "node tools/audit-provider-admissions.js",
     "build:data-lite": "node tools/build-uac-courses-lite.js",
     "enrich:admission": "node tools/enrich-admission-profiles.js && node tools/build-uac-courses-lite.js",
     "import:uac": "node tools/import-uac-courses.js",
-    "import:tafe": "node tools/import-tafe-courses.js",
     "android:debug": "powershell -ExecutionPolicy Bypass -File tools/build-android-debug.ps1"
   },
   "keywords": [

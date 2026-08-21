@@ -27,7 +27,8 @@
   const mobileNavLabels = {
     "Course help": "Help",
     Universities: "Unis",
-    Calculator: "Calc"
+    Calculator: "Calc",
+    Saved: "Library"
   };
   Object.assign(mobileNavIcons, {
     Universities: "\u25c6",
@@ -35,11 +36,11 @@
     Saved: "\u2661",
     About: "\u24d8"
   });
-  const mobileNavMedia = "(max-width: 760px)";
+  const mobileNavMedia = "(max-width: 820px)";
   const mobilePrimaryLabels = ["Courses", "Tools", "Universities", "Saved", "About"];
   const mobilePrimaryDestinations = {
     Courses: "./#courses",
-    Tools: "./tools",
+    Tools: "./#tools",
     Universities: "./#providers",
     Saved: "./#saved",
     About: "./#about"
@@ -48,7 +49,17 @@
     label,
     href: mobilePrimaryDestinations[label]
   }));
+  const mobilePrimaryIconPaths = {
+    Courses: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>',
+    Universities: '<path d="m3 9 9-5 9 5"/><path d="M5 10v8M9 10v8M15 10v8M19 10v8M3 20h18"/>',
+    Tools: '<path d="M14.7 6.3a4 4 0 0 0-5 5L3.5 17.5a2.1 2.1 0 0 0 3 3l6.2-6.2a4 4 0 0 0 5-5l-2.4 2.4-3-3Z"/>',
+    Saved: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/>',
+    About: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'
+  };
   let mobileNavSetupDone = false;
+  let homeScrollSpySetupDone = false;
+  let homeScrollSection = "";
+  let homeScrollFrame = 0;
   let routePendingTimer = 0;
   const prefetchedShellUrls = new Set();
 
@@ -177,6 +188,13 @@
       .trim();
   }
 
+  function mobilePrimaryItemMarkup(label, badgeCount = 0) {
+    const visibleLabel = mobileNavLabels[label] || label;
+    const paths = mobilePrimaryIconPaths[label] || mobilePrimaryIconPaths.About;
+    const badge = badgeCount > 0 ? `<span class="mobile-nav-badge">${Math.min(badgeCount, 9)}</span>` : "";
+    return `<span class="mobile-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>${badge}</span><span class="mobile-nav-label">${visibleLabel}</span>`;
+  }
+
   function savedCourseCount() {
     try {
       const value = JSON.parse(localStorage.getItem("sydneyCourseFinder.savedCourses") || "[]");
@@ -190,7 +208,7 @@
     const saved = savedCourseCount();
     return `
       <a href="./#courses">Courses</a>
-      <a href="./tools">Tools</a>
+      <a href="./#tools">Tools</a>
       <a href="./#providers">Universities</a>
       <a href="./#saved">Saved${saved ? ` (${saved})` : ""}</a>
       <a href="./#about">About</a>
@@ -204,20 +222,25 @@
       .replace(/\/+$/, "") || "/";
     const toolPaths = new Set([
       "/guide",
-      "/tools",
-      "/help",
-      "/tafe-tools",
       "/pathways",
       "/no-atar",
       "/atar-calculator",
       "/calculator",
+      "/atar-compass",
+      "/atar-match",
       "/subject-helper",
       "/subjects",
       "/advisor",
+      "/uac-planner",
+      "/preference-planner",
+      "/early-entry",
+      "/university-forms",
+      "/forms",
       "/my-plan",
       "/plan"
     ]);
     if (toolPaths.has(path)) return "Tools";
+    if (path === "/" && homeScrollSection) return homeScrollSection;
     if (location.hash === "#providers") return "Universities";
     if (location.hash === "#tools") return "Tools";
     if (location.hash === "#saved") return "Saved";
@@ -233,6 +256,55 @@
         else link.removeAttribute("aria-current");
       });
     });
+  }
+
+  function isHomePage() {
+    const path = location.pathname
+      .replace(/\/index\.html$/i, "/")
+      .replace(/\/+$/, "") || "/";
+    return path === "/";
+  }
+
+  function updateHomeScrollSection() {
+    homeScrollFrame = 0;
+    if (!isHomePage()) return;
+    const sections = [
+      ["Courses", "courses"],
+      ["Tools", "tools"],
+      ["Universities", "providers"],
+      ["Saved", "saved"],
+      ["About", "about"]
+    ].map(([label, id]) => [label, document.getElementById(id)]).filter(([, section]) => section);
+    if (!sections.length) return;
+
+    const headerBottom = document.querySelector(".topbar")?.getBoundingClientRect().bottom || 0;
+    const readingLine = Math.min(window.innerHeight * 0.5, headerBottom + 300);
+    let next = sections[0][0];
+    sections.forEach(([label, section]) => {
+      if (section.getBoundingClientRect().top <= readingLine) next = label;
+    });
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 12) {
+      next = sections[sections.length - 1][0];
+    }
+    if (next === homeScrollSection) return;
+    homeScrollSection = next;
+    syncCanonicalNavCurrent();
+    syncMobilePrimaryCurrent();
+  }
+
+  function scheduleHomeScrollSectionUpdate() {
+    if (homeScrollFrame) return;
+    homeScrollFrame = requestAnimationFrame(updateHomeScrollSection);
+  }
+
+  function setupHomeScrollSpy() {
+    if (!isHomePage()) return;
+    scheduleHomeScrollSectionUpdate();
+    if (homeScrollSpySetupDone) return;
+    homeScrollSpySetupDone = true;
+    window.addEventListener("scroll", scheduleHomeScrollSectionUpdate, { passive: true });
+    window.addEventListener("resize", scheduleHomeScrollSectionUpdate, { passive: true });
+    window.addEventListener("load", scheduleHomeScrollSectionUpdate, { once: true });
   }
 
   function rewritePrimaryNavigation(scope = document) {
@@ -255,8 +327,6 @@
       </div>
       <nav aria-label="Footer">
         <a href="./#courses">Courses</a>
-        <a href="./tools">Tools</a>
-        <a href="./help">Help</a>
         <a href="./#about">About the data</a>
         <a href="./#faq">FAQ</a>
       </nav>
@@ -274,7 +344,7 @@
   }
 
   function isMobileNavViewport() {
-    return window.matchMedia?.(mobileNavMedia)?.matches || window.innerWidth <= 760;
+    return window.matchMedia?.(mobileNavMedia)?.matches || window.innerWidth <= 820;
   }
 
   function sameOriginPageUrl(href) {
@@ -393,10 +463,11 @@
     const sameDocument = current.pathname === url.pathname && current.search === url.search;
     if (sameDocument && target.hash) {
       const hash = target.hash;
-      if (current.hash !== hash) history.pushState(null, "", hash);
-      document.querySelector(hash)?.scrollIntoView({ behavior: "auto", block: "start" });
-      syncCanonicalNavCurrent();
-      syncMobilePrimaryCurrent();
+      if (current.hash === hash) {
+        document.querySelector(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else {
+        location.hash = hash;
+      }
       return true;
     }
 
@@ -421,11 +492,15 @@
     mobilePrimaryItems.forEach(({ label, href }) => {
       const source = [...sourceNav.querySelectorAll("a")].find((link) => plainNavText(link) === label);
       if (source) source.dataset.mobilePrimary = "true";
+      const badgeCount = label === "Saved"
+        ? Number(document.querySelector("[data-compare-count]")?.dataset.compareCount || 0)
+        : 0;
       const link = document.createElement("a");
       link.href = href;
-      link.setAttribute("aria-label", label);
+      link.setAttribute("aria-label", badgeCount ? `Library, ${badgeCount} courses selected for comparison` : label);
       link.dataset.mobileIcon = mobileNavIcons[label] || "\u2022";
       link.dataset.mobileLabel = mobileNavLabels[label] || label;
+      link.innerHTML = mobilePrimaryItemMarkup(label, badgeCount);
       nav.appendChild(link);
     });
 
@@ -447,12 +522,13 @@
     };
     const activeHash = currentUrl.hash || (normalisePath(currentUrl.pathname) === "/" ? "#courses" : "");
     const canonicalActive = canonicalSectionForLocation();
+    const scrollTrackingHome = isHomePage() && Boolean(homeScrollSection);
     mobileNav.querySelectorAll("a").forEach((link) => {
       const target = new URL(link.getAttribute("href"), location.href);
       const samePath = normalisePath(target.pathname) === normalisePath(currentUrl.pathname);
       const sameSection = !target.hash || target.hash === activeHash;
       const sameCanonicalSection = link.getAttribute("aria-label") === canonicalActive;
-      if ((samePath && sameSection) || sameCanonicalSection) link.setAttribute("aria-current", "page");
+      if ((scrollTrackingHome && sameCanonicalSection) || (!scrollTrackingHome && ((samePath && sameSection) || sameCanonicalSection))) link.setAttribute("aria-current", "page");
       else link.removeAttribute("aria-current");
     });
     const hasCurrent = [...mobileNav.querySelectorAll("a")].some((link) => link.hasAttribute("aria-current"));
@@ -651,20 +727,43 @@
     ensureSiteFooter();
     decorateMobileNav(scope);
     setupMobileNav(scope);
+    setupHomeScrollSpy();
     enhanceAndroidSelects(scope);
+    window.courseFinderToolkit?.enhance?.(scope);
     syncMobilePrimaryCurrent();
   }
 
-  function bindPartial(scope = document) {
-    enhanceAndroidSelects(scope);
-    syncMobilePrimaryCurrent();
+  function handleMobileBack() {
+    if (root.classList.contains("app-select-open")) {
+      closeAppSelectSheet();
+      return true;
+    }
+    if (root.classList.contains("mobile-nav-expanded")) {
+      setMobileNavExpanded(false);
+      return true;
+    }
+    const openFilters = document.querySelector("[data-course-filter-panel].is-open");
+    if (openFilters) {
+      document.querySelector('[data-action="close-course-filters"]')?.click();
+      return true;
+    }
+    const openAskDrawer = document.querySelector(".ask-drawer.open");
+    if (openAskDrawer) {
+      openAskDrawer.querySelector('[data-action="close-ask"]')?.click();
+      return true;
+    }
+    if (document.activeElement?.matches?.("input, textarea, select, [contenteditable='true']")) {
+      document.activeElement.blur();
+      return true;
+    }
+    return false;
   }
 
   function registerServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol === "file:") return;
     navigator.serviceWorker
-      .register("/release-v65/sw.js", { scope: "/", updateViaCache: "none" })
+      .register("/sw.js", { scope: "/", updateViaCache: "none" })
       .then(() => undefined)
       .catch(() => {
       // The site still works if a local browser blocks service worker registration.
@@ -721,10 +820,10 @@
     hasGuidePlanSnapshot,
     myPlanNavMarkup,
     bind,
-    bindPartial,
     decorateMobileNav,
     setupMobileNav,
     syncMobilePrimaryCurrent,
+    handleMobileBack,
     prefetchAppShell,
     prefetchVisibleShellLinks,
     beginFastPageTransition,
