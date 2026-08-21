@@ -2,26 +2,31 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"
       content="Explore Sydney university pathways without relying only on ATAR, including TAFE/VET, diplomas, undergraduate certificates, STAT, SRS, EAS, portfolio entry and transfer routes."
     />
     <title>Pathways | Sydney Course Finder</title>
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Sydney Course Finder" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
-    <script src="./theme.js"></script>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="apple-touch-icon" href="./assets/app-icon-192.png" />
+    <script src="./asset-refresh-v65.js"></script>
+    <script src="./theme.js?v=65"></script>
+    <script src="./toolkit.js?v=65"></script>
+    <link rel="stylesheet" href="./styles.css?v=65" />
+    <link rel="stylesheet" href="./mobile.css?v=65" />
   </head>
   <body>
     <div id="pathways-app"></div>
-    <script src="./uac-courses.js"></script>
+    <script src="./uac-courses-lite.js?v=15"></script>
+    <script src="./course-details.js?v=13"></script>
     <script src="./pathways-logic.js"></script>
-    <script src="./pathways.js"></script>
+    <script src="./pathways.js?v=65"></script>
   </body>
 </html>

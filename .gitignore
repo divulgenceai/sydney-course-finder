@@ -11,3 +11,15 @@ test-results/
 logo-options.html
 assets/logo-option-*.svg
 .superpowers/
+
+# Android build state is generated locally and should never be published.
+android/.gradle/
+android/**/build/
+android/local.properties
+
+.env*
+
+# Local dependency caches and visual QA output.
+.pnpm-store/
+tmp/
+audits/

@@ -117,7 +117,14 @@ const MANUAL_PATHWAY_COURSES = [
   campusPostcode: "2000",
   area: course.area,
   courseLevel: "Diploma",
-  atar: "Not listed by UAC.",
+  atar: "PROVIDER",
+  selectionRank: "HSC subject average / provider criteria",
+  lowestAtar: "Not used",
+  medianAtar: "",
+  highestAtar: "",
+  admissionProfileCode: "PROVIDER",
+  admissionProfileSource: "UTS College",
+  admissionProfileUrl: course.url,
   atarYear: "",
   duration: UTS_COLLEGE_DURATIONS,
   modes: ["On campus", "Full-time"],
@@ -356,7 +363,7 @@ async function main() {
       const campus = campusByKey.get(`${providerId}-${course.campusCode}`) || campusByKey.get(`${course.providerId}-${course.campusCode}`) || {};
       const detail = details.get(`${course.importLevel}:${course.courseUrl}`) || {};
       const profile = course.atarProfile?.AtarProfiles?.[0] || {};
-      const lsr = profile.lsr || profile.lowestAtar || "";
+      const lsr = profile.lsr || "";
       return {
         id: `${course.importLevel}-${course.courseCode}-${providerId}-${course.campusCode}`,
         level: course.importLevel,
@@ -371,7 +378,14 @@ async function main() {
         campusPostcode: String(course.campusLocation || campus.campusLocationCode || "").replace(/^A/, ""),
         area: detail.areasOfStudy || "Not listed",
         courseLevel: course.courseLevel || "",
-        atar: lsr,
+        atar: lsr || profile.lowestAtar || "",
+        selectionRank: lsr,
+        lowestAtar: profile.lowestAtar || "",
+        medianAtar: profile.medianAtar || "",
+        highestAtar: profile.highestAtar || "",
+        admissionProfileCode: profile.atarProfileCode || "",
+        admissionProfileSource: "UAC",
+        admissionProfileUrl: `https://uac.edu.au/course-search/search/${course.importLevel}/course/${course.courseUrl}`,
         atarYear: profile.year || "",
         duration: formatDuration(course.duration),
         modes: formatModes(course.modeOfAttendance),

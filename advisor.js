@@ -292,22 +292,22 @@ function render() {
   const ranked = state.advisorRun ? advisorRankedCourses().slice(0, 6) : [];
   advisorApp.innerHTML = `
     <header class="topbar">
-      <a class="brand" href="./index.html#courses">
+      <a class="brand" href="./#courses">
         <img class="site-logo" src="./assets/logo.svg" alt="Sydney Course Finder logo" />
         <span>Sydney Course Finder</span>
       </a>
       <nav class="topnav" aria-label="Main">
-        <a href="./index.html#courses">Courses</a>
-        <a href="./guide.html">Guide</a>
+        <a href="./#courses">Courses</a>
+        <a href="./guide">Guide</a>
         ${window.courseFinderTheme?.myPlanNavMarkup?.() || ""}
-        <a href="./pathways.html">Pathways</a>
-        <a href="./index.html#atar">ATAR</a>
-        <a href="./atar-calculator.html">Calculator</a>
-        <a href="./subject-helper.html">Subjects</a>
-        <a href="./advisor.html" aria-current="page">Course help</a>
-        <a href="./index.html#saved">Saved</a>
-        <a href="./index.html#providers">Universities</a>
-        <a href="./index.html#faq">FAQ</a>
+        <a href="./pathways">Pathways</a>
+        <a href="./#atar">ATAR</a>
+        <a href="./atar-calculator">Calculator</a>
+        <a href="./subject-helper">Subjects</a>
+        <a href="./advisor" aria-current="page">Course help</a>
+        <a href="./#saved">Saved</a>
+        <a href="./#providers">Universities</a>
+        <a href="./#faq">FAQ</a>
       </nav>
       <div class="topbar-actions">${window.courseFinderTheme?.buttonMarkup?.() || ""}</div>
     </header>
@@ -316,12 +316,13 @@ function render() {
     <main class="advisor-main">
       <section class="hero advisor-hero">
         <div>
-          <h1>Course helper</h1>
-          <p>Answer a focused set of questions, then get a data-based first direction from the Sydney UAC course dataset. The chat uses this page's course data and pathway rules.</p>
+          <span class="section-kicker">Direction + entry fit</span>
+          <h1>Course direction &amp; ATAR match</h1>
+          <p>Find courses that suit you, then separate them into reach, target and safer options using historical entry figures.</p>
         </div>
         <dl class="stats two">
           <div><dt>Course records</dt><dd>${number(allCourses.length)}</dd></div>
-          <div><dt>Imported</dt><dd>${escapeHtml((meta.importedAt || "").slice(0, 10) || "Today")}</dd></div>
+          <div><dt>Data updated</dt><dd>${escapeHtml(formatAdvisorDate(meta.importedAt))}</dd></div>
         </dl>
       </section>
 
@@ -329,9 +330,8 @@ function render() {
         <div class="panel-head">
           <div>
             <h2>Find a direction</h2>
-            <p>The first answer is mostly data scoring from course name, field, ATAR fit, subjects, interests, mode, campus and provider profile.</p>
+            <p>Recommendations combine course relevance, your interests and subjects, campus and study preferences, provider strength and your estimated ATAR.</p>
           </div>
-          <a class="help-link" href="./index.html#atar">Back to ATAR match</a>
         </div>
         ${renderAdvisor(ranked, profile)}
       </section>
@@ -355,6 +355,7 @@ function render() {
     </main>
   `;
   bindEvents();
+  window.courseFinderTheme?.bind?.(advisorApp);
   requestAnimationFrame(scrollActiveNavIntoView);
 }
 
@@ -368,7 +369,13 @@ function scrollActiveNavIntoView() {
 }
 
 function renderAdvisor(ranked, profile) {
+  const answered = advisorQuestions.filter((question) => String(state.advisor[question.key] || "").trim()).length;
   return `
+    <div class="advisor-completion" aria-label="${answered} of ${advisorQuestions.length} direction questions answered">
+      <span><strong>${answered} / ${advisorQuestions.length}</strong> answered</span>
+      <i aria-hidden="true"><b style="width:${Math.round((answered / advisorQuestions.length) * 100)}%"></b></i>
+      <small>More answers improve the ranking, but you can run it at any time.</small>
+    </div>
     <form class="advisor-form" data-form="advisor">
       ${advisorQuestions.map(renderAdvisorQuestion).join("")}
       <button type="submit" class="match-btn">Find my course direction</button>
@@ -376,6 +383,12 @@ function renderAdvisor(ranked, profile) {
     ${renderAdvisorProcessStrip("advisor", "Scoring your answers")}
     ${state.advisorRun ? renderAdvisorResult(ranked, profile) : `<p class="empty-note">The first recommendation is algorithmic. The follow-up chat uses the same imported course data, pathway rules and your answers.</p>`}
   `;
+}
+
+function formatAdvisorDate(value) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "date unavailable";
+  return new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" }).format(date);
 }
 
 function renderAdvisorProgress() {
@@ -441,22 +454,32 @@ function renderAdvisorQuestion(question) {
 
 function renderAdvisorResult(ranked, profile) {
   const primary = ranked[0]?.course;
+  const primaryBand = primary ? advisorAtarBand(primary, profile) : null;
   return `
     <div id="result" class="advisor-result">
       <div class="advisor-summary">
-        <h3>${primary ? `Best first direction: ${highlight(primary.name)}` : "Best first direction"}</h3>
-        <p>${escapeHtml(advisorSummaryText(primary, profile))}</p>
-        <small>How this was decided: the app scores topic fit, subject fit, ATAR gap, campus/mode preference, provider profile and avoid-list penalties. The chat then explains that score in plain language.</small>
+        ${primary ? `
+          <div class="advisor-summary-provider">
+            ${advisorProviderMark(primary)}
+            <div><span>Best first direction</span><strong>${escapeHtml(primary.university)}</strong><small>${escapeHtml(primary.campus || "Campus details on course page")}</small></div>
+          </div>
+          <div class="advisor-summary-main">
+            <div>
+              <h3>${highlight(primary.name)}</h3>
+              <p>${escapeHtml(advisorSummaryText(primary, profile))}</p>
+            </div>
+            <div class="advisor-band ${escapeHtml(primaryBand.tone)}"><span>${escapeHtml(primaryBand.label)}</span><strong>${escapeHtml(displayRank(primary.atar))}</strong><small>${term("Selection rank")} profile</small></div>
+          </div>
+        ` : `<h3>Best first direction</h3>`}
+        <div class="advisor-band-legend" aria-label="ATAR planning bands">
+          <span><i class="reach"></i><b>Reach</b> above your estimate</span>
+          <span><i class="target"></i><b>Target</b> close to your estimate</span>
+          <span><i class="safer"></i><b>Safer</b> below your estimate</span>
+        </div>
+        <small>These are planning bands from historical entry figures, not admission predictions. Prerequisites, adjustments and additional criteria still apply.</small>
       </div>
       <div class="advisor-picks">
-        ${ranked.map(({ course, score, reasons }, index) => `
-          <article style="--item-delay:${Math.min(index, 8) * 24}ms">
-            <strong>${highlight(course.name)}</strong>
-            <small>${escapeHtml(course.university)} - ${escapeHtml(course.campus)} - ${term("ATAR")}: ${escapeHtml(displayRank(course.atar))}</small>
-            <p>${escapeHtml(reasons.slice(0, 3).join(" "))}</p>
-            <em>Fit score ${Math.round(score)}/100</em>
-          </article>
-        `).join("")}
+        ${ranked.map(({ course, score, reasons }, index) => renderAdvisorPick(course, score, reasons, profile, index)).join("")}
       </div>
       <div class="chat-box">
         <div class="chat-head">
@@ -481,6 +504,47 @@ function renderAdvisorResult(ranked, profile) {
       </div>
     </div>
   `;
+}
+
+function renderAdvisorPick(course, score, reasons, profile, index) {
+  const band = advisorAtarBand(course, profile);
+  return `
+    <article class="advisor-course-pick" style="--item-delay:${Math.min(index, 8) * 24}ms">
+      <header>
+        ${advisorProviderMark(course)}
+        <div><strong>${escapeHtml(course.university)}</strong><small>${escapeHtml(course.campus || "Campus check required")}</small></div>
+        <span class="advisor-band ${escapeHtml(band.tone)}">${escapeHtml(band.label)}</span>
+      </header>
+      <h3>${highlight(course.name)}</h3>
+      <div class="advisor-pick-entry">
+        <span><small>${term("Selection rank")} profile</small><strong class="atar-requirement">${escapeHtml(displayRank(course.atar))}</strong></span>
+        <span><small>Personal fit</small><strong>${Math.round(score)}/100</strong></span>
+      </div>
+      <p>${escapeHtml(reasons.slice(0, 3).join(" "))}</p>
+      <footer>${escapeHtml(band.text)}</footer>
+    </article>
+  `;
+}
+
+function advisorProviderMark(course) {
+  if (course.providerLogo) {
+    return `<span class="advisor-provider-logo"><img src="${escapeHtml(course.providerLogo)}" alt="${escapeHtml(course.university)} logo" loading="lazy" decoding="async" /></span>`;
+  }
+  const initials = String(course.university || "University").split(/\s+/).filter(Boolean).slice(0, 3).map((word) => word[0]).join("").toUpperCase();
+  return `<span class="advisor-provider-logo is-text" aria-hidden="true">${escapeHtml(initials)}</span>`;
+}
+
+function advisorAtarBand(course, profile) {
+  const rank = numericRank(course.atar);
+  if (rank === null) return { label: "Official check", tone: "unknown", text: "No numeric historical rank is available, so check the official entry page." };
+  const gap = profile.atar - rank;
+  if (gap >= 5) return { label: "Safer", tone: "safer", text: `${formatBandGap(gap)} below your estimate on the imported profile.` };
+  if (gap >= -2) return { label: "Target", tone: "target", text: Math.abs(gap) < 0.05 ? "Close to your estimate." : `${formatBandGap(Math.abs(gap))} ${gap >= 0 ? "below" : "above"} your estimate.` };
+  return { label: "Reach", tone: "reach", text: `${formatBandGap(Math.abs(gap))} above your estimate on the imported profile.` };
+}
+
+function formatBandGap(value) {
+  return `${Number(value).toFixed(Number(value) % 1 ? 2 : 0)} points`;
 }
 
 function bindEvents() {
@@ -750,6 +814,8 @@ function qualificationFitScore(course, profile) {
   const title = cleanSearchText(course.name);
   let score = 0;
   if (profile.atar >= 65 && /via diploma|^diploma|^advanced diploma/.test(title)) score -= 10;
+  if (profile.atar >= 65 && /^(undergraduate )?certificate\b|^certificate (ii|iii|iv)\b/.test(title)) score -= 24;
+  if (profile.atar >= 75 && /^bachelor\b/.test(title)) score += 8;
   if (/diploma in industry practice/.test(title)) score -= 5;
   if (!/education|law|medicine|engineering/.test(profile.text) && /\/bachelor|bachelor of .+ bachelor of /.test(title)) score -= 8;
   return score;

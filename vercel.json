@@ -12,12 +12,40 @@
       "destination": "/atar-calculator.html"
     },
     {
+      "source": "/atar-compass",
+      "destination": "/advisor.html"
+    },
+    {
+      "source": "/atar-match",
+      "destination": "/advisor.html"
+    },
+    {
+      "source": "/uac-planner",
+      "destination": "/uac-planner.html"
+    },
+    {
+      "source": "/preference-planner",
+      "destination": "/uac-planner.html"
+    },
+    {
+      "source": "/early-entry",
+      "destination": "/uac-planner.html"
+    },
+    {
       "source": "/my-plan",
       "destination": "/my-plan.html"
     },
     {
       "source": "/pathways",
       "destination": "/pathways.html"
+    },
+    {
+      "source": "/university-forms",
+      "destination": "/university-forms.html"
+    },
+    {
+      "source": "/forms",
+      "destination": "/university-forms.html"
     },
     {
       "source": "/no-atar",
@@ -38,11 +66,20 @@
   ],
   "headers": [
     {
-      "source": "/uac-courses.js",
+      "source": "/uac-courses-lite.js",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=3600, must-revalidate"
+          "value": "public, max-age=86400, stale-while-revalidate=604800"
+        }
+      ]
+    },
+    {
+      "source": "/course-data/details/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, stale-while-revalidate=604800"
         }
       ]
     },

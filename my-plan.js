@@ -31,22 +31,22 @@ function renderMyPlanPage() {
 function renderMyPlanTopbar() {
   return `
     <header class="topbar">
-      <a class="brand" href="./index.html#courses">
+      <a class="brand" href="./#courses">
         <img class="site-logo" src="${window.courseFinderTheme?.logoSrc?.() || "./assets/logo-light.svg"}" alt="Sydney Course Finder logo" />
         <span>Sydney Course Finder</span>
       </a>
       <nav class="topnav" aria-label="Main">
-        <a href="./index.html#courses">Courses</a>
-        <a href="./guide.html">Guide</a>
+        <a href="./#courses">Courses</a>
+        <a href="./guide">Guide</a>
         ${window.courseFinderTheme?.myPlanNavMarkup?.({ current: true }) || ""}
-        <a href="./pathways.html">Pathways</a>
-        <a href="./index.html#atar">ATAR</a>
-        <a href="./atar-calculator.html">Calculator</a>
-        <a href="./subject-helper.html">Subjects</a>
-        <a href="./advisor.html">Course help</a>
-        <a href="./index.html#saved">Saved</a>
-        <a href="./index.html#providers">Universities</a>
-        <a href="./index.html#faq">FAQ</a>
+        <a href="./pathways">Pathways</a>
+        <a href="./#atar">ATAR</a>
+        <a href="./atar-calculator">Calculator</a>
+        <a href="./subject-helper">Subjects</a>
+        <a href="./advisor">Course help</a>
+        <a href="./#saved">Saved</a>
+        <a href="./#providers">Universities</a>
+        <a href="./#faq">FAQ</a>
       </nav>
       <div class="topbar-actions">${window.courseFinderTheme?.buttonMarkup?.() || ""}</div>
     </header>
@@ -76,7 +76,7 @@ function renderPersonalLinearPlan(plan) {
           <h2>Linear plan</h2>
           <p>Path: Year 10 subject selection → subject drop → Projected ATAR → Dream course → UAC list → Jobs to apply to. Year 11 and Year 12 plans start from the subject-drop check.</p>
         </div>
-        <a class="help-link" href="./guide.html#guide-form">Adjust in Guide</a>
+        <a class="help-link" href="./guide#guide-form">Adjust in Guide</a>
       </div>
       <ol class="linear-plan-road">
         ${stages.map(renderLinearPlanStage).join("")}
@@ -155,7 +155,7 @@ function renderProgressOnlyPlan(plan) {
           <h2>Upcoming checkpoints</h2>
           <p>These are broad NSW/UAC planning checkpoints. Build the Guide result to personalise them.</p>
         </div>
-        <a class="help-link" href="./guide.html">Open Guide</a>
+        <a class="help-link" href="./guide">Open Guide</a>
       </div>
       <ol class="my-plan-timeline">
         ${(plan.items || []).map((item) => `
@@ -190,7 +190,7 @@ function renderEmptyPlan() {
     <section class="panel my-plan-empty">
       <strong>Start in Guide, then come back here.</strong>
       <p>Guide saves your goal, subjects, school tracking, course target and UAC ladder locally. My Plan turns that into a readable journey.</p>
-      <a class="match-btn" href="./guide.html">Build my Guide plan</a>
+      <a class="match-btn" href="./guide">Build my Guide plan</a>
     </section>
   `;
 }

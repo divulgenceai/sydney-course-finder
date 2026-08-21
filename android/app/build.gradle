@@ -1,0 +1,31 @@
+plugins {
+    id "com.android.application"
+}
+
+def localAppUrl = System.getenv("COURSE_FINDER_APP_URL") ?: "http://127.0.0.1:4190/?source=android"
+
+android {
+    namespace "com.sydneycoursefinder.app"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.sydneycoursefinder.app"
+        minSdk 23
+        targetSdk 36
+        versionCode 11
+        versionName "1.10-mobile"
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    buildTypes {
+        debug {
+            buildConfigField "String", "APP_URL", "\"${localAppUrl}\""
+        }
+        release {
+            buildConfigField "String", "APP_URL", "\"https://sydney-course-finder.vercel.app/?source=android\""
+        }
+    }
+}

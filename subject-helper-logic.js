@@ -402,6 +402,7 @@
         name,
         tier: item?.tier || item?.[1] || "useful",
         reason: item?.reason || item?.[2] || "",
+        profile: true,
         required: 0,
         assumed: 0
       });
@@ -413,6 +414,7 @@
         name: signal.name,
         tier: "useful",
         reason: "Detected in matching UAC course information.",
+        profile: false,
         required: 0,
         assumed: 0
       };
@@ -425,6 +427,7 @@
     const tierWeight = { required: 4, priority: 3, useful: 2, stretch: 1 };
     return [...rows.values()].sort((a, b) =>
       (tierWeight[b.tier] || 0) - (tierWeight[a.tier] || 0)
+      || Number(Boolean(b.profile)) - Number(Boolean(a.profile))
       || b.required - a.required
       || b.assumed - a.assumed
       || a.name.localeCompare(b.name)

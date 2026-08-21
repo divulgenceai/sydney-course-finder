@@ -121,7 +121,7 @@
       id: "general",
       label: "General degree pathway",
       tokens: [],
-      target: "the degree or career area you choose",
+      target: "chosen degree or career area",
       vet: "Certificate IV, diploma or TAFE course in the closest field",
       diploma: "Diploma, undergraduate certificate, foundation or preparation program",
       portfolio: "work samples, references, volunteering, projects or short-course evidence"
@@ -314,6 +314,128 @@
     }
   ];
 
+  const pathwayProviderTemplates = [
+    {
+      id: "wsu-college",
+      name: "Western Sydney University — The College",
+      officialUrl: "https://www.westernsydney.edu.au/future/study/application-pathways/the-college/courses",
+      excludedProfiles: ["defence"],
+      situations: { year10: 18, "year12-no-atar": 45, "left-y11": 28, "finished-y12-no-atar": 44, vet: 34, creative: 30, mature: 32 },
+      profiles: { business: 14, technology: 14, health: 14, education: 14, creative: 14, law: 8, engineering: 14, general: 7 },
+      program(profile, situation) {
+        if (situation.id === "left-y11") return `Foundation/preparation first, then ${wsuDiplomaForProfile(profile)}`;
+        return wsuDiplomaForProfile(profile);
+      },
+      outcome(profile) {
+        return `Complete the linked College program with the required result, then progress or apply to the related Western Sydney University ${profile.target}.`;
+      },
+      requirements: "Confirm the exact program’s school-completion rule, fees, duration, linked bachelor and whether progression is guaranteed or competitive.",
+      evidence: "Official WSU pathway provider; linked diplomas can lead into the related bachelor, often with advanced standing."
+    },
+    {
+      id: "uts-college",
+      name: "UTS College",
+      officialUrl: "https://utscollege.edu.au/programs/diplomas",
+      excludedSituations: ["left-y11"],
+      excludedProfiles: ["defence", "law", "education"],
+      situations: { year10: 14, "year12-no-atar": 43, "finished-y12-no-atar": 46, vet: 30, creative: 40, mature: 26 },
+      profiles: { business: 14, technology: 16, health: 5, creative: 18, engineering: 16, general: 6 },
+      program(profile) {
+        const programs = {
+          business: "Diploma of Business",
+          technology: "Diploma of Information Technology",
+          creative: "Diploma of Animation Production, Communication, or Design & Architecture",
+          engineering: "Diploma of Engineering",
+          health: "Diploma of Science",
+          general: "field-matched UTS College diploma"
+        };
+        return programs[profile.id] || programs.general;
+      },
+      outcome(profile) {
+        return `Use the diploma as first-year-equivalent study, meet the stated progression result, then move into the linked UTS ${profile.target}.`;
+      },
+      requirements: "Domestic diploma entry uses HSC subject averages/provider criteria rather than an ATAR alone. Confirm the required subjects, pace, GPA, credit and destination degree.",
+      evidence: "Official UTS pathway college; most diplomas run for 8 or 12 months and are designed around related first-year UTS study."
+    },
+    {
+      id: "macquarie-college",
+      name: "Macquarie University College",
+      officialUrl: "https://www.mq.edu.au/study/admissions-and-entry/pathways/requirements/domestic",
+      excludedProfiles: ["defence"],
+      situations: { year10: 16, "year12-no-atar": 38, "left-y11": 46, "finished-y12-no-atar": 40, vet: 44, creative: 24, mature: 45 },
+      profiles: { business: 14, technology: 14, health: 8, education: 8, creative: 8, law: 8, engineering: 12, general: 10 },
+      program(profile, situation) {
+        if (situation.id === "left-y11") return "UniReady or Foundation Program before a diploma/bachelor";
+        if (situation.id === "vet") return `recognised Certificate IV/Diploma entry or a ${profile.label.toLowerCase()} diploma`;
+        return `${profile.label} diploma, UniReady or Foundation pathway`;
+      },
+      outcome(profile) {
+        return `Complete the approved preparation or diploma result, then progress or apply to a nominated Macquarie ${profile.target}; eligible diplomas can lead to Year 2.`;
+      },
+      requirements: "Check domestic eligibility, the minimum completion result, nominated destination degrees, credit and whether your VET/work evidence is accepted.",
+      evidence: "Official Macquarie pathways include UniReady, Foundation, diplomas and recognised tertiary/VET study."
+    },
+    {
+      id: "unsw-college",
+      name: "UNSW College",
+      officialUrl: "https://www.unswcollege.edu.au/study/diplomas-overview?studentType=domestic",
+      excludedSituations: ["left-y11", "mature"],
+      excludedProfiles: ["defence", "health", "education", "law"],
+      situations: { year10: 12, "year12-no-atar": 39, "finished-y12-no-atar": 42, vet: 20, creative: 34 },
+      profiles: { business: 12, technology: 14, creative: 12, engineering: 16, general: 5 },
+      program(profile) {
+        const programs = {
+          business: "Diploma of Business",
+          technology: "Diploma of Computer Science",
+          creative: "Diploma of Architecture or Media and Communication",
+          engineering: "Diploma of Engineering",
+          general: "eligible UNSW College diploma"
+        };
+        return programs[profile.id] || programs.general;
+      },
+      outcome(profile) {
+        return `Complete the 12-month diploma and meet progression requirements, then enter second year of the linked UNSW ${profile.target}.`;
+      },
+      requirements: "Confirm domestic entry criteria, English and subject requirements, the exact linked UNSW degree, progression marks, fees and available places.",
+      evidence: "Official UNSW College diplomas cover architecture, business, computer science, engineering, media/communication and science."
+    },
+    {
+      id: "sydney-pathways",
+      name: "University of Sydney admission pathways",
+      officialUrl: "https://www.sydney.edu.au/study/applying/admission-pathways.html",
+      excludedProfiles: ["defence"],
+      situations: { year10: 8, "year12-no-atar": 35, "finished-y12-no-atar": 18, vet: 14, creative: 46, mature: 48 },
+      profiles: { creative: 18, law: 7, health: 7, business: 6, technology: 5, engineering: 5, general: 8 },
+      program(profile, situation) {
+        if (situation.id === "creative" || profile.id === "creative") return "portfolio, audition or interview pathway where the course offers it";
+        if (situation.id === "mature") return "mature-age entry, Tertiary Preparation Certificate or STAT where accepted";
+        if (situation.id === "year12-no-atar") return "MySydney, E12 or other eligible admission scheme";
+        return "eligible admission or transfer pathway";
+      },
+      outcome(profile) {
+        return `Meet the exact scheme or alternative-entry requirements, then apply to an eligible University of Sydney ${profile.target}; otherwise use tertiary study and transfer later.`;
+      },
+      requirements: "These routes are course-specific. Confirm eligibility, deadlines, prerequisites, additional criteria and whether the target course participates.",
+      evidence: "Official University of Sydney pathways distinguish current-school, mature-age, creative and transfer applicants."
+    },
+    {
+      id: "adfa",
+      name: "ADFA — UNSW Canberra",
+      officialUrl: "https://www.adfcareers.gov.au/students-and-education/australian-defence-force-academy",
+      onlyProfiles: ["defence"],
+      situations: { year10: 50, "year12-no-atar": 44, "left-y11": 18, "finished-y12-no-atar": 26, vet: 20, mature: 24 },
+      profiles: { defence: 30 },
+      program() {
+        return "ADF officer application plus an eligible UNSW Canberra degree";
+      },
+      outcome() {
+        return "Pass ADF Careers officer selection and UNSW entry, then study at ADFA while training for a Navy, Army or Air Force officer role.";
+      },
+      requirements: "Confirm citizenship/eligibility, medical and fitness standards, aptitude and officer selection, service commitment, degree entry and the required application sequence.",
+      evidence: "ADFA is a combined defence-employment and university pathway, not a generic no-ATAR shortcut."
+    }
+  ];
+
   function classifyPathwayGoal(goal = "") {
     const clean = cleanSearchText(goal);
     if (!clean) return fieldProfiles.find((profile) => profile.id === "general");
@@ -336,14 +458,64 @@
       .filter((route) => route.score > 0)
       .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
       .slice(0, 4);
+    const providers = pathwayProviderTemplates
+      .map((provider) => hydratePathwayProvider(provider, profile, currentSituation))
+      .filter((provider) => provider.score > 0)
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+      .slice(0, profile.id === "defence" ? 1 : 4);
     return {
       goal: String(goal || "").trim(),
       profile,
       situation: currentSituation,
       routes,
+      providers,
       signals,
       summary: summaryFor(currentSituation, profile, routes[0])
     };
+  }
+
+  function hydratePathwayProvider(provider, profile, situation) {
+    if (provider.onlyProfiles && !provider.onlyProfiles.includes(profile.id)) return { id: provider.id, score: 0 };
+    if (provider.excludedProfiles?.includes(profile.id)) return { id: provider.id, score: 0 };
+    if (provider.excludedSituations?.includes(situation.id)) return { id: provider.id, score: 0 };
+    const situationScore = provider.situations?.[situation.id] || 0;
+    const profileScore = provider.profiles?.[profile.id] ?? provider.profiles?.general ?? 0;
+    if (!situationScore) return { id: provider.id, score: 0 };
+    const program = provider.program(profile, situation);
+    return {
+      id: provider.id,
+      name: provider.name,
+      officialUrl: provider.officialUrl,
+      program,
+      why: providerFitExplanation(provider.id, profile, situation, program),
+      steps: [
+        situation.label,
+        program,
+        provider.outcome(profile, situation)
+      ],
+      requirements: provider.requirements,
+      evidence: provider.evidence,
+      score: situationScore + profileScore
+    };
+  }
+
+  function providerFitExplanation(providerId, profile, situation, program) {
+    const start = situation.id === "year10"
+      ? "This is a backup to plan now, not something you need to enrol in yet."
+      : `This fits someone who is ${situation.short.toLowerCase()}.`;
+    if (providerId === "uts-college") {
+      return `${start} ${program} is closely matched to ${profile.label.toLowerCase()} and domestic entry is assessed using provider criteria such as HSC subject averages, not a single ATAR cut-off.`;
+    }
+    if (providerId === "macquarie-college" && situation.id === "left-y11") {
+      return "Macquarie specifically points applicants without standard Year 12 evidence toward UniReady or Foundation preparation before diploma or bachelor entry.";
+    }
+    if (providerId === "sydney-pathways" && (situation.id === "creative" || profile.id === "creative")) {
+      return "This is relevant because some Sydney creative courses assess a portfolio, audition or interview alongside academic eligibility.";
+    }
+    if (providerId === "adfa") {
+      return "This is the direct university-and-employment route for an ADF officer goal, with both defence selection and UNSW Canberra entry.";
+    }
+    return `${start} This program keeps the study area connected to ${profile.label.toLowerCase()} instead of sending you through an unrelated general course.`;
   }
 
   function hydrateRoute(route, profile, situation) {
@@ -560,7 +732,8 @@
     classifyPathwayGoal,
     pathwaySituations,
     fieldProfiles,
-    routeTemplates
+    routeTemplates,
+    pathwayProviderTemplates
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

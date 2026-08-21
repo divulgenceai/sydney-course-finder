@@ -17,9 +17,16 @@ const primaryCourseTextCache = new WeakMap();
 const topicScoreCache = new WeakMap();
 const searchFieldCache = new WeakMap();
 const incomeOutcomeCache = new WeakMap();
+const providerProfileCache = new Map();
 const filteredCourseCache = { key: "", results: [] };
+const searchQueryPlanCache = new Map();
+let searchLexicon = null;
+let searchLexiconWarmupScheduled = false;
+let searchIndexWarmupIndex = 0;
+let searchIndexWarmupScheduled = false;
 let incomeWarmupIndex = 0;
 let incomeWarmupScheduled = false;
+let renderPass = 0;
 
 const levelLabels = {
   undergraduate: "Undergraduate",
@@ -52,7 +59,7 @@ const subjectOptions = [
 
 const topicOptions = [
   { label: "All interests", keywords: [] },
-  { label: "Technology", keywords: ["technology", "computer", "software", "cyber", "data", "information technology", "it", "artificial intelligence", "game", "coding", "programming", "developer", "web", "app", "enterprise computing", "information systems"] },
+  { label: "Technology", keywords: ["technology", "computer", "software", "cyber", "data", "information technology", "artificial intelligence", "game", "coding", "programming", "developer", "web", "app", "enterprise computing", "information systems"] },
   { label: "Medicine and Health", keywords: ["medicine", "medical", "health", "nursing", "clinical", "psychology", "nutrition", "physiotherapy", "pharmacy", "biomedical"] },
   { label: "Engineering", keywords: ["engineering", "civil", "mechanical", "electrical", "mechatronic", "construction", "robotics"] },
   { label: "Architecture and Built Environment", keywords: ["architecture", "architectural", "built environment", "construction", "property", "planning", "interior architecture", "landscape", "urban", "building"] },
@@ -68,9 +75,9 @@ const topicOptions = [
 
 const providerQuality = {
   Technology: {
-    UNSW: { score: 97, note: "Very strong computing and employer outcomes" },
-    UTS: { score: 93, note: "Strong industry focus and technology reputation" },
-    USYD: { score: 91, note: "High prestige and computer science reputation" },
+    USYD: { score: 98, note: "Sydney's strongest 2026 QS computer science subject result" },
+    UNSW: { score: 96, note: "Very strong computing, research and employer outcomes" },
+    UTS: { score: 94, note: "Strong industry focus and a top Sydney computing profile" },
     MQ: { score: 82, note: "Good computing and analytics options" },
     WS: { score: 74, note: "Large Sydney course range and practical access" }
   },
@@ -148,6 +155,21 @@ const providerQuality = {
   }
 };
 
+const providerCurrentStanding = {
+  UNSW: {
+    score: 100,
+    label: "QS 2027: #1 in Australia and #19 globally",
+    shortLabel: "QS 2027 Australia #1",
+    source: "https://www.topuniversities.com/qs-top-uni-wur"
+  },
+  USYD: {
+    score: 94,
+    label: "QS 2027: #28 globally",
+    shortLabel: "QS 2027 world #28",
+    source: "https://www.topuniversities.com/universities/university-sydney"
+  }
+};
+
 const providerAliases = [
   { id: "WS", label: "Western Sydney University", aliases: ["wsu", "western sydney university", "western sydney uni", "western sydney"] },
   { id: "UTS", label: "University of Technology Sydney", aliases: ["uts", "university of technology sydney", "technology sydney"] },
@@ -184,6 +206,7 @@ const glossary = {
 
 const searchAliases = {
   medicine: ["medicine", "medical", "doctor of medicine", "medical studies"],
+  med: ["medicine", "medical", "health"],
   doctor: ["medicine", "medical", "doctor of medicine"],
   medical: ["medical", "medicine"],
   law: ["law", "laws", "legal"],
@@ -192,8 +215,11 @@ const searchAliases = {
   "artificial intelligence": ["artificial intelligence", "ai", "machine learning"],
   it: ["it", "information technology"],
   coding: ["coding", "programming", "software", "computer", "information technology"],
+  coder: ["coding", "programming", "software", "computer science"],
+  developer: ["software", "programming", "computer science", "information technology"],
   programming: ["programming", "coding", "software", "computer", "information technology"],
   "computer science": ["computer science", "computing", "software", "information technology"],
+  computers: ["computer", "computing", "computer science", "information technology"],
   cybersecurity: ["cybersecurity", "cyber security", "cyber", "information security"],
   "cyber security": ["cybersecurity", "cyber security", "cyber", "information security"],
   "data science": ["data science", "data analytics", "analytics", "statistics"],
@@ -201,7 +227,9 @@ const searchAliases = {
   psychology: ["psychology", "psychological science", "counselling", "mental health"],
   counselling: ["counselling", "counseling", "psychology", "mental health"],
   architecture: ["architecture", "architectural", "built environment", "planning"],
+  architect: ["architecture", "architectural", "built environment", "design"],
   construction: ["construction", "building", "built environment", "property"],
+  engineer: ["engineering", "engineer", "civil", "mechanical", "electrical", "software"],
   sport: ["sport", "sports", "exercise", "fitness", "pdhpe"],
   exercise: ["exercise", "sport", "sports", "fitness", "pdhpe"],
   food: ["food", "nutrition", "culinary", "hospitality", "food science"],
@@ -209,17 +237,51 @@ const searchAliases = {
   hospitality: ["hospitality", "hotel", "tourism", "events"],
   tourism: ["tourism", "hospitality", "events", "travel"],
   teaching: ["teaching", "teacher", "education"],
+  teacher: ["teaching", "teacher", "education"],
   nursing: ["nursing", "nurse", "health"],
+  nurse: ["nursing", "nurse", "health"],
+  police: ["policing", "police", "criminology", "justice", "public safety"],
   social: ["social work", "community", "human services", "welfare"],
   "social work": ["social work", "community", "human services", "welfare"]
 };
 
+const searchIntentAliases = [
+  ["comp sci", "computer science"],
+  ["computer sciences", "computer science"],
+  ["compsci", "computer science"],
+  ["cs", "computer science"],
+  ["info tech", "information technology"],
+  ["infotech", "information technology"],
+  ["it", "information technology"],
+  ["soft eng", "software engineering"],
+  ["software dev", "software development"],
+  ["data sci", "data science"],
+  ["datasci", "data science"],
+  ["cyber sec", "cybersecurity"],
+  ["cybersec", "cybersecurity"],
+  ["artificial intel", "artificial intelligence"],
+  ["ai", "artificial intelligence"],
+  ["psych", "psychology"],
+  ["physio", "physiotherapy"],
+  ["paramed", "paramedicine"],
+  ["biomed", "biomedical science"],
+  ["med sci", "medical science"],
+  ["archi", "architecture"],
+  ["biz", "business"]
+];
+
 const broadTopicQueries = new Set([
   "technology",
+  "computer science",
+  "information technology",
+  "software engineering",
+  "artificial intelligence",
   "coding",
   "programming",
   "data",
+  "data science",
   "cyber",
+  "cybersecurity",
   "engineering",
   "architecture",
   "construction",
@@ -229,8 +291,14 @@ const broadTopicQueries = new Set([
   "tourism",
   "health",
   "medicine",
+  "medical science",
+  "biomedical science",
+  "nursing",
+  "psychology",
+  "physiotherapy",
   "sport",
   "exercise",
+  "law",
   "social work",
   "community",
   "creative arts",
@@ -241,7 +309,8 @@ const broadTopicQueries = new Set([
 
 const storageKeys = {
   saved: "sydneyCourseFinder.savedCourses",
-  compare: "sydneyCourseFinder.compareCourses"
+  compare: "sydneyCourseFinder.compareCourses",
+  separatedSavedCompare: "sydneyCourseFinder.separatedSavedCompareV1"
 };
 
 const pathwayLinks = [
@@ -307,7 +376,12 @@ const courseTypeOptions = [
   "Other"
 ];
 const studyAreaOptions = ["All study areas", ...topicOptions.filter((topic) => topic.label !== "All interests").map((topic) => topic.label)];
-const searchSortOptions = ["Relevance", "Closest campus", "Study area fit", "Lowest ATAR", "Highest ATAR", "Income potential"];
+const searchSortOptions = ["Relevance", "Closest campus", "Study area fit", "Lowest selection rank", "Highest selection rank", "Income potential"];
+const durationOptions = ["Any duration", "1 year or less", "2 years", "3 years", "4 years or more"];
+const prerequisiteOptions = ["Any prerequisite status", "No listed prerequisites", "Has subject prerequisites", "Has additional entry criteria"];
+const pathwayFilterOptions = ["Any pathway status", "Pathway mentioned", "Direct degree results"];
+const guaranteedEntryOptions = ["Any guaranteed-entry status", "Guaranteed entry mentioned", "No guaranteed rank published"];
+const degreeStructureOptions = ["Any degree structure", "Single degrees", "Double degrees"];
 const knownLocations = [
   { names: ["sydney", "sydney cbd", "cbd", "city", "2000"], lat: -33.8688, lng: 151.2093 },
   { names: ["ultimo", "broadway", "haymarket", "uts", "2007"], lat: -33.8832, lng: 151.2006 },
@@ -509,6 +583,8 @@ const advisorQuestions = [
 
 const advisorDefaults = Object.fromEntries(advisorQuestions.map((question) => [question.key, ""]));
 
+migrateLegacySavedCompareState();
+
 const state = {
   draft: "",
   query: "",
@@ -521,7 +597,15 @@ const state = {
   income: "Any income",
   sort: "Relevance",
   locationQuery: "",
-  visible: 24,
+  estimatedAtar: "",
+  duration: "Any duration",
+  prerequisite: "Any prerequisite status",
+  pathway: "Any pathway status",
+  guaranteedEntry: "Any guaranteed-entry status",
+  degreeStructure: "Any degree structure",
+  advancedFiltersOpen: false,
+  allowAtarStretch: false,
+  visible: coursePageSize(),
   atar: 75,
   matcherProvider: "All providers",
   matcherSubjects: [],
@@ -531,8 +615,11 @@ const state = {
   providerTopic: "Technology",
   savedIds: readIdList(storageKeys.saved),
   compareIds: readIdList(storageKeys.compare),
+  compareOnlyDifferences: false,
   openCourseIds: new Set(),
+  compareMessage: "",
   processing: "",
+  mobileFiltersOpen: false,
   askOpen: false,
   aiStatus: { checked: false, configured: false, connected: false, provider: "Gemini", model: "gemini-3.5-flash" },
   askMessages: [{
@@ -546,7 +633,12 @@ const state = {
 };
 
 const levels = ["All levels", ...Object.keys(levelLabels).filter((level) => allCourses.some((course) => course.level === level)).map((level) => levelLabels[level])];
-const providers = ["All providers", ...allProviders.map((provider) => provider.name).sort()];
+const providers = [
+  "All providers",
+  ...allProviders
+    .map((provider) => provider.name)
+    .sort((a, b) => providerOptionLabel(a).localeCompare(providerOptionLabel(b)))
+];
 const rankedProviders = [...allProviders].sort((a, b) => providerOverallScore(b) - providerOverallScore(a) || a.name.localeCompare(b.name));
 const courseById = new Map(allCourses.map((course) => [course.id, course]));
 const duplicateRowsHidden = Number(meta.duplicateRowsRemoved ?? importedCourses.length - allCourses.length);
@@ -580,198 +672,326 @@ function syncCampusWithProvider() {
 }
 
 function render() {
+  if (renderPass > 0) app.classList.add("is-state-update");
   syncCampusWithProvider();
   const results = filteredCourses();
-  const searchActive = Boolean(state.query) || hasIncomeOnlySearch();
+  const searchActive = hasActiveCourseSearch();
   const campusOptions = campusOptionsForProvider(state.provider);
   const savedCourses = savedCourseList();
   const compareCourses = compareCourseList();
   app.innerHTML = `
+    <a class="skip-link" href="#courses">Skip to course search</a>
     <header class="topbar">
-      <a class="brand" href="#">
+      <a class="brand" href="#courses">
         <img class="site-logo" src="${window.courseFinderTheme?.logoSrc?.() || "./assets/logo-light.svg"}" alt="Sydney Course Finder logo" />
         <span>Sydney Course Finder</span>
       </a>
       <nav class="topnav" aria-label="Main">
         <a href="#courses" ${navCurrent("#courses")}>Courses</a>
-        <a href="./guide.html">Guide</a>
-        ${window.courseFinderTheme?.myPlanNavMarkup?.() || ""}
-        <a href="./pathways.html">Pathways</a>
-        <a href="#atar" ${navCurrent("#atar")}>ATAR</a>
-        <a href="./atar-calculator.html">Calculator</a>
-        <a href="./subject-helper.html">Subjects</a>
-        <a href="./advisor.html">Course help</a>
-        <a href="#saved" ${navCurrent("#saved")}>Saved ${state.savedIds.length ? `(${state.savedIds.length})` : ""}</a>
+        <a href="#tools" ${navCurrent("#tools")}>Tools</a>
         <a href="#providers" ${navCurrent("#providers")}>Universities</a>
-        <a href="#faq" ${navCurrent("#faq")}>FAQ</a>
+        <a href="#saved" ${navCurrent("#saved")}>Saved${state.savedIds.length ? ` (${state.savedIds.length})` : ""}</a>
+        <a href="#about" ${navCurrent("#about")}>About</a>
       </nav>
       <div class="topbar-actions">${window.courseFinderTheme?.buttonMarkup?.() || ""}</div>
     </header>
     ${renderAppProgress()}
 
-    <main>
-      <section class="hero">
-        <div>
-          <h1>Sydney course search</h1>
-          <p>Search UAC undergraduate course records linked to Sydney campus or Sydney-location study options. Expand a result to see entry information.</p>
-        </div>
-        <dl class="stats two">
-          <div><dt>Course records</dt><dd>${number(allCourses.length)}</dd></div>
-          <div><dt>Providers</dt><dd>${number(meta.uniqueProviders || allProviders.length)}</dd></div>
-        </dl>
-        <p class="data-note">
-          UAC data imported ${escapeHtml((meta.importedAt || "").slice(0, 10) || "today")}.
-          ${duplicateRowsHidden ? `${number(duplicateRowsHidden)} duplicate category rows hidden.` : "No duplicate course records shown."}
-          ${number(infoSummary.atar)} numeric ATAR profiles, ${number(infoSummary.prerequisites)} prerequisite entries,
-          ${number(infoSummary.assumed)} assumed-knowledge entries.
-        </p>
-      </section>
-
-      <section id="courses" class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Course Search</h2>
-            <p>Search by course, career, field, provider, campus or income. Results only update when you press Search or choose an income chip.</p>
+    <main id="main-content">
+      <section class="hero course-finder-hero" aria-labelledby="page-title">
+        <div class="hero-copy">
+          <h1 id="page-title"><span class="desktop-only">Find the right Sydney university course</span><span class="mobile-only">Find your Sydney course</span></h1>
+          <p><span class="desktop-only">Compare entry requirements, pathways, course length, campuses, and study options across Sydney universities.</span><span class="mobile-only">Compare courses, entry options and universities in one place.</span></p>
+          <div class="hero-actions">
+            <a class="primary-action" href="#courses">Search courses</a>
+            <a class="secondary-action" href="./atar-calculator">Estimate my ATAR</a>
           </div>
-          <span>${searchActive ? `${number(results.length)} results` : "Search first"}</span>
         </div>
-        <form class="search-form" data-form="search">
-          <label>${icon("search")}<input name="search" type="search" autocomplete="off" value="${escapeHtml(state.draft)}" placeholder="Example: Artificial Intelligence, Medicine, Law, Nursing" /></label>
-          <button type="submit">Search</button>
-        </form>
-        <div class="filters">
-          ${showLevelFilter ? select("level", "Level", levels, state.level) : ""}
-          ${select("courseType", "Course type", courseTypeOptions, state.courseType)}
-          ${select("area", "Study area", studyAreaOptions, state.area)}
-          ${select("provider", "Provider", providers, state.provider)}
-          ${select("campus", "Campus", campusOptions, state.campus)}
-          ${select("mode", "Mode", modes, state.mode)}
-          ${select("income", "Income goal", incomeOptions, state.income)}
-          ${select("sort", "Sort by", searchSortOptions, state.sort)}
-          ${textControl("locationQuery", "Distance from", state.locationQuery, "Suburb or postcode")}
-          <button class="clear-btn" type="button" data-action="clear">Clear</button>
-        </div>
-        ${renderDistanceNote()}
-        <div class="income-filter-bar" aria-label="Income goal quick filter">
-          <span>Search by income</span>
-          ${incomeOptions.map((option) => `
-            <button type="button" data-income-filter="${escapeHtml(option)}" aria-pressed="${state.income === option}">
-              ${escapeHtml(option)}
-            </button>
-          `).join("")}
-          <small>Shows courses linked to roles that can reach the selected broad income band.</small>
-        </div>
-        <div class="course-list">
-          ${renderProcessStrip("search", "Searching courses")}
-          ${searchActive ? results.slice(0, state.visible).map((course, index) => renderCourse(course, "", index)).join("") : `<p class="empty-note">Search a course, career, field or university, or use Search by income only.</p>`}
-          ${searchActive && !results.length ? `<p class="empty-note">No courses found. Try a broader keyword like technology, health, business, law or design, or lower the income band.</p>` : ""}
-          ${results.length > state.visible ? `<button class="load-more" type="button" data-action="more">Show more</button>` : ""}
+        <div class="hero-trust" aria-label="Course data summary">
+          <strong><i class="mobile-trust-icon mobile-only">${icon("courses")}</i><span class="desktop-only">${number(allCourses.length)} Sydney course options</span><span class="mobile-only">${number(allCourses.length)} courses</span></strong>
+          <span><i class="mobile-trust-icon mobile-only">${icon("university")}</i><span class="desktop-only">From ${number(meta.uniqueProviders || allProviders.length)} universities and providers</span><span class="mobile-only">${number(meta.uniqueProviders || allProviders.length)} providers</span></span>
+          <small><i class="mobile-trust-icon mobile-only">${icon("calendar")}</i><span class="desktop-only">UAC import updated ${escapeHtml(formatImportDate())}</span><span class="mobile-only">Updated ${escapeHtml(formatImportDate())}</span></small>
         </div>
       </section>
 
-      <section id="atar" class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>ATAR Match</h2>
-            <p>Optional subjects and interests help rank the results. ATAR matching only uses courses with a numeric UAC profile.</p>
-          </div>
-          <div class="panel-actions">
-            <a class="help-link" href="./atar-calculator.html">ATAR calculator</a>
-            <a class="help-link" href="./advisor.html?atar=${encodeURIComponent(state.atar)}">Need help?</a>
-            <span>${term("selection rank")}</span>
-          </div>
-        </div>
-        <div class="atar-controls">
-          <label>
-            <span>Approximate ATAR</span>
-            <div class="atar-inputs">
-              <input type="range" min="30" max="99.95" step="0.05" value="${state.atar}" data-action="atar-range" />
-              <input type="number" min="30" max="99.95" step="0.05" value="${state.atar}" data-action="atar-number" />
-            </div>
-            <small id="atarValue">${Number(state.atar).toFixed(2)}</small>
-          </label>
-          ${select("matcherProvider", "Provider", providers, state.matcherProvider)}
-          ${select("matcherTopic", "Interest topic", topicOptions.map((topic) => topic.label), state.matcherTopic)}
-          ${select("matcherIncome", "Income goal", incomeOptions, state.matcherIncome)}
-          <label>
-            <span>Subjects</span>
-            <div class="subject-box">
-              ${state.matcherSubjects.map((subject) => `<button type="button" class="chip" data-remove-subject="${escapeHtml(subject)}">${escapeHtml(subject)} x</button>`).join("")}
-              <select data-action="add-subject">
-                <option value="">Add subject</option>
-                ${subjectOptions.filter((subject) => !state.matcherSubjects.includes(subject)).map((subject) => `<option>${escapeHtml(subject)}</option>`).join("")}
-              </select>
-            </div>
-          </label>
-          <button type="button" class="match-btn" data-action="run-atar">Find matches</button>
-        </div>
-        <div class="income-filter-bar atar-income-filter" aria-label="ATAR income filter">
-          <span>Search by income only</span>
-          ${incomeOptions.map((option) => `
-            <button type="button" data-atar-income-filter="${escapeHtml(option)}" aria-pressed="${state.matcherIncome === option}">
-              ${escapeHtml(option)}
-            </button>
-          `).join("")}
-          <small>Use this even if you have not chosen subjects yet. It ranks ATAR-matched courses that can lead to the selected broad income band.</small>
-        </div>
-        <div class="course-list compact">
-          ${renderProcessStrip("atar", "Matching courses")}
-          ${state.matcherRun ? renderAtarResults() : `<p class="empty-note">Enter an ATAR estimate, choose optional preferences, then run the matcher.</p>`}
-        </div>
-      </section>
+      ${renderCourseSearchPanel(results, searchActive, campusOptions)}
 
-      <section id="saved" class="panel">
+      <section id="tools" class="panel tools-panel">
         <div class="panel-head">
           <div>
-            <h2>Saved Library</h2>
-            <p>Saved courses stay in this browser. Add courses to compare their entry details side by side.</p>
+            <span class="section-kicker">Your planning workspace</span>
+            <h2>Choose the decision you need to make</h2>
+            <p>Each tool has one clear job and a useful outcome. Start with the large cards, or jump straight to an application task.</p>
           </div>
-          <span>${number(savedCourses.length)} saved</span>
+          ${window.courseFinderTheme?.hasGuidePlanSnapshot?.() ? `<a class="tool-plan-resume" href="./my-plan">Continue My Plan</a>` : ""}
         </div>
-        ${renderCompareLibrary(compareCourses)}
-        <div class="saved-actions">
-          ${savedCourses.length ? `<button class="clear-btn" type="button" data-action="clear-saved">Clear saved</button>` : ""}
-          ${compareCourses.length ? `<button class="clear-btn" type="button" data-action="clear-compare">Clear compare</button>` : ""}
+        <div class="tool-feature-grid">
+          ${renderToolCard("./guide", "Build a full plan", "Guide", "Turn your year group, goals and school results into one personalised route from subjects to UAC and careers.", "Personal plan", "5 min", "guide", true)}
+          ${renderToolCard("./advisor", "Explore and shortlist", "Course direction & ATAR match", "Find relevant fields and courses, then sort them into reach, target and safer options using your estimated ATAR.", "Course shortlist", "3 min", "direction", true)}
+          ${renderToolCard("./subject-helper", "Choose Year 11/12 subjects", "Subject helper", "Start with a degree or job and see prerequisite, assumed-knowledge and useful HSC subjects separately.", "Subject plan", "2 min", "subjects")}
+          ${renderToolCard("./atar-calculator", "Estimate from marks", "ATAR calculator", "Use historical UAC scaling data to test a valid 10-unit subject pattern and get an indicative range.", "ATAR range", "5 min", "calculator")}
+          ${renderToolCard("./uac-planner#preferences", "Build an application list", "UAC preference planner", "Create a five-course draft in genuine preference order, with entry context and safer backups.", "Preference draft", "5 min", "list")}
+          ${renderToolCard("./uac-planner#early-entry", "Check 2026 schemes", "Early-entry finder", "Compare verified direct and UAC early-offer routes with exact application and requirements links.", "Early-entry routes", "3 min", "star")}
+          ${renderToolCard("./pathways", "Plan a backup route", "Alternative pathways", "Compare TAFE, diploma, preparation, portfolio and transfer routes for your exact situation.", "Backup pathway", "3 min", "path")}
+          ${renderToolCard("./university-forms", "Prepare documents", "University forms", "Find official provider documents and complete supported PDFs privately in your browser.", "Ready-to-use form", "2 min", "forms")}
         </div>
-        <div class="course-list compact">
-          ${savedCourses.length ? savedCourses.map((course, index) => renderCourse(course, "", index)).join("") : renderSavedEmpty()}
-        </div>
+        <aside class="tool-help-row">
+          <span class="tool-help-icon" aria-hidden="true">?</span>
+          <div><strong>Not sure where to start?</strong><p>Use Course direction &amp; ATAR match for a shortlist, or Guide for the complete sequence.</p></div>
+          <a href="./advisor">Find a direction <span aria-hidden="true">→</span></a>
+        </aside>
       </section>
 
       <section id="providers" class="panel">
         <div class="panel-head">
           <div>
-            <h2>Universities and Providers</h2>
-            <p>Top 3 uses a local profile score based on field strength, broad prestige, employer reputation and Sydney course availability. It is guidance, not an official ranking.</p>
+            <h2>Universities</h2>
+            <p>Browse Sydney universities and providers, with an overall site profile and a separate score for the area each provider is strongest in.</p>
           </div>
           <span>${allProviders.length} providers</span>
         </div>
-        <div class="top-provider-block">
-          <div class="top-provider-head">
-            <div>
-              <h3>Top 3 by study area</h3>
-              <p>Quality-weighted ranking, not course-count ranking.</p>
-            </div>
-            ${select("providerTopic", "Area", topicOptions.filter((topic) => topic.label !== "All interests").map((topic) => topic.label), state.providerTopic)}
-          </div>
-          <div class="top-provider-grid">${renderTopProviders()}</div>
-          <p class="rating-note">Profile scores combine the field-specific quality list in this app with provider course availability. Use them as a comparison shortcut, then confirm with UAC, QILT and each university page.</p>
-        </div>
+        ${renderProviderScoreExplainer()}
+        ${renderTopProviderBlock()}
         <div class="provider-grid">${rankedProviders.map(renderProvider).join("")}</div>
       </section>
 
-      <section id="faq" class="panel">
+      <section id="saved" class="panel saved-panel">
         <div class="panel-head">
           <div>
-            <h2>HSC and Uni FAQ</h2>
-            <p>Quick factors to consider before choosing a course or university.</p>
+            <h2>Your course library</h2>
+            <p>Saving and comparing are separate. Save courses to keep them; compare up to three without changing your saved list.</p>
+          </div>
+          <div class="library-state-counts" aria-label="${number(savedCourses.length)} saved and ${number(compareCourses.length)} comparing">
+            <span><strong>${number(savedCourses.length)}</strong> saved</span>
+            <span><strong>${number(compareCourses.length)}</strong> comparing</span>
           </div>
         </div>
-        <div class="faq-list">${renderFaq()}</div>
+        ${renderCompareLibrary(compareCourses)}
+        <div class="saved-library-head">
+          <div>
+            <h3>Saved courses</h3>
+            <p>These are courses you chose to keep. Removing one here will not remove it from comparison.</p>
+          </div>
+          ${savedCourses.length ? `<button class="clear-btn" type="button" data-action="clear-saved">Clear saved</button>` : ""}
+        </div>
+        <div class="course-list compact saved-course-list">
+          ${savedCourses.length ? savedCourses.map((course, index) => renderCourse(course, "", index)).join("") : renderSavedEmpty()}
+        </div>
+      </section>
+
+      <section id="about" class="panel about-panel">
+        <div class="panel-head">
+          <div>
+            <h2>About the data</h2>
+            <p>This tool organises imported UAC course records for comparison. It does not make admission decisions.</p>
+          </div>
+        </div>
+        <div class="trust-grid">
+          <div><strong>Data year</strong><span>Each result shows its published rank year and the date this site imported the record.</span></div>
+          <div><strong>Correct terminology</strong><span>Selection rank, ATAR, prerequisites and additional criteria are shown separately wherever the data allows.</span></div>
+          <div><strong>Official confirmation</strong><span>Every result links to UAC or the provider. Previous entry results never guarantee a future offer.</span></div>
+        </div>
       </section>
     </main>
+    ${renderCompareTray(compareCourses)}
+    <footer class="site-footer" id="faq">
+      <div>
+        <strong>Sydney Course Finder</strong>
+        <p>Planning support only. Confirm current admission criteria, fees, CSP status and offer rules with UAC and the university.</p>
+      </div>
+      <details class="footer-faq">
+        <summary>Frequently asked questions</summary>
+        <div class="faq-list">${renderFaq()}</div>
+      </details>
+      <nav aria-label="Footer">
+        <a href="#courses">Courses</a>
+        <a href="#about">About the data</a>
+        <a href="${escapeHtml(meta.source || "https://www.uac.edu.au/course-search/")}">UAC source</a>
+      </nav>
+    </footer>
   `;
   bindEvents();
+  window.courseFinderTheme?.bind?.(app);
+  renderPass += 1;
+}
+
+function renderCourseSearchPanel(
+  results = filteredCourses(),
+  searchActive = hasActiveCourseSearch(),
+  campusOptions = campusOptionsForProvider(state.provider)
+) {
+  return `
+    <section id="courses" class="panel course-search-panel" aria-labelledby="course-search-title">
+      <div class="panel-head">
+        <div>
+          <h2 id="course-search-title">Search courses</h2>
+          <p>Start with a course, career or university, then narrow the results. Filters work even when the search box is empty.</p>
+        </div>
+        <span class="result-count" role="status" aria-live="polite">${searchActive ? `${number(results.length)} results` : "Ready to search"}</span>
+      </div>
+      <form class="search-form" data-form="search">
+        <span class="mobile-search-label mobile-only">Course, career or university</span>
+        <label>
+          <span class="sr-only">Course, career or university</span>
+          ${icon("search")}
+          <input name="search" type="search" autocomplete="off" value="${escapeHtml(state.draft)}" placeholder="Search courses, careers or unis" />
+        </label>
+        <button type="submit" aria-label="Search courses"><span class="desktop-only" aria-hidden="true">Search courses</span><span class="mobile-only" aria-hidden="true">Search</span></button>
+        <button class="mobile-filter-toggle" type="button" data-action="toggle-course-filters" aria-expanded="${state.mobileFiltersOpen}">
+          <span>${icon("filter")} Filters${activeCourseFilterCount() ? ` (${activeCourseFilterCount()})` : ""}</span>
+          <strong>${searchActive ? `${number(results.length)} results` : "Choose filters"}</strong>
+        </button>
+      </form>
+      ${renderSearchInterpretation()}
+      <button class="course-filter-scrim" type="button" data-action="close-course-filters" aria-label="Close filters" tabindex="${state.mobileFiltersOpen ? "0" : "-1"}"></button>
+      <div class="course-filter-panel ${state.mobileFiltersOpen ? "is-open" : ""}" data-course-filter-panel>
+        <div class="mobile-filter-head">
+          <div>
+            <strong>Filter courses</strong>
+            <span>${activeCourseFilterCount()} active</span>
+          </div>
+          <button type="button" data-action="clear">Reset</button>
+        </div>
+        <div class="filters essential-filters">
+          ${select("area", "Study area", studyAreaOptions, state.area)}
+          ${numberControl("estimatedAtar", "Estimated ATAR", state.estimatedAtar, "Optional", 0, 99.95, 0.05)}
+          ${select("provider", "Provider", providers, state.provider)}
+          ${select("campus", "Campus", campusOptions, state.campus)}
+          ${select("duration", "Course duration", durationOptions, state.duration)}
+          ${select("mode", "Mode", modes, state.mode)}
+        </div>
+        <details class="advanced-filter-disclosure" ${state.advancedFiltersOpen ? "open" : ""}>
+          <summary>Advanced filters <span>${advancedCourseFilterCount() ? `${advancedCourseFilterCount()} active` : "Optional"}</span></summary>
+          <div class="filters advanced-filters">
+            ${showLevelFilter ? select("level", "Study level", levels, state.level) : ""}
+            ${select("courseType", "Course type", courseTypeOptions, state.courseType)}
+            ${select("degreeStructure", "Degree structure", degreeStructureOptions, state.degreeStructure)}
+            ${select("prerequisite", "Prerequisites", prerequisiteOptions, state.prerequisite)}
+            ${select("pathway", "Pathways", pathwayFilterOptions, state.pathway)}
+            ${select("guaranteedEntry", "Guaranteed entry", guaranteedEntryOptions, state.guaranteedEntry)}
+            ${select("income", "Income goal", incomeOptions, state.income)}
+            ${select("sort", "Sort by", searchSortOptions, state.sort)}
+            ${textControl("locationQuery", "Distance from", state.locationQuery, "Sydney suburb or postcode")}
+          </div>
+          ${renderDistanceNote()}
+        </details>
+        <div class="filter-foot">
+          <button class="clear-btn" type="button" data-action="clear">Reset all filters</button>
+          <small>Admission figures are historical and may change each intake.</small>
+        </div>
+        <button class="mobile-filter-done" type="button" data-action="close-course-filters">${searchActive ? `Show ${number(results.length)} courses` : "Done"}</button>
+      </div>
+      <div class="search-trust-note">
+        <strong>Read entry figures carefully.</strong>
+        <span>A selection rank may include adjustments and is not always the same as an ATAR. Prerequisites and additional criteria can still affect admission.</span>
+      </div>
+      <div class="course-results-region">
+        ${searchActive && results.length ? renderSearchFieldLeaders(results) : ""}
+        <div class="course-list">
+          ${renderProcessStrip("search", "Searching courses")}
+          ${searchActive && results.length ? results.slice(0, state.visible).map((course, index) => renderCourse(course, "", index, true)).join("") : ""}
+          ${searchActive && !results.length ? renderNoResults() : ""}
+          ${!searchActive ? renderCourseSearchStart() : ""}
+          ${results.length > state.visible ? `<button class="load-more" type="button" data-action="more">Show more</button>` : ""}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function formatImportDate() {
+  const value = String(meta.importedAt || "");
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "date unavailable";
+  return new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" }).format(date);
+}
+
+function renderToolCard(href, stage, title, text, outcome, time = "2 min", iconName = "guide", featured = false) {
+  return `
+    <a class="tool-feature-card${featured ? " is-featured" : ""}" data-tool-card="${escapeHtml(iconName)}" href="${escapeHtml(href)}">
+      <header>
+        <span class="tool-feature-icon" aria-hidden="true">${toolIcon(iconName)}</span>
+        <span class="tool-feature-stage">${escapeHtml(stage)}</span>
+        <em aria-label="Usually takes ${escapeHtml(time)}">${escapeHtml(time)}</em>
+      </header>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(text)}</p>
+      <footer><span>${escapeHtml(outcome)}</span><strong>Open tool <i aria-hidden="true">→</i></strong></footer>
+    </a>
+  `;
+}
+
+function toolIcon(name) {
+  const paths = {
+    decide: '<circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.2 2.2 4.8-5"/>',
+    estimate: '<path d="M5 18a8 8 0 1 1 14 0"/><path d="m12 14 4-4"/><path d="M4 20h16"/>',
+    apply: '<path d="M7 3h8l4 4v14H7z"/><path d="M15 3v5h5M10 13h6M10 17h6"/>',
+    guide: '<path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v18H7.5A3.5 3.5 0 0 0 4 23z"/><path d="M20 5.5A3.5 3.5 0 0 0 16.5 2H13v18h3.5A3.5 3.5 0 0 1 20 23z"/>',
+    direction: '<path d="M4 7h9M4 17h9M13 7l3-3m-3 3 3 3M13 17l3-3m-3 3 3 3"/>',
+    subjects: '<path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+    compass: '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2.2 4.8-4.8 2.2 2.2-4.8z"/>',
+    calculator: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M14 11h2M8 15h2M14 15h2M8 19h2M14 19h2"/>',
+    list: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="m4 6 .8.8L6.5 5M4 12l.8.8L6.5 11M4 18l.8.8L6.5 17"/>',
+    star: '<path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+    path: '<path d="M5 19c0-6 3-6 7-6s7 0 7-6"/><path d="m16 7 3-3 3 3"/><circle cx="5" cy="19" r="2"/>',
+    forms: '<path d="M7 3h8l4 4v14H7z"/><path d="M15 3v5h5M10 12h6M10 16h6"/>'
+  };
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[name] || paths.guide}</svg>`;
+}
+
+function renderCourseSearchStart() {
+  return `
+    <div class="course-search-start">
+      <strong class="desktop-only">Start with what matters most</strong>
+      <strong class="mobile-only">Popular searches</strong>
+      <p>Search a degree, career or university—or choose filters such as study area, campus and estimated ATAR.</p>
+      <div>
+        <button type="button" data-search-example="computer science">Computer science</button>
+        <button type="button" data-search-example="nursing">Nursing</button>
+        <button type="button" data-search-example="law">Law</button>
+        <button type="button" data-search-example="UTS">UTS</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderNoResults() {
+  return `
+    <div class="course-empty-state" role="status">
+      <strong>No exact matches yet</strong>
+      <p>Keep your goal and loosen one constraint, or explore a realistic alternative.</p>
+      <div class="empty-actions">
+        <button type="button" data-action="relax-filter">Remove one filter</button>
+        <button type="button" data-action="show-atar-stretch">Show courses slightly above my ATAR</button>
+        <button type="button" data-action="show-pathways">View pathway courses</button>
+        <button type="button" data-action="browse-study-areas">Browse all study areas</button>
+        <button type="button" data-action="clear">Reset all filters</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderCompareTray(compareCourses) {
+  if (!compareCourses.length || window.location.hash === "#saved") return "";
+  const mobileStatus = `${compareCourses.length} selected`;
+  return `
+    <aside class="compare-tray" data-compare-count="${compareCourses.length}" aria-label="Courses being compared">
+      <div>
+        <strong><span class="desktop-only">${compareCourses.length} of 3 comparing</span><span class="mobile-only">${mobileStatus}</span></strong>
+        <span>${compareCourses.map((course) => escapeHtml(shortCourseName(course.name))).join(" · ")}</span>
+      </div>
+      <div class="compare-tray-actions">
+        ${compareCourses.map((course) => `<button type="button" data-remove-compare="${escapeHtml(course.id)}" aria-label="Remove ${escapeHtml(course.name)} from comparison">×</button>`).join("")}
+        <a href="#saved" aria-label="Compare ${compareCourses.length} courses"><span class="desktop-only">Compare ${compareCourses.length}</span><span class="mobile-only">Compare</span></a>
+      </div>
+      <p class="sr-only" aria-live="polite">${escapeHtml(state.compareMessage)}</p>
+    </aside>
+  `;
+}
+
+function shortCourseName(value) {
+  const text = decodeHtmlEntities(value || "").replace(/^Bachelor of /i, "").trim();
+  return truncateText(text, 34);
 }
 
 function navCurrent(targetHash) {
@@ -794,43 +1014,215 @@ function renderProcessStrip(key, label) {
   `;
 }
 
-function runProcessing(key, action, after = null, delay = 260) {
+function runProcessing(key, action, after = null) {
   const x = window.scrollX;
   const y = window.scrollY;
-  state.processing = key;
-  render();
-  requestAnimationFrame(() => window.scrollTo(x, y));
-  window.setTimeout(() => {
+  const commit = () => {
     action();
     state.processing = "";
-    const nextX = window.scrollX;
-    const nextY = window.scrollY;
-    render();
-    requestAnimationFrame(() => {
-      window.scrollTo(nextX, nextY);
-      if (after) after();
-    });
-  }, delay);
+    if (key === "search") renderCourseSearchSurface();
+    else render();
+  };
+  const restore = () => {
+    window.scrollTo(x, y);
+    if (after) after();
+  };
+
+  if (key === "search" && !prefersReducedMotion() && !isMobileViewport() && typeof document.startViewTransition === "function") {
+    app.classList.add("is-results-updating");
+    document.documentElement.classList.add("is-course-results-transition");
+    const transition = document.startViewTransition(commit);
+    transition.updateCallbackDone.then(
+      () => requestAnimationFrame(restore),
+      () => requestAnimationFrame(restore)
+    );
+    const cleanUpTransition = () => {
+      app.classList.remove("is-results-updating");
+      document.documentElement.classList.remove("is-course-results-transition");
+    };
+    transition.finished.then(cleanUpTransition, cleanUpTransition);
+    return;
+  }
+
+  commit();
+  requestAnimationFrame(restore);
 }
 
-function renderPreservingViewport() {
+function renderPreservingViewport(anchorSelector = "") {
   const x = window.scrollX;
   const y = window.scrollY;
+  const anchorBefore = anchorSelector ? app.querySelector(anchorSelector) : null;
+  const anchorBeforeRect = anchorBefore?.getBoundingClientRect();
+  const anchorWasVisible = Boolean(anchorBeforeRect
+    && anchorBeforeRect.bottom > 72
+    && anchorBeforeRect.top < window.innerHeight - 48);
   render();
-  requestAnimationFrame(() => window.scrollTo(x, y));
+  const restore = () => {
+    window.scrollTo(x, y);
+    if (anchorWasVisible) {
+      const nextAnchor = app.querySelector(anchorSelector);
+      if (nextAnchor) {
+        const rect = nextAnchor.getBoundingClientRect();
+        const topbarBottom = app.querySelector(".topbar")?.getBoundingClientRect().bottom || 0;
+        const stillVisible = rect.bottom > topbarBottom + 48 && rect.top < window.innerHeight - 48;
+        if (!stillVisible) {
+          window.scrollTo(x, Math.max(0, window.scrollY + rect.top - topbarBottom - 16));
+        }
+      }
+    }
+  };
+  requestAnimationFrame(() => {
+    restore();
+    requestAnimationFrame(restore);
+  });
+}
+
+function renderCourseSearchSurface() {
+  syncCampusWithProvider();
+  const current = app.querySelector("#courses");
+  if (!current) {
+    render();
+    return app.querySelector("#courses");
+  }
+  const template = document.createElement("template");
+  template.innerHTML = renderCourseSearchPanel(
+    filteredCourses(),
+    hasActiveCourseSearch(),
+    campusOptionsForProvider(state.provider)
+  ).trim();
+  const next = template.content.firstElementChild;
+  if (!next) return current;
+  current.replaceWith(next);
+  bindCourseSearchSurface(next);
+  window.courseFinderTheme?.bind?.(next);
+  renderPass += 1;
+  return next;
+}
+
+function renderCourseSearchPreservingViewport(anchorSelector = "") {
+  const x = window.scrollX;
+  const y = window.scrollY;
+  const anchorBefore = anchorSelector ? app.querySelector(anchorSelector) : null;
+  const anchorBeforeRect = anchorBefore?.getBoundingClientRect();
+  const anchorOffset = anchorBeforeRect ? anchorBeforeRect.top : null;
+  renderCourseSearchSurface();
+  requestAnimationFrame(() => {
+    if (anchorSelector && anchorOffset !== null) {
+      const nextAnchor = app.querySelector(anchorSelector);
+      if (nextAnchor) {
+        const nextOffset = nextAnchor.getBoundingClientRect().top;
+        window.scrollTo(x, Math.max(0, y + nextOffset - anchorOffset));
+        return;
+      }
+    }
+    window.scrollTo(x, y);
+  });
+}
+
+function animateRemoval(target, action) {
+  if (!target || prefersReducedMotion()) {
+    action();
+    return;
+  }
+  target.classList.add("is-removing");
+  window.setTimeout(action, 150);
 }
 
 function hasIncomeOnlySearch() {
   return !normalise(state.query) && state.income !== "Any income";
 }
 
+function hasActiveCourseFilters() {
+  return (showLevelFilter && state.level !== "All levels")
+    || state.courseType !== "All course types"
+    || state.area !== "All study areas"
+    || state.provider !== "All providers"
+    || state.campus !== "All campuses"
+    || state.mode !== "All modes"
+    || state.income !== "Any income"
+    || Boolean(String(state.estimatedAtar || "").trim())
+    || state.duration !== "Any duration"
+    || state.prerequisite !== "Any prerequisite status"
+    || state.pathway !== "Any pathway status"
+    || state.guaranteedEntry !== "Any guaranteed-entry status"
+    || state.degreeStructure !== "Any degree structure"
+    || Boolean(cleanSearchText(state.locationQuery));
+}
+
+function hasActiveCourseSearch() {
+  return Boolean(normalise(state.query)) || hasActiveCourseFilters();
+}
+
+function activeCourseFilterCount() {
+  return [
+    showLevelFilter && state.level !== "All levels",
+    state.courseType !== "All course types",
+    state.area !== "All study areas",
+    state.provider !== "All providers",
+    state.campus !== "All campuses",
+    state.mode !== "All modes",
+    state.income !== "Any income",
+    Boolean(String(state.estimatedAtar || "").trim()),
+    state.duration !== "Any duration",
+    state.prerequisite !== "Any prerequisite status",
+    state.pathway !== "Any pathway status",
+    state.guaranteedEntry !== "Any guaranteed-entry status",
+    state.degreeStructure !== "Any degree structure",
+    state.sort !== "Relevance",
+    Boolean(cleanSearchText(state.locationQuery))
+  ].filter(Boolean).length;
+}
+
+function advancedCourseFilterCount() {
+  return [
+    showLevelFilter && state.level !== "All levels",
+    state.courseType !== "All course types",
+    state.degreeStructure !== "Any degree structure",
+    state.prerequisite !== "Any prerequisite status",
+    state.pathway !== "Any pathway status",
+    state.guaranteedEntry !== "Any guaranteed-entry status",
+    state.income !== "Any income",
+    state.sort !== "Relevance",
+    Boolean(cleanSearchText(state.locationQuery))
+  ].filter(Boolean).length;
+}
+
+function relaxOneCourseFilter() {
+  const resetOrder = [
+    ["guaranteedEntry", "Any guaranteed-entry status"],
+    ["prerequisite", "Any prerequisite status"],
+    ["pathway", "Any pathway status"],
+    ["degreeStructure", "Any degree structure"],
+    ["duration", "Any duration"],
+    ["campus", "All campuses"],
+    ["provider", "All providers"],
+    ["mode", "All modes"],
+    ["income", "Any income"],
+    ["courseType", "All course types"],
+    ["area", "All study areas"],
+    ["level", "All levels"]
+  ];
+  const active = resetOrder.find(([key, fallback]) => state[key] !== fallback);
+  if (active) {
+    state[active[0]] = active[1];
+  } else if (state.estimatedAtar) {
+    state.allowAtarStretch = true;
+  } else if (state.query) {
+    state.query = state.query.split(/\s+/).slice(0, -1).join(" ");
+    state.draft = state.query;
+  }
+  state.visible = coursePageSize();
+  state.openCourseIds.clear();
+}
+
 function filteredCourses() {
-  const query = normalise(state.query);
+  const query = cleanSearchText(state.query);
   const incomeOnly = hasIncomeOnlySearch();
-  if (!query && !incomeOnly) return [];
+  if (!query && !hasActiveCourseFilters()) return [];
+  const queryPlan = query ? searchQueryPlan(query) : null;
   const origin = resolveKnownLocation(state.locationQuery);
   const cacheKey = [
-    query,
+    queryPlan?.cacheKey || query,
     state.level,
     state.courseType,
     state.area,
@@ -838,13 +1230,20 @@ function filteredCourses() {
     state.campus,
     state.mode,
     state.income,
+    state.estimatedAtar,
+    state.allowAtarStretch,
+    state.duration,
+    state.prerequisite,
+    state.pathway,
+    state.guaranteedEntry,
+    state.degreeStructure,
     state.sort,
     origin ? origin.label : cleanSearchText(state.locationQuery)
   ].join("|");
   if (filteredCourseCache.key === cacheKey) return filteredCourseCache.results;
-  const results = allCourses
+  const ranked = allCourses
     .filter((course) => {
-      const queryMatch = !query || courseSearchMatch(course, query);
+      const queryMatch = !query || courseSearchMatch(course, queryPlan);
       const levelMatch = state.level === "All levels" || courseLevels(course).some((level) => levelLabels[level] === state.level);
       const typeMatch = state.courseType === "All course types" || courseTypeLabel(course) === state.courseType;
       const areaMatch = courseMatchesStudyArea(course, state.area);
@@ -852,25 +1251,170 @@ function filteredCourses() {
       const campusMatch = state.campus === "All campuses" || course.campus === state.campus;
       const modeMatch = state.mode === "All modes" || (course.modes || []).includes(state.mode);
       const incomeMatch = courseMeetsIncome(course, state.income);
-      return queryMatch && levelMatch && typeMatch && areaMatch && providerMatch && campusMatch && modeMatch && incomeMatch;
+      const atarMatch = courseMatchesEstimatedAtar(course);
+      const durationMatch = courseMatchesDuration(course, state.duration);
+      const prerequisiteMatch = courseMatchesPrerequisiteFilter(course, state.prerequisite);
+      const pathwayMatch = courseMatchesPathwayFilter(course, state.pathway);
+      const guaranteedMatch = courseMatchesGuaranteedEntryFilter(course, state.guaranteedEntry);
+      const structureMatch = courseMatchesDegreeStructure(course, state.degreeStructure);
+      return queryMatch
+        && levelMatch
+        && typeMatch
+        && areaMatch
+        && providerMatch
+        && campusMatch
+        && modeMatch
+        && incomeMatch
+        && atarMatch
+        && durationMatch
+        && prerequisiteMatch
+        && pathwayMatch
+        && guaranteedMatch
+        && structureMatch;
     })
     .map((course) => ({
       course,
-      score: searchScore(course, query),
+      score: searchScore(course, queryPlan),
       areaScore: studyAreaSortScore(course),
       distance: origin ? courseDistanceKm(course, origin) : null,
       incomeScore: courseIncomeOutcomes(course)[0]?.max || 0
     }))
     .sort((a, b) => compareSearchEntries(a, b))
     .map((entry) => entry.course);
+  const results = dedupeVisibleCourseResults(promoteFieldLeaderCourses(ranked, queryPlan));
   filteredCourseCache.key = cacheKey;
   filteredCourseCache.results = results;
   return results;
 }
 
+function promoteFieldLeaderCourses(courses, queryPlan) {
+  if (state.sort !== "Relevance" || state.provider !== "All providers" || queryPlan?.provider) return courses;
+  const topic = state.area !== "All study areas"
+    ? topicOptions.find((item) => item.label === state.area)
+    : queryPlan?.contentQuery
+      ? topicForQuery(queryPlan.contentQuery)
+      : null;
+  const qualityRows = topic ? providerQuality[topic.label] : null;
+  if (!qualityRows) return courses;
+
+  const leaderIds = Object.entries(qualityRows)
+    .sort(([, left], [, right]) => right.score - left.score)
+    .slice(0, 3)
+    .map(([providerId]) => providerId);
+  const promoted = leaderIds
+    .map((providerId) => courses
+      .filter((course) => course.providerId === providerId)
+      .map((course, index) => ({
+        course,
+        index,
+        fit: fieldLeaderCourseFitScore(course, queryPlan?.contentQuery || "")
+      }))
+      .filter((entry) => entry.fit > 0)
+      .sort((left, right) => right.fit - left.fit || left.index - right.index)[0]?.course)
+    .filter(Boolean);
+  if (!promoted.length) return courses;
+  const promotedIds = new Set(promoted.map((course) => course.id));
+  return [...promoted, ...courses.filter((course) => !promotedIds.has(course.id))];
+}
+
+function fieldLeaderCourseFitScore(course, query) {
+  const cleanQuery = cleanSearchText(query);
+  if (!cleanQuery) return 0;
+  const title = courseSearchFields(course).title;
+  const aliases = [cleanQuery, ...(searchAliases[cleanQuery] || [])]
+    .map(cleanSearchText)
+    .filter((alias, index, values) => alias && values.indexOf(alias) === index);
+  const aliasScore = aliases.reduce((score, alias, index) => {
+    if (!phraseMatch(title, alias)) return score;
+    return score + Math.max(1, aliases.length - index) * 1000;
+  }, 0);
+  if (!aliasScore && !phraseMatch(title, cleanQuery)) return 0;
+  const structureScore = courseTypeLabel(course) === "Double degree" ? -700 : 200;
+  return aliasScore + structureScore - Math.min(180, title.length);
+}
+
+function courseMatchesEstimatedAtar(course) {
+  const estimate = Number(state.estimatedAtar);
+  if (!Number.isFinite(estimate) || estimate <= 0) return true;
+  const rank = numericRank(course.atar);
+  if (rank === null) return true;
+  const allowance = state.allowAtarStretch ? 5 : 0;
+  return rank <= Math.min(99.95, estimate + allowance);
+}
+
+function courseMatchesDuration(course, option) {
+  if (!option || option === "Any duration") return true;
+  const years = courseDurationYears(course);
+  if (!Number.isFinite(years)) return false;
+  if (option === "1 year or less") return years <= 1.5;
+  if (option === "2 years") return years > 1.5 && years < 2.75;
+  if (option === "3 years") return years >= 2.75 && years < 3.75;
+  if (option === "4 years or more") return years >= 3.75;
+  return true;
+}
+
+function courseDurationYears(course) {
+  const text = cleanSearchText(course.duration || "");
+  const year = text.match(/(\d+(?:\.\d+)?)\s*year/);
+  if (year) return Number(year[1]);
+  const month = text.match(/(\d+(?:\.\d+)?)\s*month/);
+  if (month) return Number(month[1]) / 12;
+  return null;
+}
+
+function courseMatchesPrerequisiteFilter(course, option) {
+  if (!option || option === "Any prerequisite status") return true;
+  const prerequisites = hasSpecificInfo(course.prerequisites);
+  const additional = hasSpecificInfo(course.additionalCriteria);
+  if (option === "No listed prerequisites") return !prerequisites && !additional;
+  if (option === "Has subject prerequisites") return prerequisites;
+  if (option === "Has additional entry criteria") return additional;
+  return true;
+}
+
+function coursePathwayText(course) {
+  return cleanSearchText([
+    course.name,
+    course.summary,
+    course.additionalCriteria,
+    course.prerequisites,
+    course.careers
+  ].join(" "));
+}
+
+function courseHasPathwayMention(course) {
+  return /\b(pathway|diploma|foundation|preparation program|bridging|transfer|articulation|tafe|vet)\b/.test(coursePathwayText(course));
+}
+
+function courseMatchesPathwayFilter(course, option) {
+  if (!option || option === "Any pathway status") return true;
+  if (option === "Pathway mentioned") return courseHasPathwayMention(course);
+  if (option === "Direct degree results") return courseTypeLabel(course) === "Bachelor" || courseTypeLabel(course) === "Honours" || courseTypeLabel(course) === "Double degree";
+  return true;
+}
+
+function courseHasGuaranteedEntryMention(course) {
+  return /\b(guaranteed entry|guaranteed selection rank|guaranteed offer|guaranteed admission)\b/.test(coursePathwayText(course));
+}
+
+function courseMatchesGuaranteedEntryFilter(course, option) {
+  if (!option || option === "Any guaranteed-entry status") return true;
+  const mentioned = courseHasGuaranteedEntryMention(course);
+  return option === "Guaranteed entry mentioned" ? mentioned : !mentioned;
+}
+
+function courseMatchesDegreeStructure(course, option) {
+  if (!option || option === "Any degree structure") return true;
+  const isDouble = courseTypeLabel(course) === "Double degree";
+  return option === "Double degrees" ? isDouble : !isDouble;
+}
+
 function compareSearchEntries(a, b) {
   if (hasIncomeOnlySearch() && state.sort === "Relevance") {
     if (b.incomeScore !== a.incomeScore) return b.incomeScore - a.incomeScore;
+  }
+  if (state.sort === "Relevance" && state.area !== "All study areas" && b.areaScore !== a.areaScore) {
+    return b.areaScore - a.areaScore;
   }
   if (state.sort === "Closest campus") {
     const distanceA = Number.isFinite(a.distance) ? a.distance : Infinity;
@@ -880,12 +1424,12 @@ function compareSearchEntries(a, b) {
   if (state.sort === "Study area fit") {
     if (b.areaScore !== a.areaScore) return b.areaScore - a.areaScore;
   }
-  if (state.sort === "Lowest ATAR") {
+  if (state.sort === "Lowest selection rank") {
     const rankA = numericRank(a.course.atar);
     const rankB = numericRank(b.course.atar);
     if ((rankA ?? Infinity) !== (rankB ?? Infinity)) return (rankA ?? Infinity) - (rankB ?? Infinity);
   }
-  if (state.sort === "Highest ATAR") {
+  if (state.sort === "Highest selection rank") {
     const rankA = numericRank(a.course.atar);
     const rankB = numericRank(b.course.atar);
     if ((rankB ?? -Infinity) !== (rankA ?? -Infinity)) return (rankB ?? -Infinity) - (rankA ?? -Infinity);
@@ -900,7 +1444,17 @@ function courseMatchesStudyArea(course, areaLabel) {
   if (!areaLabel || areaLabel === "All study areas") return true;
   const topic = topicOptions.find((item) => item.label === areaLabel);
   if (!topic) return true;
-  return topicWeightedScore(course, topic) > 0 || phraseMatch(course.area, areaLabel);
+  return topicWeightedScore(course, topic) >= 35 || phraseMatch(course.area, areaLabel);
+}
+
+function dedupeVisibleCourseResults(courses) {
+  const seen = new Set();
+  return courses.filter((course) => {
+    const key = [course.name, course.providerId, course.campus, course.level].map(cleanSearchText).join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function studyAreaSortScore(course) {
@@ -912,6 +1466,7 @@ function studyAreaSortScore(course) {
 
 function courseTypeLabel(course) {
   const title = cleanSearchText(course.name);
+  if (courseQualificationComponents(course).length > 1) return "Double degree";
   if (title.startsWith("advanced diploma")) return "Advanced Diploma";
   if (title.startsWith("diploma")) return "Diploma";
   if (title.startsWith("associate degree") || title.startsWith("assocdeg")) return "Associate Degree";
@@ -920,6 +1475,60 @@ function courseTypeLabel(course) {
   if (title.startsWith("bachelor") && /\bhonours\b/.test(title)) return "Honours";
   if (title.startsWith("bachelor")) return "Bachelor";
   return "Other";
+}
+
+function courseQualificationComponents(course) {
+  const title = decodeHtmlEntities(course?.name || "").replace(/\s+/g, " ").trim();
+  if (!title) return [];
+  const qualificationPattern = /\b(?:Bachelor|Master|Doctor|Diploma|Associate Degree|Undergraduate Certificate|Graduate Certificate)\b/gi;
+  const matches = [...title.matchAll(qualificationPattern)];
+  if (matches.length < 2) return [title];
+  return matches
+    .map((match, index) => {
+      const nextIndex = matches[index + 1]?.index ?? title.length;
+      return title
+        .slice(match.index, nextIndex)
+        .replace(/\s*(?:\/|&|\band\b)\s*$/i, "")
+        .trim();
+    })
+    .filter(Boolean);
+}
+
+function courseDegreeStructureLabel(course) {
+  const components = courseQualificationComponents(course);
+  if (components.length > 1) {
+    const bachelorCount = components.filter((component) => /^Bachelor\b/i.test(component)).length;
+    return bachelorCount === components.length
+      ? `Double degree · ${components.length} bachelor's qualifications`
+      : `Combined program · ${components.length} qualifications`;
+  }
+  const type = courseTypeLabel(course);
+  if (type === "Honours") return "Single honours degree";
+  if (type === "Bachelor") return "Single bachelor's degree";
+  if (type === "Double degree") return "Double or combined degree";
+  return `Single ${type.toLowerCase()} qualification`;
+}
+
+function courseQualificationsSummary(course) {
+  const components = courseQualificationComponents(course);
+  if (!components.length) return "Not published";
+  if (components.length === 1) return `1 qualification: ${components[0]}`;
+  return `${components.length} qualifications: ${components.join(" + ")}`;
+}
+
+function courseDegreeStructureExplanation(course) {
+  const components = courseQualificationComponents(course);
+  if (components.length > 1) {
+    return `The title combines ${components.length} qualifications or degree components. This usually gives broader study but can add time and workload; confirm the official award, progression and early-exit rules.`;
+  }
+  const type = courseTypeLabel(course);
+  if (type === "Honours") {
+    return "One honours qualification with advanced study or research. Check whether honours is embedded, guaranteed or performance-dependent.";
+  }
+  if (["Diploma", "Advanced Diploma", "Associate Degree", "Undergraduate Certificate"].includes(type)) {
+    return "A shorter standalone qualification that may also provide credit or a pathway into a bachelor degree. Confirm the linked-course and credit rules.";
+  }
+  return "One main qualification with a more focused course structure. Compare its majors, electives and accreditation with broader combined programs.";
 }
 
 function courseDistanceKm(course, origin) {
@@ -1010,30 +1619,202 @@ function haversineKm(a, b) {
   return earthRadiusKm * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
 }
 
-function renderCourse(course, matchLine = "", index = 0) {
+function renderCourse(course, matchLine = "", index = 0, showFieldSignal = false) {
   const saved = state.savedIds.includes(course.id);
   const comparing = state.compareIds.includes(course.id);
   const open = state.openCourseIds.has(course.id);
   const distanceLine = distanceSummaryLine(course);
+  const year = courseAdmissionYear(course);
+  const selectionRank = compactSelectionRankDisplay(course);
+  const rawAtar = compactRawAtarDisplay(course);
+  const pathways = coursePathwaySummary(course);
+  const guaranteed = courseGuaranteedEntrySummary(course);
+  const csp = courseCspSummary(course);
+  const fieldSignal = showFieldSignal ? providerFieldSignal(course) : null;
   return `
-    <details class="course-item" style="--item-delay:${Math.min(index, 8) * 26}ms" data-course-id="${escapeHtml(course.id)}" ${open ? "open" : ""}>
-      <summary>
-        <img src="${escapeHtml(course.providerLogo)}" alt="${escapeHtml(course.university)} logo" loading="lazy" />
-        <span class="course-summary">
-          <strong>${highlight(course.name)}</strong>
-          <small>${escapeHtml(course.university)} - ${escapeHtml(course.campus)} - Code ${escapeHtml(course.courseCode)}</small>
-          <em>${escapeHtml(levelDisplay(course))} - ${term("ATAR")}: ${escapeHtml(displayRank(course.atar))}${matchLine ? ` - ${escapeHtml(matchLine)}` : ""}</em>
-          <em class="income-preview">${escapeHtml(incomeSummaryLine(course))}</em>
-          ${distanceLine ? `<em class="distance-preview">${escapeHtml(distanceLine)}</em>` : ""}
-        </span>
-        <span class="quick-actions">
+    <article class="course-item course-result-card ${open ? "is-expanded" : ""}" style="--item-delay:${Math.min(index, 8) * 26}ms" data-course-id="${escapeHtml(course.id)}">
+      <div class="course-card-head">
+        <div class="course-provider">
+          <img src="${escapeHtml(course.providerLogo)}" alt="" loading="lazy" decoding="async" />
+          <span>${escapeHtml(course.university)}</span>
+          ${fieldSignal && fieldSignal.score >= 80 ? `
+            <small class="course-field-signal">
+              <strong>${escapeHtml(currentSearchTopic()?.label || "Field")} strength</strong>
+              <span>${escapeHtml(fieldSignal.note)}</span>
+            </small>
+          ` : ""}
+        </div>
+        <div class="course-summary">
+          <h3>${highlight(course.name)}</h3>
+          <p>${escapeHtml(course.campus)} · Code ${escapeHtml(course.courseCode)}</p>
+          <dl class="course-core-facts">
+            <div><dt>Duration</dt><dd>${compactCourseField(course.duration, "Confirm duration")}</dd></div>
+            <div><dt>Study mode</dt><dd>${compactCourseField((course.modes || []).join(", "), "Confirm study mode")}</dd></div>
+            <div><dt>Level</dt><dd>${escapeHtml(levelDisplay(course))}</dd></div>
+          </dl>
+          ${distanceLine ? `<p class="distance-preview">${escapeHtml(distanceLine)}</p>` : ""}
+        </div>
+        <div class="course-admission">
+          <div class="admission-number">
+            <span><span class="desktop-only">${escapeHtml(courseRankLabel(course))}</span><span class="mobile-only">${escapeHtml(courseMobileRankLabel(course))}</span></span>
+            <strong class="atar-requirement">${escapeHtml(selectionRank)}</strong>
+          </div>
+          <div class="admission-number">
+            <span><span class="desktop-only">${escapeHtml(courseRawAtarLabel(course))}</span><span class="mobile-only">Raw ATAR</span></span>
+            <strong class="atar-requirement">${escapeHtml(rawAtar)}</strong>
+          </div>
+          ${matchLine ? `<small>${escapeHtml(matchLine)}</small>` : ""}
+          <small>${escapeHtml(guaranteed)}</small>
+          <small class="admission-definition">Selection rank can include adjustments; lowest ATAR is the raw ATAR of an offer-holder.</small>
+          <a href="${escapeHtml(course.admissionProfileUrl || course.uacUrl)}" target="_blank" rel="noreferrer">${escapeHtml(course.admissionProfileSource || primaryCourseLinkLabel(course))} source ${icon("external")}</a>
+        </div>
+      </div>
+      <dl class="course-decision-grid">
+        <div><dt>Prerequisites</dt><dd>${compactCourseField(course.prerequisites, "None listed in imported data")}</dd></div>
+        <div><dt>Assumed knowledge</dt><dd>${compactCourseField(course.assumed, "None listed in imported data")}</dd></div>
+        <div><dt>Available pathways</dt><dd>${escapeHtml(pathways)}</dd></div>
+        <div><dt>CSP status</dt><dd>${escapeHtml(csp)}</dd></div>
+      </dl>
+      <div class="course-card-foot">
+        <div class="course-source-line">
+          <span>Published profile: ${escapeHtml(String(year))}</span>
+          <span>Site data updated ${escapeHtml(formatImportDate())}</span>
+          <span>Previous entry results do not guarantee admission.</span>
+        </div>
+        <div class="course-card-actions">
           <button type="button" data-save-course="${escapeHtml(course.id)}" aria-pressed="${saved}">${saved ? "Saved" : "Save"}</button>
           <button type="button" data-compare-course="${escapeHtml(course.id)}" aria-pressed="${comparing}">${comparing ? "Comparing" : "Compare"}</button>
-        </span>
-      </summary>
-      ${open ? renderCourseDetail(course, saved, comparing) : ""}
-    </details>
+          <button type="button" data-toggle-course="${escapeHtml(course.id)}" aria-expanded="${open}">${open ? "Hide details" : "View details"}</button>
+        </div>
+      </div>
+      ${open ? (courseDetailsLoaded(course) ? renderCourseDetail(course, saved, comparing) : renderCourseDetailLoading()) : ""}
+    </article>
   `;
+}
+
+function courseAdmissionYear(course) {
+  if (course.admissionProfileCode === "PROVIDER") return course.atarYear || "Provider criteria";
+  const importedYear = Number(String(meta.importedAt || "").slice(0, 4));
+  return Number(course.atarYear) || (Number.isFinite(importedYear) ? importedYear : new Date().getFullYear());
+}
+
+function courseRankLabel(course) {
+  if (course.admissionProfileCode === "PROVIDER") return "Selection basis (provider)";
+  return `Lowest selection rank (${courseAdmissionYear(course)})`;
+}
+
+function courseMobileRankLabel(course) {
+  return course.admissionProfileCode === "PROVIDER" ? "Selection basis" : "Selection rank";
+}
+
+function courseRawAtarLabel(course) {
+  if (course.admissionProfileCode === "PROVIDER") return "Lowest raw ATAR";
+  return `Lowest raw ATAR (${courseAdmissionYear(course)})`;
+}
+
+function courseSelectionRankValue(course) {
+  return course.selectionRank || course.atar || "";
+}
+
+function compactSelectionRankDisplay(course) {
+  if (course.admissionProfileCode === "PROVIDER") {
+    return course.selectionRank || "Provider entry criteria";
+  }
+  return compactRankDisplay(courseSelectionRankValue(course));
+}
+
+function compactRawAtarDisplay(course) {
+  if (course.admissionProfileCode === "PROVIDER") return "Not used";
+  return compactRankDisplay(course.lowestAtar);
+}
+
+function compactRankDisplay(value) {
+  const parsed = numericRank(value);
+  if (parsed !== null) return parsed.toFixed(parsed % 1 ? 2 : 0);
+  const code = String(value || "").trim();
+  const compact = {
+    NC: "New course",
+    NO: "No ATAR-only offers",
+    NR: "Not published",
+    NP: "Not published",
+    NS: "No S1 offers",
+    NN: "Not published",
+    "<5": "Fewer than 5 offers"
+  };
+  return compact[code] || "Not published";
+}
+
+function compactCourseField(value, fallback) {
+  const text = decodeHtmlEntities(value || "").replace(/\s+/g, " ").trim();
+  if (!hasSpecificInfo(text)) return escapeHtml(fallback);
+  return escapeHtml(truncateText(text, 120));
+}
+
+function coursePathwaySummary(course) {
+  if (courseHasPathwayMention(course)) {
+    if (/diploma/.test(coursePathwayText(course))) return "Diploma or linked pathway mentioned";
+    if (/foundation|preparation program|bridging/.test(coursePathwayText(course))) return "Foundation or preparation route mentioned";
+    if (/tafe|vet|transfer|articulation/.test(coursePathwayText(course))) return "TAFE, VET or transfer route mentioned";
+    return "Pathway option mentioned";
+  }
+  return "No specific pathway listed; check the provider";
+}
+
+function courseGuaranteedEntrySummary(course) {
+  return courseHasGuaranteedEntryMention(course)
+    ? "Guaranteed-entry information mentioned—confirm the exact current rank"
+    : "No guaranteed rank published in this imported record";
+}
+
+function courseCspSummary(course) {
+  const text = cleanSearchText(`${course.fees || ""} ${course.summary || ""}`);
+  if (/\b(commonwealth supported place|csp)\b/.test(text)) return "CSP information mentioned—confirm availability";
+  return "Not confirmed in imported data; check the official page";
+}
+
+function courseDetailsLoaded(course) {
+  return window.courseFinderCourseDetails?.hasFullDetails?.(course) || !course?.detailChunk;
+}
+
+function renderCourseDetailLoading(message = "Loading the complete course information…") {
+  return `
+    <div class="course-detail-loading" role="status" aria-live="polite">
+      <span>${escapeHtml(message)}</span>
+      <i></i><i></i><i></i>
+    </div>
+  `;
+}
+
+async function hydrateCourseDetail(details, course) {
+  if (!details || !course) return;
+  if (courseDetailsLoaded(course)) {
+    details.querySelector(".course-detail-loading")?.remove();
+    if (!details.querySelector(".course-detail")) {
+      details.insertAdjacentHTML("beforeend", renderCourseDetail(course, state.savedIds.includes(course.id), state.compareIds.includes(course.id)));
+      bindCourseActionButtons(details);
+    }
+    return;
+  }
+
+  if (!details.querySelector(".course-detail-loading")) details.insertAdjacentHTML("beforeend", renderCourseDetailLoading());
+  details.classList.add("is-loading-detail");
+  try {
+    await window.courseFinderCourseDetails.get(course);
+    if (!details.isConnected || !state.openCourseIds.has(course.id)) return;
+    details.querySelector(".course-detail-loading")?.remove();
+    details.querySelector(".course-detail")?.remove();
+    details.insertAdjacentHTML("beforeend", renderCourseDetail(course, state.savedIds.includes(course.id), state.compareIds.includes(course.id)));
+    bindCourseActionButtons(details);
+  } catch {
+    const loading = details.querySelector(".course-detail-loading");
+    if (loading) loading.outerHTML = renderCourseDetailLoading("Full details could not load. The course links below are still available.");
+    if (!details.querySelector(".course-detail")) {
+      details.insertAdjacentHTML("beforeend", renderCourseDetail(course, state.savedIds.includes(course.id), state.compareIds.includes(course.id)));
+      bindCourseActionButtons(details);
+    }
+  } finally {
+    details.classList.remove("is-loading-detail");
+  }
 }
 
 function distanceSummaryLine(course) {
@@ -1051,15 +1832,24 @@ function renderCourseDetail(course, saved, comparing) {
         ${row("Course code", course.courseCode)}
         ${row("Level", levelDisplay(course))}
         ${row("Campus", course.campus)}
-        ${row("ATAR / selection rank", displayRank(course.atar))}
+        ${row(courseRankLabel(course), compactSelectionRankDisplay(course), "atar-requirement")}
+        ${row(courseRawAtarLabel(course), compactRawAtarDisplay(course), "atar-requirement")}
+        ${row("How to read these figures", "Selection rank may include adjustment factors. Lowest raw ATAR does not include those adjustments.")}
+        ${row("Guaranteed entry rank", courseGuaranteedEntrySummary(course))}
         ${row("Duration", course.duration)}
         ${row("Study mode", (course.modes || []).join(", "))}
         ${row("Intake", course.intake)}
         ${row("Prerequisites", course.prerequisites)}
         ${row("Assumed knowledge", course.assumed)}
+        ${row("Additional entry criteria", course.additionalCriteria)}
         ${row("Fees", course.fees)}
+        ${row("Commonwealth supported place status", courseCspSummary(course))}
+        ${row("Available pathways", coursePathwaySummary(course))}
         ${row("Careers", course.careers)}
-        ${row("Information source", course.source)}
+        ${row("Practical experience", course.practicalExperience)}
+        ${row("Information source", course.source || primaryCourseLinkLabel(course))}
+        ${row("Published profile year", String(courseAdmissionYear(course)))}
+        ${row("Site data last updated", formatImportDate())}
       </dl>
       ${renderIncomeOutlook(course)}
       <p>${highlight(course.summary)}</p>
@@ -1255,50 +2045,75 @@ function scheduleIncomeWarmup() {
 
 function renderCompareLibrary(compareCourses) {
   if (!compareCourses.length) {
-    return `<div class="compare-empty"><strong>Compare courses</strong><p>Use Compare on up to four saved courses to see ATAR, campus, duration, prerequisites and links side by side.</p></div>`;
+    return `
+      <div class="compare-empty">
+        <strong>Compare courses row by row</strong>
+        <p>Select two or three results. This table will mark every field that differs and call out useful advantages without pretending one course is automatically best.</p>
+        <a href="#courses">Choose courses to compare</a>
+      </div>
+    `;
   }
-  const rows = [
-    ["Provider", (course) => course.university],
-    ["Campus", (course) => course.campus],
-    ["ATAR / selection rank", (course) => displayRank(course.atar)],
-    ["Jobs / income", (course) => incomeSummaryLine(course)],
-    ["Duration", (course) => course.duration],
-    ["Study mode", (course) => (course.modes || []).join(", ")],
-    ["Prerequisites", (course) => course.prerequisites],
-    ["Assumed knowledge", (course) => course.assumed],
-    ["Fees", (course) => course.fees]
-  ];
+  const rowStates = comparisonRows(compareCourses);
+  const differenceCount = rowStates.filter((row) => row.different).length;
+  const visibleRows = state.compareOnlyDifferences && compareCourses.length > 1
+    ? rowStates.filter((row) => row.different)
+    : rowStates;
+  const comparisonReady = compareCourses.length > 1;
   return `
-    <div class="compare-box">
-      <div class="compare-head">
+    <div class="compare-box course-compare">
+      <div class="compare-workspace-head">
         <div>
-          <h3>Compare courses</h3>
-          <p>${compareCourses.length}/4 selected</p>
+          <span class="compare-kicker">Decision view</span>
+          <h3>Compare courses row by row</h3>
+          <p id="compareGuidance">${comparisonReady
+            ? `Degree structure and combined-course differences appear first. ${differenceCount} ${differenceCount === 1 ? "difference" : "differences"} found across ${rowStates.length} details. Blue rows differ; stronger practical options are labelled.`
+            : "Add one more course to reveal degree-type, entry, duration and pathway differences."}</p>
+        </div>
+        <div class="compare-toolbar">
+          <span class="compare-count">${compareCourses.length} of 3 comparing</span>
+          ${comparisonReady ? `
+            <button type="button" data-action="toggle-compare-differences" aria-pressed="${state.compareOnlyDifferences}">
+              ${state.compareOnlyDifferences ? "Show all rows" : "Only differences"}
+            </button>
+          ` : ""}
+          <button class="clear-btn" type="button" data-action="clear-compare">Clear compare</button>
         </div>
       </div>
-      <div class="compare-scroll">
-        <table>
+      <div class="compare-legend" aria-hidden="true">
+        <span><i class="is-different"></i> Different</span>
+        <span><i class="is-advantage"></i> Useful advantage</span>
+        <span><i class="is-same"></i> Same</span>
+      </div>
+      <div class="compare-scroll" tabindex="0" aria-label="Scrollable course comparison">
+        <table class="course-compare-table" style="--compare-columns:${compareCourses.length}" aria-describedby="compareGuidance">
+          <caption class="sr-only">Comparison of ${compareCourses.length} selected university courses by admission, study and pathway details.</caption>
           <thead>
             <tr>
-              <th>Course</th>
+              <th class="compare-attribute" scope="col">Compare by</th>
               ${compareCourses.map((course) => `
-                <th>
-                  <strong>${highlight(course.name)}</strong>
-                  <small>${escapeHtml(course.university)}</small>
-                  <button type="button" data-remove-compare="${escapeHtml(course.id)}">Remove</button>
+                <th scope="col">
+                  <div class="compare-course-heading">
+                    <span>${escapeHtml(course.university)}</span>
+                    <strong>${escapeHtml(course.name)}</strong>
+                    <small>${escapeHtml(course.campus)}</small>
+                    <button type="button" data-remove-compare="${escapeHtml(course.id)}" aria-label="Remove ${escapeHtml(course.name)} from comparison">Remove</button>
+                  </div>
                 </th>
               `).join("")}
             </tr>
           </thead>
           <tbody>
-            ${rows.map(([label, getter]) => `
-              <tr>
-                <th>${highlight(label)}</th>
-                ${compareCourses.map((course) => `<td>${compareCell(getter(course))}</td>`).join("")}
+            ${visibleRows.map((row) => `
+              <tr class="${row.different ? "compare-row-different" : "compare-row-same"} ${row.different && row.emphasis === "major" ? "compare-row-major" : ""}">
+                <th class="compare-attribute" scope="row">
+                  <span>${escapeHtml(row.label)}</span>
+                  <small>${row.different ? escapeHtml(row.differenceLabel || "Different") : "Same"}</small>
+                </th>
+                ${row.values.map((value, index) => renderComparisonCell(row, value, index)).join("")}
               </tr>
             `).join("")}
-            <tr>
-              <th>Links</th>
+            <tr class="compare-links-row">
+              <th class="compare-attribute" scope="row">Official sources</th>
               ${compareCourses.map((course) => `
                 <td>
                   <a href="${escapeHtml(course.uacUrl)}" target="_blank" rel="noreferrer">${escapeHtml(primaryCourseLinkLabel(course))} ${icon("external")}</a>
@@ -1311,6 +2126,156 @@ function renderCompareLibrary(compareCourses) {
       </div>
     </div>
   `;
+}
+
+function comparisonRows(compareCourses) {
+  const definitions = [
+    { key: "provider", label: "University", value: (course) => course.university },
+    { key: "campus", label: "Campus", value: (course) => course.campus },
+    {
+      key: "degreeStructure",
+      label: "Degree type",
+      value: (course) => courseDegreeStructureLabel(course),
+      emphasis: "major",
+      differenceLabel: "Key difference"
+    },
+    {
+      key: "qualifications",
+      label: "Qualifications included",
+      value: (course) => courseQualificationsSummary(course),
+      emphasis: "major",
+      differenceLabel: "Check the degrees"
+    },
+    {
+      key: "degreeStructureMeaning",
+      label: "What the structure means",
+      value: (course) => courseDegreeStructureExplanation(course),
+      emphasis: "major",
+      differenceLabel: "Different commitment"
+    },
+    { key: "level", label: "Course level", value: (course) => levelDisplay(course) },
+    { key: "studyArea", label: "Study area / focus", value: (course) => course.area },
+    {
+      key: "selectionRank",
+      label: "Lowest selection rank",
+      value: (course) => `${compactSelectionRankDisplay(course)} (${courseAdmissionYear(course)})`,
+      score: (course) => numericRank(courseSelectionRankValue(course)),
+      preference: "min",
+      advantage: "Lowest listed rank"
+    },
+    {
+      key: "rawAtar",
+      label: "Lowest raw ATAR",
+      value: (course) => `${compactRawAtarDisplay(course)} (${courseAdmissionYear(course)})`,
+      score: (course) => numericRank(course.lowestAtar),
+      preference: "min",
+      advantage: "Lowest listed ATAR"
+    },
+    {
+      key: "duration",
+      label: "Duration",
+      value: (course) => course.duration,
+      score: (course) => comparisonDurationMonths(course.duration),
+      preference: "min",
+      advantage: "Shortest course"
+    },
+    {
+      key: "studyMode",
+      label: "Study mode",
+      value: (course) => (course.modes || []).join(", ") || "Not published",
+      score: (course) => (course.modes || []).length || null,
+      preference: "max",
+      advantage: "Most study options"
+    },
+    { key: "prerequisites", label: "Prerequisites", value: (course) => course.prerequisites },
+    { key: "assumed", label: "Assumed knowledge", value: (course) => course.assumed },
+    {
+      key: "pathways",
+      label: "Available pathways",
+      value: (course) => coursePathwaySummary(course),
+      score: (course) => courseHasPathwayMention(course) ? 1 : 0,
+      preference: "max",
+      advantage: "Pathway listed"
+    },
+    {
+      key: "guaranteedEntry",
+      label: "Guaranteed entry",
+      value: (course) => courseGuaranteedEntrySummary(course),
+      score: (course) => courseHasGuaranteedEntryMention(course) ? 1 : 0,
+      preference: "max",
+      advantage: "Entry guarantee info"
+    },
+    { key: "fees", label: "Fees information", value: (course) => course.fees },
+    { key: "csp", label: "CSP status", value: (course) => courseCspSummary(course) },
+    { key: "careers", label: "Career outcomes", value: (course) => course.careers },
+    { key: "updated", label: "Site data updated", value: () => formatImportDate() }
+  ];
+
+  return definitions.map((definition) => {
+    const values = compareCourses.map((course) => comparisonValue(definition.value(course)));
+    const normalised = values.map(normaliseComparisonValue);
+    const different = compareCourses.length > 1 && new Set(normalised).size > 1;
+    const advantages = new Set();
+
+    if (different && definition.score && definition.preference) {
+      const scores = compareCourses.map((course) => definition.score(course));
+      const comparable = scores.every((score) => Number.isFinite(score));
+      const uniqueScores = new Set(scores);
+      if (comparable && uniqueScores.size > 1) {
+        const preferredScore = definition.preference === "min" ? Math.min(...scores) : Math.max(...scores);
+        scores.forEach((score, index) => {
+          if (score === preferredScore) advantages.add(index);
+        });
+      }
+    }
+
+    return {
+      ...definition,
+      values,
+      different,
+      advantages
+    };
+  });
+}
+
+function renderComparisonCell(row, value, index) {
+  const isAdvantage = row.advantages.has(index);
+  const classes = [
+    row.different ? "compare-cell-different" : "compare-cell-same",
+    isAdvantage ? "compare-cell-advantage" : ""
+  ].filter(Boolean).join(" ");
+  const display = truncateText(value, 260);
+  const title = display !== value ? ` title="${escapeHtml(value)}"` : "";
+  return `
+    <td class="${classes}">
+      <span${title}>${escapeHtml(display)}</span>
+      ${isAdvantage ? `<em>${escapeHtml(row.advantage)}</em>` : ""}
+    </td>
+  `;
+}
+
+function comparisonValue(value) {
+  const text = decodeHtmlEntities(value || "").replace(/\s+/g, " ").trim();
+  return text || "Not published";
+}
+
+function normaliseComparisonValue(value) {
+  return comparisonValue(value)
+    .toLocaleLowerCase("en-AU")
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function comparisonDurationMonths(value) {
+  const text = comparisonValue(value).toLocaleLowerCase("en-AU");
+  const yearMatch = text.match(/(\d+(?:\.\d+)?)\s*years?/);
+  if (yearMatch) return Number(yearMatch[1]) * 12;
+  const monthMatch = text.match(/(\d+(?:\.\d+)?)\s*months?/);
+  if (monthMatch) return Number(monthMatch[1]);
+  const weekMatch = text.match(/(\d+(?:\.\d+)?)\s*weeks?/);
+  if (weekMatch) return Number(weekMatch[1]) / 4.345;
+  return null;
 }
 
 function renderSavedEmpty() {
@@ -1404,6 +2369,24 @@ function renderAdvisorResult(ranked) {
   `;
 }
 
+function renderTopProviderBlock() {
+  const areas = topicOptions.filter((topic) => topic.keywords.length).map((topic) => topic.label);
+  return `
+    <section class="top-provider-block" aria-labelledby="specialistProviderTitle">
+      <div class="top-provider-head">
+        <div>
+          <span class="eyebrow">Specialised rankings</span>
+          <h3 id="specialistProviderTitle">Top 3 by study area</h3>
+          <p>Field-specific strength and relevant Sydney course availability, kept separate from the overall profile.</p>
+        </div>
+        ${select("providerTopic", "Study area", areas, state.providerTopic)}
+      </div>
+      <div class="top-provider-grid">${renderTopProviders()}</div>
+      <p class="rating-note">Specialised fit is a Course Finder planning score for this study area, not a general university ranking. Use it to find a strong shortlist, then compare the actual courses.</p>
+    </section>
+  `;
+}
+
 function renderTopProviders() {
   const topic = topicOptions.find((item) => item.label === state.providerTopic) || topicOptions[1];
   const quality = providerQuality[topic.label] || {};
@@ -1422,21 +2405,67 @@ function renderTopProviders() {
   return rows.map((row, index) => `
     <a class="top-provider-card" style="--item-delay:${Math.min(index, 8) * 22}ms" href="${escapeHtml(row.provider.website)}" target="_blank" rel="noreferrer">
       <span>${index + 1}</span>
-      <img src="${escapeHtml(row.provider.logo)}" alt="${escapeHtml(row.provider.name)} logo" loading="lazy" />
+      <img src="${escapeHtml(row.provider.logo)}" alt="${escapeHtml(row.provider.name)} logo" loading="lazy" decoding="async" />
       <strong>${escapeHtml(row.provider.name)}</strong>
       <small>${escapeHtml(row.note)}</small>
-      <em>Profile score ${Math.round(row.score)}/100</em>
+      <em>Specialised fit ${Math.round(row.score)}/100</em>
     </a>
   `).join("");
 }
 
 function renderProvider(provider, index = 0) {
+  const profile = providerProfile(provider);
+  const link = provider.website || "#courses";
   return `
-    <a class="provider-card" style="--item-delay:${Math.min(index, 8) * 22}ms" href="${escapeHtml(provider.website)}" target="_blank" rel="noreferrer">
-      <img src="${escapeHtml(provider.logo)}" alt="${escapeHtml(provider.name)} logo" loading="lazy" />
-      <strong>${escapeHtml(provider.name)}</strong>
-      <small>${providerProfile(provider)}</small>
+    <a class="provider-card" style="--item-delay:${Math.min(index, 8) * 22}ms" href="${escapeHtml(link)}" ${provider.website ? 'target="_blank" rel="noreferrer"' : ""}>
+      <div class="provider-card-heading">
+        <img src="${escapeHtml(provider.logo)}" alt="${escapeHtml(provider.name)} logo" loading="lazy" decoding="async" />
+        <div>
+          <strong>${escapeHtml(provider.name)}</strong>
+          <span>${escapeHtml(profile.band)}</span>
+        </div>
+      </div>
+      <div class="provider-overall-score">
+        <span>Overall site profile</span>
+        <b>${profile.overall}<small>/100</small></b>
+      </div>
+      <p class="provider-overall-why"><b>Overall why:</b> ${escapeHtml(profile.overallWhy)}</p>
+      ${profile.currentStanding ? `<span class="provider-current-standing">${escapeHtml(profile.currentStanding.shortLabel)}</span>` : ""}
+      <div class="provider-specialty-score">
+        <span>Strongest matched area</span>
+        <strong>${escapeHtml(profile.specialty.label)} <b>${profile.specialty.score}/100</b></strong>
+        <small><b>Specialised why:</b> ${escapeHtml(profile.specialty.note)}</small>
+      </div>
     </a>
+  `;
+}
+
+function renderProviderScoreExplainer() {
+  return `
+    <div class="provider-score-explainer">
+      <div>
+        <span class="eyebrow">How the ranking works</span>
+        <h3>Two scores, for two different questions</h3>
+        <p>These are Sydney Course Finder planning scores—not official university rankings, league tables or guarantees of teaching quality.</p>
+      </div>
+      <dl>
+        <div>
+          <dt>Overall site profile /100</dt>
+          <dd>Blends course breadth, Sydney options, study-mode flexibility, field strength and a small current-standing signal where credible evidence is available.</dd>
+        </div>
+        <div>
+          <dt>Specialised fit /100</dt>
+          <dd>Shows the provider’s strongest matched study area. The “why” explains the particular reputation or course evidence behind it.</dd>
+        </div>
+        <div>
+          <dt>How to use it</dt>
+          <dd>Use the score to build a shortlist, then compare the actual course, accreditation, campus, entry rules, cost and support.</dd>
+        </div>
+      </dl>
+      <p class="provider-ranking-source">
+        Current standing evidence: <a href="${escapeHtml(providerCurrentStanding.UNSW.source)}" target="_blank" rel="noreferrer">QS World University Rankings 2027 places UNSW #1 in Australia and #19 globally ${icon("external")}</a>
+      </p>
+    </div>
   `;
 }
 
@@ -1449,7 +2478,7 @@ function renderFaq() {
     ["What if my ATAR is below the course?", "Check adjustment factors, alternative offers, diploma pathways, internal transfers and related courses with lower entry ranks."],
     ["What should I compare between universities?", "Compare commute, campus, fees, accreditation, placements, graduate employment, course flexibility, internships, support services and transfer options."],
     ["Why do some courses not show an ATAR?", "UAC may mark a course as new, unavailable, non-ATAR entry, or not reportable. The site shows those status notes when UAC publishes them."],
-    ["How are provider profile scores calculated?", "The profile score is a local guide, not an official ranking. It combines broad field reputation, prestige, employer/industry strength and Sydney course availability so the Top 3 section is not just counting courses."],
+    ["How are university profile scores calculated?", "The overall site profile is a local planning score that blends Sydney course breadth, study-mode flexibility and field-strength signals. The specialised score is separate and shows the provider’s strongest matched study area. Neither is an official university ranking."],
     ["How should I use the income ranges?", "Use them as broad career-planning bands, not guaranteed salaries. The app maps course career fields to likely occupations and indicative Australian full-time earnings ranges; actual income depends on experience, employer, location, registration and extra study."],
     ["What if I do not have the ATAR?", "Look at selection-rank adjustments, Educational Access Scheme, Schools Recommendation Scheme, diploma pathways, TAFE-to-uni pathways, related lower-entry courses and internal transfer after first year."],
     ["Should I still apply if my ATAR is lower?", "Yes, if the course is realistic and you have backups. Put dream courses above safer options, because UAC preferences are considered in order and universities may use adjustment factors."],
@@ -2020,15 +3049,247 @@ function formatAskCoursesWithIncome(entries) {
   }).join("; ");
 }
 
+function bindCourseSearchSurface(scope) {
+  if (!scope) return;
+  bindHashNavLinks(scope);
+
+  scope.querySelector('[data-form="search"]')?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    state.draft = event.target.search.value.trim();
+    runProcessing("search", () => {
+      state.query = state.draft;
+  state.visible = coursePageSize();
+      state.openCourseIds.clear();
+    }, () => {
+      if (!isMobileViewport()) return;
+      const results = app.querySelector("#courses .course-list, #courses .course-empty-state");
+      if (!results) return;
+      const headerOffset = document.querySelector(".site-header")?.getBoundingClientRect().height || 72;
+      const targetTop = results.getBoundingClientRect().top + window.scrollY - headerOffset - 12;
+      window.scrollTo({ top: Math.max(0, targetTop), behavior: "auto" });
+    });
+  });
+
+  scope.querySelector('[name="search"]')?.addEventListener("input", (event) => {
+    state.draft = event.target.value;
+  });
+
+  const syncMobileFilterPanel = (open) => {
+    state.mobileFiltersOpen = open;
+    const panel = scope.querySelector("[data-course-filter-panel]");
+    panel?.classList.toggle("is-open", open);
+    if (open && panel) panel.scrollTop = 0;
+    scope.querySelector('[data-action="toggle-course-filters"]')?.setAttribute("aria-expanded", String(open));
+  };
+  scope.querySelector('[data-action="toggle-course-filters"]')?.addEventListener("click", () => {
+    syncMobileFilterPanel(!state.mobileFiltersOpen);
+  });
+  scope.querySelectorAll('[data-action="close-course-filters"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      syncMobileFilterPanel(false);
+      if (button.classList.contains("mobile-filter-done") && hasActiveCourseSearch()) {
+        scope.querySelector(".course-list")?.scrollIntoView({
+          block: "start",
+          behavior: prefersReducedMotion() || isMobileViewport() ? "auto" : "smooth"
+        });
+      }
+    });
+  });
+
+  [
+    "level",
+    "courseType",
+    "area",
+    "provider",
+    "mode",
+    "campus",
+    "income",
+    "sort",
+    "duration",
+    "prerequisite",
+    "pathway",
+    "guaranteedEntry",
+    "degreeStructure"
+  ].forEach((key) => {
+    scope.querySelector(`[data-action="${key}"]`)?.addEventListener("change", (event) => {
+      state[key] = event.target.value;
+      if (key === "provider") syncCampusWithProvider();
+      runProcessing("search", () => {
+  state.visible = coursePageSize();
+        state.openCourseIds.clear();
+      });
+    });
+  });
+
+  const estimatedAtarInput = scope.querySelector('[data-action="estimatedAtar"]');
+  const commitEstimatedAtar = (value) => {
+    runProcessing("search", () => {
+      const numberValue = Number(value);
+      state.estimatedAtar = value === "" || !Number.isFinite(numberValue)
+        ? ""
+        : String(Math.max(0, Math.min(99.95, numberValue)));
+      state.allowAtarStretch = false;
+  state.visible = coursePageSize();
+      state.openCourseIds.clear();
+    });
+  };
+  estimatedAtarInput?.addEventListener("change", (event) => commitEstimatedAtar(event.target.value));
+  estimatedAtarInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    commitEstimatedAtar(event.target.value);
+  });
+
+  scope.querySelector(".advanced-filter-disclosure")?.addEventListener("toggle", (event) => {
+    state.advancedFiltersOpen = event.currentTarget.open;
+  });
+
+  const locationInput = scope.querySelector('[data-action="locationQuery"]');
+  const commitLocationInput = (value) => {
+    state.locationQuery = String(value || "").trim();
+    runProcessing("search", () => {
+  state.visible = coursePageSize();
+      state.openCourseIds.clear();
+    });
+  };
+  locationInput?.addEventListener("input", (event) => {
+    state.locationQuery = event.target.value;
+  });
+  locationInput?.addEventListener("change", (event) => commitLocationInput(event.target.value));
+  locationInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    commitLocationInput(event.target.value);
+  });
+
+  scope.querySelectorAll("[data-income-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.income = button.dataset.incomeFilter || "Any income";
+      if (!state.query && state.income !== "Any income") state.sort = "Income potential";
+      runProcessing("search", () => {
+  state.visible = coursePageSize();
+        state.openCourseIds.clear();
+      });
+    });
+  });
+
+  scope.querySelectorAll('[data-action="clear"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      runProcessing("search", () => {
+        state.draft = "";
+        state.query = "";
+        state.level = "All levels";
+        state.courseType = "All course types";
+        state.area = "All study areas";
+        state.provider = "All providers";
+        state.mode = "All modes";
+        state.campus = "All campuses";
+        state.income = "Any income";
+        state.sort = "Relevance";
+        state.locationQuery = "";
+        state.estimatedAtar = "";
+        state.duration = "Any duration";
+        state.prerequisite = "Any prerequisite status";
+        state.pathway = "Any pathway status";
+        state.guaranteedEntry = "Any guaranteed-entry status";
+        state.degreeStructure = "Any degree structure";
+        state.advancedFiltersOpen = false;
+        state.allowAtarStretch = false;
+  state.visible = coursePageSize();
+        state.mobileFiltersOpen = false;
+        state.openCourseIds.clear();
+      });
+    });
+  });
+
+  scope.querySelector('[data-action="more"]')?.addEventListener("click", () => {
+    runProcessing("search", () => {
+  state.visible += coursePageSize();
+    });
+  });
+
+  scope.querySelectorAll("[data-search-example]").forEach((button) => {
+    button.addEventListener("click", () => {
+      runProcessing("search", () => {
+        state.draft = button.dataset.searchExample || "";
+        state.query = state.draft;
+  state.visible = coursePageSize();
+        state.openCourseIds.clear();
+      }, () => scheduleHashScroll("auto"));
+    });
+  });
+
+  scope.querySelectorAll("[data-field-provider]").forEach((button) => {
+    button.addEventListener("click", () => {
+      runProcessing("search", () => {
+        state.provider = button.dataset.fieldProvider || "All providers";
+        syncCampusWithProvider();
+  state.visible = coursePageSize();
+        state.openCourseIds.clear();
+      });
+    });
+  });
+
+  scope.querySelector('[data-action="relax-filter"]')?.addEventListener("click", () => {
+    runProcessing("search", relaxOneCourseFilter);
+  });
+  scope.querySelector('[data-action="show-atar-stretch"]')?.addEventListener("click", () => {
+    runProcessing("search", () => {
+      if (!state.estimatedAtar) state.estimatedAtar = "75";
+      state.allowAtarStretch = true;
+      state.sort = "Lowest selection rank";
+    });
+  });
+  scope.querySelector('[data-action="show-pathways"]')?.addEventListener("click", () => {
+    runProcessing("search", () => {
+      state.pathway = "Pathway mentioned";
+      state.advancedFiltersOpen = true;
+      state.estimatedAtar = "";
+      state.allowAtarStretch = false;
+    });
+  });
+  scope.querySelector('[data-action="browse-study-areas"]')?.addEventListener("click", () => {
+    runProcessing("search", () => {
+      state.query = "";
+      state.draft = "";
+      state.area = "All study areas";
+    });
+  });
+
+  bindCourseActionButtons(scope);
+  scope.querySelectorAll(".course-item[data-course-id]").forEach((courseItem) => {
+    const initialCourse = courseById.get(courseItem.dataset.courseId);
+    courseItem.querySelector("[data-toggle-course]")?.addEventListener("click", () => {
+      const id = courseItem.dataset.courseId;
+      if (!id) return;
+      if (state.openCourseIds.has(id)) state.openCourseIds.delete(id);
+      else state.openCourseIds.add(id);
+      renderCourseSearchPreservingViewport(`[data-course-id="${CSS.escape(id)}"]`);
+    });
+    if (state.openCourseIds.has(courseItem.dataset.courseId) && initialCourse) {
+      hydrateCourseDetail(courseItem, initialCourse);
+    }
+  });
+}
+
 function bindEvents() {
+  bindHashNavLinks();
+
   app.querySelector('[data-form="search"]')?.addEventListener("submit", (event) => {
     event.preventDefault();
     const value = event.target.search.value.trim();
     state.draft = value;
     runProcessing("search", () => {
       state.query = state.draft;
-      state.visible = 24;
+  state.visible = coursePageSize();
       state.openCourseIds.clear();
+    }, () => {
+      if (!isMobileViewport()) return;
+      const results = app.querySelector(".course-list, .course-empty-state");
+      if (!results) return;
+      const headerOffset = document.querySelector(".site-header")?.getBoundingClientRect().height || 72;
+      const targetTop = results.getBoundingClientRect().top + window.scrollY - headerOffset - 12;
+      window.scrollTo({ top: Math.max(0, targetTop), behavior: "auto" });
     });
   });
 
@@ -2036,42 +3297,88 @@ function bindEvents() {
     state.draft = event.target.value;
   });
 
-  ["level", "courseType", "area", "provider", "mode", "campus", "income", "sort"].forEach((key) => {
+  const syncMobileFilterPanel = (open) => {
+    state.mobileFiltersOpen = open;
+    const panel = app.querySelector("[data-course-filter-panel]");
+    panel?.classList.toggle("is-open", open);
+    if (open && panel) panel.scrollTop = 0;
+    app.querySelector('[data-action="toggle-course-filters"]')?.setAttribute("aria-expanded", String(open));
+  };
+  app.querySelector('[data-action="toggle-course-filters"]')?.addEventListener("click", () => {
+    syncMobileFilterPanel(!state.mobileFiltersOpen);
+  });
+  app.querySelectorAll('[data-action="close-course-filters"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      syncMobileFilterPanel(false);
+      if (button.classList.contains("mobile-filter-done") && hasActiveCourseSearch()) {
+        app.querySelector("#courses .course-list")?.scrollIntoView({ block: "start", behavior: prefersReducedMotion() || isMobileViewport() ? "auto" : "smooth" });
+      }
+    });
+  });
+
+  [
+    "level",
+    "courseType",
+    "area",
+    "provider",
+    "mode",
+    "campus",
+    "income",
+    "sort",
+    "duration",
+    "prerequisite",
+    "pathway",
+    "guaranteedEntry",
+    "degreeStructure"
+  ].forEach((key) => {
     app.querySelector(`[data-action="${key}"]`)?.addEventListener("change", (event) => {
       const value = event.target.value;
       state[key] = value;
+      if (key === "provider") syncCampusWithProvider();
       const update = () => {
-        state.visible = 24;
+  state.visible = coursePageSize();
         state.openCourseIds.clear();
       };
-      if (state.query) runProcessing("search", update, null, 220);
-      else {
-        update();
-        render();
-      }
+      runProcessing("search", update);
     });
+  });
+
+  const estimatedAtarInput = app.querySelector('[data-action="estimatedAtar"]');
+  const commitEstimatedAtar = (value) => {
+    runProcessing("search", () => {
+      const numberValue = Number(value);
+      state.estimatedAtar = value === "" || !Number.isFinite(numberValue)
+        ? ""
+        : String(Math.max(0, Math.min(99.95, numberValue)));
+      state.allowAtarStretch = false;
+  state.visible = coursePageSize();
+      state.openCourseIds.clear();
+    });
+  };
+  estimatedAtarInput?.addEventListener("change", (event) => commitEstimatedAtar(event.target.value));
+  estimatedAtarInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    commitEstimatedAtar(event.target.value);
+  });
+
+  app.querySelector(".advanced-filter-disclosure")?.addEventListener("toggle", (event) => {
+    state.advancedFiltersOpen = event.currentTarget.open;
   });
 
   const locationInput = app.querySelector('[data-action="locationQuery"]');
   const commitLocationInput = (value) => {
     state.locationQuery = String(value || "").trim();
     const update = () => {
-      state.visible = 24;
+  state.visible = coursePageSize();
       state.openCourseIds.clear();
     };
-    if (state.query) runProcessing("search", update, null, 220);
-    else {
-      update();
-      render();
-    }
+    runProcessing("search", update);
   };
   locationInput?.addEventListener("input", (event) => {
     state.locationQuery = event.target.value;
   });
   locationInput?.addEventListener("change", (event) => {
-    commitLocationInput(event.target.value);
-  });
-  locationInput?.addEventListener("blur", (event) => {
     commitLocationInput(event.target.value);
   });
   locationInput?.addEventListener("keydown", (event) => {
@@ -2087,81 +3394,143 @@ function bindEvents() {
       state.income = value;
       if (!state.query && value !== "Any income") state.sort = "Income potential";
       const update = () => {
-        state.visible = 24;
+  state.visible = coursePageSize();
         state.openCourseIds.clear();
       };
-      if (state.query) runProcessing("search", update, null, 220);
-      else {
-        update();
-        render();
-      }
+      runProcessing("search", update);
     });
   });
 
-  app.querySelector('[data-action="clear"]')?.addEventListener("click", () => {
-    state.draft = "";
-    state.query = "";
-    state.level = "All levels";
-    state.courseType = "All course types";
-    state.area = "All study areas";
-    state.provider = "All providers";
-    state.mode = "All modes";
-    state.campus = "All campuses";
-    state.income = "Any income";
-    state.sort = "Relevance";
-    state.locationQuery = "";
-    state.visible = 24;
-    state.openCourseIds.clear();
-    render();
+  app.querySelectorAll('[data-action="clear"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      runProcessing("search", () => {
+        state.draft = "";
+        state.query = "";
+        state.level = "All levels";
+        state.courseType = "All course types";
+        state.area = "All study areas";
+        state.provider = "All providers";
+        state.mode = "All modes";
+        state.campus = "All campuses";
+        state.income = "Any income";
+        state.sort = "Relevance";
+        state.locationQuery = "";
+        state.estimatedAtar = "";
+        state.duration = "Any duration";
+        state.prerequisite = "Any prerequisite status";
+        state.pathway = "Any pathway status";
+        state.guaranteedEntry = "Any guaranteed-entry status";
+        state.degreeStructure = "Any degree structure";
+        state.advancedFiltersOpen = false;
+        state.allowAtarStretch = false;
+  state.visible = coursePageSize();
+        state.mobileFiltersOpen = false;
+        state.openCourseIds.clear();
+      });
+    });
   });
 
   app.querySelector('[data-action="more"]')?.addEventListener("click", () => {
     runProcessing("search", () => {
-      state.visible += 24;
+  state.visible += coursePageSize();
     }, null, 180);
+  });
+
+  app.querySelectorAll("[data-search-example]").forEach((button) => {
+    button.addEventListener("click", () => {
+      runProcessing("search", () => {
+        state.draft = button.dataset.searchExample || "";
+        state.query = state.draft;
+  state.visible = coursePageSize();
+        state.openCourseIds.clear();
+      }, () => scheduleHashScroll("auto"));
+    });
+  });
+
+  app.querySelectorAll("[data-field-provider]").forEach((button) => {
+    button.addEventListener("click", () => {
+      runProcessing("search", () => {
+        state.provider = button.dataset.fieldProvider || "All providers";
+        syncCampusWithProvider();
+  state.visible = coursePageSize();
+        state.openCourseIds.clear();
+      });
+    });
+  });
+
+  app.querySelector('[data-action="relax-filter"]')?.addEventListener("click", () => {
+    runProcessing("search", relaxOneCourseFilter);
+  });
+  app.querySelector('[data-action="show-atar-stretch"]')?.addEventListener("click", () => {
+    runProcessing("search", () => {
+      if (!state.estimatedAtar) state.estimatedAtar = "75";
+      state.allowAtarStretch = true;
+      state.sort = "Lowest selection rank";
+    });
+  });
+  app.querySelector('[data-action="show-pathways"]')?.addEventListener("click", () => {
+    runProcessing("search", () => {
+      state.pathway = "Pathway mentioned";
+      state.advancedFiltersOpen = true;
+      state.estimatedAtar = "";
+      state.allowAtarStretch = false;
+    });
+  });
+  app.querySelector('[data-action="browse-study-areas"]')?.addEventListener("click", () => {
+    runProcessing("search", () => {
+      state.query = "";
+      state.draft = "";
+      state.area = "All study areas";
+    });
   });
 
   bindCourseActionButtons(app);
 
-  app.querySelectorAll(".course-item[data-course-id]").forEach((details) => {
-    details.addEventListener("toggle", () => {
-      const id = details.dataset.courseId;
+  app.querySelectorAll(".course-item[data-course-id]").forEach((courseItem) => {
+    const initialCourse = courseById.get(courseItem.dataset.courseId);
+    courseItem.querySelector("[data-toggle-course]")?.addEventListener("click", () => {
+      const id = courseItem.dataset.courseId;
       if (!id) return;
-      if (details.open) {
-        state.openCourseIds.add(id);
-        if (!details.querySelector(".course-detail")) {
-          const course = courseById.get(id);
-          if (course) {
-            details.insertAdjacentHTML("beforeend", renderCourseDetail(course, state.savedIds.includes(id), state.compareIds.includes(id)));
-            bindCourseActionButtons(details);
-          }
-        }
-      } else {
-        state.openCourseIds.delete(id);
-      }
+      if (state.openCourseIds.has(id)) state.openCourseIds.delete(id);
+      else state.openCourseIds.add(id);
+      renderCourseSearchPreservingViewport(`[data-course-id="${CSS.escape(id)}"]`);
     });
+    if (state.openCourseIds.has(courseItem.dataset.courseId) && initialCourse) hydrateCourseDetail(courseItem, initialCourse);
   });
 
   app.querySelectorAll("[data-remove-compare]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.compareIds = state.compareIds.filter((id) => id !== button.dataset.removeCompare);
-      persistIdList(storageKeys.compare, state.compareIds);
-      render();
+      const transitionTarget = button.closest(".course-compare") || button.closest(".compare-tray");
+      animateRemoval(transitionTarget, () => {
+        state.compareIds = state.compareIds.filter((id) => id !== button.dataset.removeCompare);
+        state.compareMessage = "Course removed from comparison. Your saved courses were not changed.";
+        persistIdList(storageKeys.compare, state.compareIds);
+        renderPreservingViewport("#saved");
+      });
     });
   });
 
   app.querySelector('[data-action="clear-saved"]')?.addEventListener("click", () => {
-    state.savedIds = [];
-    state.compareIds = [];
-    persistIdList(storageKeys.saved, state.savedIds);
-    persistIdList(storageKeys.compare, state.compareIds);
-    render();
+    animateRemoval(app.querySelector(".saved-course-list"), () => {
+      state.savedIds = [];
+      persistIdList(storageKeys.saved, state.savedIds);
+      renderPreservingViewport("#saved");
+    });
   });
 
   app.querySelector('[data-action="clear-compare"]')?.addEventListener("click", () => {
-    state.compareIds = [];
-    persistIdList(storageKeys.compare, state.compareIds);
-    render();
+    animateRemoval(app.querySelector(".course-compare"), () => {
+      state.compareIds = [];
+      state.compareOnlyDifferences = false;
+      state.compareMessage = "Comparison cleared. Your saved courses were not changed.";
+      persistIdList(storageKeys.compare, state.compareIds);
+      renderPreservingViewport("#saved");
+    });
+  });
+
+  app.querySelector('[data-action="toggle-compare-differences"]')?.addEventListener("click", () => {
+    state.compareOnlyDifferences = !state.compareOnlyDifferences;
+    renderPreservingViewport(".course-compare");
   });
 
   app.querySelector('[data-action="matcherProvider"]')?.addEventListener("change", (event) => {
@@ -2278,7 +3647,17 @@ function bindCourseActionButtons(root) {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      toggleSaved(button.dataset.saveCourse);
+      const courseId = button.dataset.saveCourse;
+      const savedCard = button.closest(".saved-course-list .course-result-card");
+      const removingSavedCard = state.savedIds.includes(courseId)
+        ? button.closest(".saved-course-list .course-result-card")
+        : null;
+      const anchorSelector = savedCard && !removingSavedCard
+        ? `#saved [data-course-id="${CSS.escape(courseId)}"]`
+        : removingSavedCard
+          ? "#saved"
+          : "";
+      animateRemoval(removingSavedCard, () => toggleSaved(courseId, anchorSelector));
     });
   });
 
@@ -2286,7 +3665,11 @@ function bindCourseActionButtons(root) {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      toggleCompare(button.dataset.compareCourse);
+      const courseId = button.dataset.compareCourse;
+      const anchorSelector = button.closest(".saved-course-list .course-result-card")
+        ? `#saved [data-course-id="${CSS.escape(courseId)}"]`
+        : "";
+      toggleCompare(courseId, anchorSelector);
     });
   });
 }
@@ -2317,28 +3700,71 @@ function scrollAskToBottom() {
   });
 }
 
-function scheduleHashScroll() {
+function scheduleHashScroll(behavior = "auto") {
   const hash = window.location.hash;
   if (!hash) return;
   const id = decodeURIComponent(hash.slice(1));
   if (!id) return;
-  requestAnimationFrame(() => requestAnimationFrame(() => settleHashScroll(id)));
+  requestAnimationFrame(() => requestAnimationFrame(() => scrollToHashTarget(id, behavior)));
 }
 
-function settleHashScroll(id, attempts = 0) {
+function bindHashNavLinks(scope = app) {
+  scope.querySelectorAll('a[href^="#"]').forEach((link) => {
+    link.addEventListener("click", (event) => {
+      const hash = link.getAttribute("href");
+      if (!hash || hash === "#") return;
+      event.preventDefault();
+      navigateToHash(hash);
+    });
+  });
+}
+
+function navigateToHash(hash) {
+  const id = decodeURIComponent(hash.slice(1));
+  if (!id || !document.getElementById(id)) return;
+  if (window.location.hash !== hash) {
+    history.pushState(null, "", hash);
+  }
+  updateHashNavCurrent(hash);
+  scrollToHashTarget(id, preferredHashScrollBehavior());
+  window.setTimeout(scheduleIncomeWarmup, isMobileViewport() ? 80 : 300);
+}
+
+function scrollToHashTarget(id, behavior = "smooth") {
   const target = document.getElementById(id);
   if (!target) return;
-  const header = app.querySelector(".topbar");
-  const headerBottom = header ? header.getBoundingClientRect().bottom : 0;
-  const targetTop = target.getBoundingClientRect().top;
-  const desiredTop = headerBottom + 16;
-  const delta = targetTop - desiredTop;
-  if (Math.abs(delta) > 3) {
-    window.scrollBy({ top: delta, behavior: "auto" });
-  }
-  if (attempts < 5) {
-    window.setTimeout(() => settleHashScroll(id, attempts + 1), 120);
-  }
+  const topbar = app.querySelector(".topbar");
+  const topOffset = (topbar?.getBoundingClientRect().height || 0) + 16;
+  const targetTop = target.getBoundingClientRect().top + window.scrollY - topOffset;
+  window.scrollTo({
+    top: Math.max(0, targetTop),
+    behavior: prefersReducedMotion() ? "auto" : behavior
+  });
+}
+
+function updateHashNavCurrent(hash = window.location.hash || "#courses") {
+  const activeHash = hash || "#courses";
+  document.documentElement.classList.toggle("compare-view-active", activeHash === "#saved");
+  app.querySelectorAll('.topnav a[href^="#"]').forEach((link) => {
+    if (link.getAttribute("href") === activeHash) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+}
+
+function isMobileViewport() {
+  return window.matchMedia?.("(max-width: 820px)")?.matches || window.innerWidth <= 820;
+}
+
+function coursePageSize() {
+  return isMobileViewport() ? 10 : 16;
+}
+
+function preferredHashScrollBehavior() {
+  return prefersReducedMotion() || isMobileViewport() ? "auto" : "smooth";
 }
 
 function select(key, label, options, value) {
@@ -2346,10 +3772,21 @@ function select(key, label, options, value) {
     <label>
       <span>${escapeHtml(label)}</span>
       <select data-action="${escapeHtml(key)}">
-        ${options.map((option) => `<option ${option === value ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}
+        ${options.map((option) => `
+          <option value="${escapeHtml(option)}" ${option === value ? "selected" : ""}>
+            ${escapeHtml(key === "provider" || key === "matcherProvider" ? providerOptionLabel(option) : option)}
+          </option>
+        `).join("")}
       </select>
     </label>
   `;
+}
+
+function providerOptionLabel(providerName) {
+  if (providerName === "University of Technology Sydney") {
+    return "UTS — University of Technology Sydney";
+  }
+  return providerName;
 }
 
 function textControl(key, label, value, placeholder) {
@@ -2357,6 +3794,24 @@ function textControl(key, label, value, placeholder) {
     <label>
       <span>${escapeHtml(label)}</span>
       <input data-action="${escapeHtml(key)}" type="text" autocomplete="off" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" />
+    </label>
+  `;
+}
+
+function numberControl(key, label, value, placeholder, min, max, step) {
+  return `
+    <label>
+      <span>${escapeHtml(label)}</span>
+      <input
+        data-action="${escapeHtml(key)}"
+        type="number"
+        inputmode="decimal"
+        value="${escapeHtml(value)}"
+        placeholder="${escapeHtml(placeholder)}"
+        min="${escapeHtml(min)}"
+        max="${escapeHtml(max)}"
+        step="${escapeHtml(step)}"
+      />
     </label>
   `;
 }
@@ -2371,11 +3826,11 @@ function renderDistanceNote() {
   return `<p class="distance-note">Distance sorting uses approximate straight-line distance from ${escapeHtml(origin.label)} to the listed campus suburb. Use it as a commute shortcut, then check transport time.</p>`;
 }
 
-function row(label, value) {
+function row(label, value, valueClass = "") {
   return `
     <div>
       <dt>${highlight(label)}</dt>
-      <dd>${fieldValue(value || "Not listed")}</dd>
+      <dd${valueClass ? ` class="${escapeHtml(valueClass)}"` : ""}>${fieldValue(value || "Not listed")}</dd>
     </div>
   `;
 }
@@ -2482,7 +3937,7 @@ function avoidedProviderGroups(value) {
 
 function courseMatchesProviderGroup(course, group) {
   if (!group) return false;
-  if (course.providerId === group.id) return true;
+  if (course.providerId) return course.providerId === group.id;
   const providerText = cleanSearchText(`${course.providerId} ${course.university}`);
   return group.aliases.some((alias) => textMentionsAlias(providerText, alias));
 }
@@ -2650,21 +4105,26 @@ async function advisorAiChatReply(message) {
   }
 }
 
-function searchScore(course, query) {
-  if (!query) return 0;
-  const cleanQuery = cleanSearchText(query);
+function searchScore(course, queryOrPlan) {
+  const plan = typeof queryOrPlan === "object" && queryOrPlan
+    ? queryOrPlan
+    : searchQueryPlan(queryOrPlan);
+  if (!plan.cleanQuery) return 0;
+  if (plan.provider && !courseMatchesProviderGroup(course, plan.provider)) return -1000000;
+  const cleanQuery = plan.contentQuery;
   const { title, code, provider, campus, area, summary, careers, primary } = courseSearchFields(course);
-  const words = tokenise(cleanQuery);
+  const words = plan.contentTokens;
   const orderedTitleMatch = words.length > 1 && new RegExp(words.map(escapeRegExp).join(".*")).test(title);
-  const topic = isBroadTopicQuery(cleanQuery) ? topicForQuery(cleanQuery) : null;
+  const topic = topicForQuery(cleanQuery);
   const incomeMinimum = incomeMinimumFromQuery(cleanQuery);
-  let score = 0;
+  let score = plan.provider ? 60000 : 0;
 
+  if (!cleanQuery) return score + (course.level === "undergraduate" ? 250 : 0);
   if (title === cleanQuery) score += 90000;
-  if (exactDegreeTitle(title, cleanQuery)) score += 85000;
+  if (exactDegreeTitle(title, cleanQuery)) score += topic ? 32000 : 85000;
   if (title.startsWith(cleanQuery)) score += 42000;
   if (phraseMatch(title, cleanQuery)) score += 36000 + Math.max(0, 5000 - title.indexOf(cleanQuery) * 120);
-  if (aliasMatch(title, cleanQuery)) score += 30000;
+  score += weightedAliasMatchScore(title, cleanQuery);
   if (orderedTitleMatch) score += 22000;
   if (code === cleanQuery) score += 6500;
   if (phraseMatch(provider, cleanQuery)) score += 1200;
@@ -2673,26 +4133,113 @@ function searchScore(course, query) {
   if (phraseMatch(careers, cleanQuery) || aliasMatch(careers, cleanQuery)) score += 2600;
   if (phraseMatch(summary, cleanQuery) || aliasMatch(summary, cleanQuery)) score += 80;
   if (topic) score += topicWeightedScore(course, topic) * 120;
-  score += words.filter((word) => tokenMatch(title, word)).length * 3500;
-  score += words.filter((word) => tokenMatch(primary, word)).length * 70;
+  const fields = courseSearchFields(course);
+  score += words.filter((word) => tokenSetMatch(fields.titleTokens, word)).length * 3500;
+  score += words.filter((word) => tokenSetMatch(fields.primaryTokens, word)).length * 70;
   if (course.level === "undergraduate") score += 250;
   if (numericRank(course.atar) !== null) score += 20;
+  if (!/\b(diploma|certificate|pathway|foundation)\b/.test(cleanQuery)) {
+    const qualification = courseTypeLabel(course);
+    if (qualification === "Bachelor" || qualification === "Honours" || qualification === "Double degree") score += 6000;
+    if (qualification === "Diploma" || qualification === "Advanced Diploma" || qualification === "Undergraduate Certificate") score -= 6000;
+  }
   if (incomeMinimum && courseIncomeOutcomes(course).some((job) => job.max >= incomeMinimum)) score += 3200;
   score += searchProviderQuality(course, cleanQuery);
   return score;
 }
 
-function courseSearchMatch(course, query) {
-  const primaryText = courseSearchFields(course).primary;
-  const words = tokenise(query);
-  const topic = isBroadTopicQuery(query) ? topicForQuery(query) : null;
+function courseSearchMatch(course, queryOrPlan) {
+  const plan = typeof queryOrPlan === "object" && queryOrPlan
+    ? queryOrPlan
+    : searchQueryPlan(queryOrPlan);
+  if (plan.provider && !courseMatchesProviderGroup(course, plan.provider)) return false;
+  if (!plan.contentQuery) return Boolean(plan.provider);
+  const fields = courseSearchFields(course);
+  const primaryText = fields.primary;
+  const query = plan.contentQuery;
+  const words = plan.contentTokens;
+  const topic = topicForQuery(query);
   const incomeMinimum = incomeMinimumFromQuery(query);
   if (phraseMatch(primaryText, query)) return true;
   if (aliasMatch(primaryText, query)) return true;
-  if (words.length > 1 && words.every((word) => tokenMatch(primaryText, word))) return true;
-  if (topic && topicWeightedScore(course, topic) > 0) return true;
+  if (words.length > 1 && words.every((word) => tokenSetMatch(fields.primaryTokens, word))) return true;
+  if (words.length === 1 && tokenSetMatch(fields.primaryTokens, words[0])) return true;
+  if (topic && topicWeightedScore(course, topic) >= 35) return true;
   if (incomeMinimum && courseIncomeOutcomes(course).some((job) => job.max >= incomeMinimum)) return true;
   return false;
+}
+
+function renderSearchInterpretation() {
+  const query = cleanSearchText(state.query);
+  if (!query) return "";
+  const plan = searchQueryPlan(query);
+  const notes = [];
+  if (plan.wasExpanded) {
+    notes.push(`Understood <strong>${escapeHtml(query)}</strong> as <strong>${escapeHtml(plan.expandedQuery)}</strong>`);
+  }
+  if (plan.wasCorrected) {
+    notes.push(`Corrected spelling to <strong>${escapeHtml(plan.correctedQuery)}</strong>`);
+  }
+  if (plan.provider) {
+    notes.push(`Searching <strong>${escapeHtml(plan.provider.label)}</strong>${plan.contentQuery ? ` for <strong>${escapeHtml(plan.contentQuery)}</strong>` : ""}`);
+  }
+  if (!notes.length) return "";
+  return `<p class="search-interpretation" role="status">${notes.join(" · ")}</p>`;
+}
+
+function currentSearchTopic() {
+  if (state.area !== "All study areas") {
+    return topicOptions.find((topic) => topic.label === state.area) || null;
+  }
+  const plan = state.query ? searchQueryPlan(state.query) : null;
+  return plan?.contentQuery ? topicForQuery(plan.contentQuery) : null;
+}
+
+function providerFieldSignal(course, topic = currentSearchTopic()) {
+  if (!topic) return null;
+  const curated = providerQuality[topic.label]?.[course.providerId];
+  if (curated) return { ...curated, curated: true };
+  const provider = allProviders.find((item) => item.id === course.providerId);
+  const inferred = provider ? providerProfile(provider).topicRows.find((row) => row.label === topic.label) : null;
+  return inferred ? { score: inferred.score, note: inferred.note, curated: false } : null;
+}
+
+function renderSearchFieldLeaders(results) {
+  const topic = currentSearchTopic();
+  if (!topic || state.provider !== "All providers") return "";
+  const seen = new Set();
+  const leaders = results
+    .map((course) => ({ course, signal: providerFieldSignal(course, topic) }))
+    .filter(({ course, signal }) => {
+      if (!signal || seen.has(course.providerId)) return false;
+      seen.add(course.providerId);
+      return true;
+    })
+    .sort((a, b) => b.signal.score - a.signal.score || courseProviderScore(b.course) - courseProviderScore(a.course))
+    .slice(0, 3);
+  if (leaders.length < 2) return "";
+  return `
+    <aside class="search-field-leaders" aria-label="Strong providers for ${escapeHtml(topic.label)}">
+      <div class="field-leader-intro">
+        <span>Strong providers for this field</span>
+        <strong>${escapeHtml(topic.label)}</strong>
+        <small>Course relevance comes first. Field strength then helps order similar matches.</small>
+      </div>
+      <div class="field-leader-list">
+        ${leaders.map(({ course, signal }, index) => `
+          <button type="button" class="field-leader" data-field-provider="${escapeHtml(course.university)}">
+            <span class="field-leader-rank">${index + 1}</span>
+            <img src="${escapeHtml(course.providerLogo)}" alt="" loading="lazy" decoding="async" />
+            <span>
+              <strong>${escapeHtml(course.university)}</strong>
+              <small>${escapeHtml(signal.note)}</small>
+            </span>
+          </button>
+        `).join("")}
+      </div>
+      <p>This is a Course Finder planning signal, not an official league table. It blends subject standing with relevant Sydney course availability. <a href="https://www.topuniversities.com/subject-rankings" target="_blank" rel="noreferrer">Check QS subject rankings ${icon("external")}</a></p>
+    </aside>
+  `;
 }
 
 function preferenceScore(course) {
@@ -2738,7 +4285,8 @@ function topicWeightedScore(course, topic) {
 }
 
 function topicForQuery(query) {
-  const clean = normalise(query);
+  const clean = cleanSearchText(query);
+  if (clean.length < 3) return null;
   return topicOptions.find((topic) => {
     if (topic.label === "All interests") return false;
     const label = normalise(topic.label);
@@ -2786,15 +4334,19 @@ function primaryCourseText(course) {
 
 function courseSearchFields(course) {
   if (searchFieldCache.has(course)) return searchFieldCache.get(course);
+  const title = cleanSearchText(course.name);
+  const primary = primaryCourseText(course);
   const fields = {
-    title: cleanSearchText(course.name),
+    title,
     code: cleanSearchText(course.courseCode),
     provider: cleanSearchText(course.university),
     campus: cleanSearchText(course.campus),
     area: cleanSearchText(course.area),
     summary: cleanSearchText(course.summary),
     careers: cleanSearchText(course.careers),
-    primary: primaryCourseText(course)
+    primary,
+    titleTokens: new Set(title.split(" ").filter(Boolean)),
+    primaryTokens: new Set(primary.split(" ").filter(Boolean))
   };
   searchFieldCache.set(course, fields);
   return fields;
@@ -2839,6 +4391,10 @@ function term(label) {
 function icon(name) {
   const paths = {
     search: '<path d="m21 21-4.2-4.2"/><circle cx="11" cy="11" r="7"/>',
+    filter: '<path d="M4 6h16"/><path d="M7 12h10"/><path d="M10 18h4"/>',
+    courses: '<path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+    university: '<path d="m3 9 9-5 9 5"/><path d="M5 10v8M9 10v8M15 10v8M19 10v8M3 20h18"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
     external: '<path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>'
   };
   return `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ""}</svg>`;
@@ -2860,6 +4416,183 @@ function cleanSearchText(value) {
     .trim();
 }
 
+const searchStopWords = new Set(["a", "an", "at", "course", "courses", "degree", "degrees", "for", "in", "of", "program", "programs", "study", "the"]);
+
+function searchQueryPlan(value) {
+  const cleanQuery = cleanSearchText(value);
+  if (!cleanQuery) {
+    return {
+      cacheKey: "",
+      cleanQuery: "",
+      correctedQuery: "",
+      expandedQuery: "",
+      contentQuery: "",
+      contentTokens: [],
+      provider: null,
+      providerAlias: "",
+      wasCorrected: false,
+      wasExpanded: false
+    };
+  }
+  if (searchQueryPlanCache.has(cleanQuery)) return searchQueryPlanCache.get(cleanQuery);
+
+  const lexicon = ensureSearchLexicon();
+  const expansion = expandSearchIntentQuery(cleanQuery);
+  const originalTokens = tokenise(expansion.query);
+  const correctedTokens = originalTokens.map((token) => correctSearchToken(token, lexicon));
+  const correctedQuery = correctedTokens.join(" ");
+  const providerMatch = providerSearchIntent(correctedQuery);
+  const providerAliasTokens = new Set(tokenise(providerMatch?.alias || ""));
+  const contentTokens = correctedTokens.filter((token) =>
+    !searchStopWords.has(token) && !providerAliasTokens.has(token)
+  );
+  const contentQuery = contentTokens.join(" ");
+  const plan = {
+    cacheKey: `${correctedQuery}|${providerMatch?.group.id || ""}|${contentQuery}`,
+    cleanQuery,
+    correctedQuery,
+    expandedQuery: expansion.query,
+    contentQuery,
+    contentTokens,
+    provider: providerMatch?.group || null,
+    providerAlias: providerMatch?.alias || "",
+    wasCorrected: correctedQuery !== expansion.query,
+    wasExpanded: expansion.query !== cleanQuery
+  };
+  searchQueryPlanCache.set(cleanQuery, plan);
+  return plan;
+}
+
+function expandSearchIntentQuery(value) {
+  const original = cleanSearchText(value);
+  let query = original;
+  for (const [alias, replacement] of searchIntentAliases) {
+    const pattern = new RegExp(`(^|\\s)${escapeRegExp(alias)}(?=\\s|$)`, "g");
+    query = query.replace(pattern, (_, leadingSpace) => `${leadingSpace}${replacement}`);
+  }
+  return { query: cleanSearchText(query), original };
+}
+
+function providerSearchIntent(cleanQuery) {
+  const matches = providerAliases.flatMap((group) =>
+    group.aliases.map((alias) => ({ group, alias: cleanSearchText(alias) }))
+  )
+    .filter(({ alias }) => textMentionsAlias(cleanQuery, alias))
+    .sort((a, b) => tokenise(b.alias).length - tokenise(a.alias).length || b.alias.length - a.alias.length);
+  return matches[0] || null;
+}
+
+function ensureSearchLexicon() {
+  if (searchLexicon) return searchLexicon;
+  const counts = new Map();
+  const add = (value, weight = 1) => {
+    tokenise(value).forEach((token) => {
+      if (!/^[a-z][a-z0-9]*$/.test(token) || token.length < 3) return;
+      counts.set(token, (counts.get(token) || 0) + weight);
+    });
+  };
+
+  Object.entries(searchAliases).forEach(([query, aliases]) => {
+    add(query, 40);
+    aliases.forEach((alias) => add(alias, 24));
+  });
+  providerAliases.forEach((group) => {
+    add(group.label, 50);
+    group.aliases.forEach((alias) => add(alias, 60));
+  });
+  topicOptions.forEach((topic) => {
+    add(topic.label, 30);
+    topic.keywords.forEach((keyword) => add(keyword, 20));
+  });
+  allCourses.forEach((course) => {
+    add(course.name, 10);
+    add(course.university, 8);
+    add(course.area, 3);
+    add(course.careers, 1);
+  });
+
+  searchLexicon = [...counts.entries()].map(([token, weight]) => ({ token, weight }));
+  return searchLexicon;
+}
+
+function correctSearchToken(token, lexicon = ensureSearchLexicon()) {
+  if (token.length < 4 || lexicon.some((entry) => entry.token === token)) return token;
+  const maxDistance = token.length >= 8 ? 2 : 1;
+  let best = null;
+  for (const candidate of lexicon) {
+    if (Math.abs(candidate.token.length - token.length) > maxDistance) continue;
+    const distance = boundedDamerauLevenshtein(token, candidate.token, maxDistance);
+    if (distance > maxDistance) continue;
+    if (!best
+      || distance < best.distance
+      || (distance === best.distance && candidate.weight > best.weight)
+      || (distance === best.distance && candidate.weight === best.weight && candidate.token.length < best.token.length)) {
+      best = { ...candidate, distance };
+    }
+  }
+  return best?.token || token;
+}
+
+function boundedDamerauLevenshtein(left, right, maximum) {
+  if (left === right) return 0;
+  if (Math.abs(left.length - right.length) > maximum) return maximum + 1;
+  const rows = Array.from({ length: left.length + 1 }, () => new Array(right.length + 1).fill(0));
+  for (let i = 0; i <= left.length; i += 1) rows[i][0] = i;
+  for (let j = 0; j <= right.length; j += 1) rows[0][j] = j;
+  for (let i = 1; i <= left.length; i += 1) {
+    let rowMinimum = maximum + 1;
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      rows[i][j] = Math.min(
+        rows[i - 1][j] + 1,
+        rows[i][j - 1] + 1,
+        rows[i - 1][j - 1] + cost
+      );
+      if (i > 1 && j > 1 && left[i - 1] === right[j - 2] && left[i - 2] === right[j - 1]) {
+        rows[i][j] = Math.min(rows[i][j], rows[i - 2][j - 2] + cost);
+      }
+      rowMinimum = Math.min(rowMinimum, rows[i][j]);
+    }
+    if (rowMinimum > maximum) return maximum + 1;
+  }
+  return rows[left.length][right.length];
+}
+
+function scheduleSearchLexiconWarmup() {
+  if (searchLexicon || searchLexiconWarmupScheduled) return;
+  searchLexiconWarmupScheduled = true;
+  const warm = () => {
+    searchLexiconWarmupScheduled = false;
+    ensureSearchLexicon();
+  };
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(warm, { timeout: 900 });
+  } else {
+    window.setTimeout(warm, 180);
+  }
+}
+
+function scheduleSearchIndexWarmup() {
+  if (searchIndexWarmupScheduled || searchIndexWarmupIndex >= allCourses.length) return;
+  searchIndexWarmupScheduled = true;
+  const warm = (deadline) => {
+    searchIndexWarmupScheduled = false;
+    let processed = 0;
+    while (searchIndexWarmupIndex < allCourses.length) {
+      courseSearchFields(allCourses[searchIndexWarmupIndex]);
+      searchIndexWarmupIndex += 1;
+      processed += 1;
+      if (processed >= 80 && (!deadline || deadline.timeRemaining() < 4)) break;
+    }
+    if (searchIndexWarmupIndex < allCourses.length) scheduleSearchIndexWarmup();
+  };
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(warm);
+  } else {
+    window.setTimeout(() => warm(null), 420);
+  }
+}
+
 function tokenise(value) {
   return cleanSearchText(value).split(" ").filter(Boolean);
 }
@@ -2878,6 +4611,10 @@ function tokenVariants(word) {
 
 function tokenMatch(text, word) {
   const tokens = new Set(tokenise(text));
+  return tokenSetMatch(tokens, word);
+}
+
+function tokenSetMatch(tokens, word) {
   return [...tokenVariants(cleanSearchText(word))].some((variant) => tokens.has(variant));
 }
 
@@ -2891,6 +4628,13 @@ function phraseMatch(text, phrase) {
 
 function aliasMatch(text, query) {
   return (searchAliases[cleanSearchText(query)] || []).some((alias) => phraseMatch(text, alias));
+}
+
+function weightedAliasMatchScore(text, query, maximum = 32000) {
+  const aliases = searchAliases[cleanSearchText(query)] || [];
+  const index = aliases.findIndex((alias) => phraseMatch(text, alias));
+  if (index < 0) return 0;
+  return Math.max(8000, maximum - index * 6000);
 }
 
 function exactDegreeTitle(title, query) {
@@ -2990,15 +4734,74 @@ function truncateText(value, limit) {
 }
 
 function providerOverallScore(provider) {
-  const qualityScores = Object.values(providerQuality)
-    .map((area) => area[provider.id]?.score)
-    .filter((score) => Number.isFinite(score));
-  if (qualityScores.length) return Math.round(qualityScores.reduce((sum, score) => sum + score, 0) / qualityScores.length);
-  return Math.min(70, 42 + (provider.courseCount || 0) * 0.08);
+  return providerProfile(provider).overall;
 }
 
 function providerProfile(provider) {
-  return `Profile score ${Math.round(providerOverallScore(provider))}/100`;
+  if (providerProfileCache.has(provider.id)) return providerProfileCache.get(provider.id);
+  const courses = allCourses.filter((course) => course.providerId === provider.id);
+  const topicRows = topicOptions
+    .filter((topic) => topic.keywords.length)
+    .map((topic) => {
+      const relevant = courses.filter((course) => topicMatch(course, topic));
+      const curated = providerQuality[topic.label]?.[provider.id];
+      if (!relevant.length && !curated) return null;
+      const evidenceScore = Math.min(76, 48 + Math.round(Math.log2(relevant.length + 1) * 7));
+      return {
+        label: topic.label,
+        count: relevant.length,
+        score: Math.round(curated?.score || evidenceScore),
+        note: curated?.note || `${relevant.length} matched Sydney course option${relevant.length === 1 ? "" : "s"} in this study area.`
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score || b.count - a.count || a.label.localeCompare(b.label));
+
+  const specialty = topicRows[0] || {
+    label: "General course availability",
+    count: courses.length,
+    score: Math.min(68, 46 + Math.round(Math.log2(courses.length + 1) * 6)),
+    note: `${courses.length} Sydney course option${courses.length === 1 ? "" : "s"} in the imported data.`
+  };
+  const topStrengths = topicRows.slice(0, 3).map((row) => row.score);
+  const strengthAverage = topStrengths.length
+    ? topStrengths.reduce((sum, score) => sum + score, 0) / topStrengths.length
+    : specialty.score;
+  const breadthScore = Math.min(96, 34 + topicRows.length * 5);
+  const choiceScore = Math.min(96, 42 + Math.round(Math.log2(courses.length + 1) * 8));
+  const modes = new Set(courses.flatMap((course) => course.modes || []));
+  const modeScore = Math.min(90, 44 + modes.size * 9);
+  const baseOverall = Math.max(40, Math.min(98, Math.round(
+    strengthAverage * 0.5 +
+    breadthScore * 0.22 +
+    choiceScore * 0.18 +
+    modeScore * 0.1
+  )));
+  const currentStanding = providerCurrentStanding[provider.id] || null;
+  const overall = currentStanding
+    ? Math.max(40, Math.min(98, Math.round(baseOverall * 0.75 + currentStanding.score * 0.25)))
+    : baseOverall;
+  const topicCount = topicRows.length;
+  const modeCopy = [
+    modes.has("Online") || modes.has("Distance") ? "online study" : "",
+    modes.has("Part-time") ? "part-time study" : ""
+  ].filter(Boolean);
+  const localOverallWhy = topicCount <= 2
+    ? `A more specialised provider with ${courses.length} Sydney course option${courses.length === 1 ? "" : "s"}, strongest in ${specialty.label}${modeCopy.length ? `, with ${modeCopy.join(" and ")}` : ""}.`
+    : `${courses.length} Sydney course options across ${topicCount} matched study areas${modeCopy.length ? `, including ${modeCopy.join(" and ")}` : ""}.`;
+  const overallWhy = currentStanding
+    ? `${localOverallWhy} Current standing signal: ${currentStanding.label}.`
+    : localOverallWhy;
+  const band = overall >= 85
+    ? "Leading breadth and field strength"
+    : overall >= 75
+      ? "Strong all-round profile"
+      : overall >= 65
+        ? "Solid Sydney profile"
+        : "Specialist or narrower profile";
+  const result = { overall, band, overallWhy, specialty, topicRows, currentStanding };
+  providerProfileCache.set(provider.id, result);
+  return result;
 }
 
 function savedCourseList() {
@@ -3011,30 +4814,49 @@ function compareCourseList() {
   return state.compareIds.map((id) => courseById.get(id));
 }
 
-function toggleSaved(id) {
+function toggleSaved(id, anchorSelector = "") {
   if (!courseById.has(id)) return;
   state.savedIds = state.savedIds.includes(id)
     ? state.savedIds.filter((item) => item !== id)
     : [...state.savedIds, id];
-  if (!state.savedIds.includes(id)) {
-    state.compareIds = state.compareIds.filter((item) => item !== id);
-    persistIdList(storageKeys.compare, state.compareIds);
-  }
   persistIdList(storageKeys.saved, state.savedIds);
-  render();
+  renderPreservingViewport(anchorSelector);
 }
 
-function toggleCompare(id) {
+function toggleCompare(id, anchorSelector = "") {
   if (!courseById.has(id)) return;
   if (state.compareIds.includes(id)) {
     state.compareIds = state.compareIds.filter((item) => item !== id);
+    state.compareMessage = "Course removed from comparison. Your saved courses were not changed.";
   } else {
-    state.compareIds = [...state.compareIds.filter((item) => item !== id), id].slice(-4);
-    if (!state.savedIds.includes(id)) state.savedIds = [...state.savedIds, id];
+    if (state.compareIds.length >= 3) {
+      state.compareMessage = "You can compare up to three courses. Remove one before adding another.";
+      renderPreservingViewport(anchorSelector);
+      return;
+    }
+    state.compareIds = [...state.compareIds, id];
+    state.compareMessage = "Course added to comparison. Save it separately if you want to keep it.";
   }
-  persistIdList(storageKeys.saved, state.savedIds);
   persistIdList(storageKeys.compare, state.compareIds);
-  render();
+  renderPreservingViewport(anchorSelector);
+}
+
+function migrateLegacySavedCompareState() {
+  try {
+    if (localStorage.getItem(storageKeys.separatedSavedCompare)) return;
+    const saved = JSON.parse(localStorage.getItem(storageKeys.saved) || "[]");
+    const compared = JSON.parse(localStorage.getItem(storageKeys.compare) || "[]");
+    if (Array.isArray(saved) && Array.isArray(compared) && compared.length) {
+      const legacyComparedIds = new Set(compared.filter((id) => typeof id === "string"));
+      localStorage.setItem(
+        storageKeys.saved,
+        JSON.stringify(saved.filter((id) => !legacyComparedIds.has(id)))
+      );
+    }
+    localStorage.setItem(storageKeys.separatedSavedCompare, "1");
+  } catch {
+    // Keep the existing session state when storage is blocked or malformed.
+  }
 }
 
 function readIdList(key) {
@@ -3064,8 +4886,10 @@ function courseProviderScore(course) {
 
 function searchProviderQuality(course, query) {
   const topic = topicForQuery(query);
-  const fieldScore = topic ? providerQuality[topic.label]?.[course.providerId]?.score : undefined;
-  return Number.isFinite(fieldScore) ? fieldScore : courseProviderScore(course) * 0.5;
+  if (!topic) return courseProviderScore(course) * 0.5;
+  const signal = providerFieldSignal(course, topic);
+  const overall = courseProviderScore(course);
+  return signal ? signal.score * 520 + overall * 35 : overall * 140;
 }
 
 function decodeHtmlEntities(value) {
@@ -3092,13 +4916,19 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+if ("scrollRestoration" in history) {
+  history.scrollRestoration = "manual";
+}
+
 render();
 scheduleHashScroll();
 loadAiStatus();
+scheduleSearchLexiconWarmup();
+scheduleSearchIndexWarmup();
 window.setTimeout(scheduleIncomeWarmup, 1400);
 
 window.addEventListener("hashchange", () => {
-  render();
-  scheduleHashScroll();
-  window.setTimeout(scheduleIncomeWarmup, 300);
+  updateHashNavCurrent();
+  scheduleHashScroll(preferredHashScrollBehavior());
+  window.setTimeout(scheduleIncomeWarmup, isMobileViewport() ? 80 : 300);
 });

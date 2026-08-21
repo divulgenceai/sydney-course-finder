@@ -102,3 +102,39 @@ test("Creative searches prioritise portfolio routes", () => {
   assert.equal(result.routes[0].id, "portfolio");
   assert.match(result.routes[0].steps.join(" "), /portfolio|interview|audition/i);
 });
+
+test("pathway provider recommendations change with the selected situation", () => {
+  const leftYear11 = buildPathwayResults({ goal: "software", situation: "left-y11" });
+  const finishedYear12 = buildPathwayResults({ goal: "software", situation: "finished-y12-no-atar" });
+
+  assert.equal(leftYear11.providers[0].id, "macquarie-college");
+  assert.ok(!leftYear11.providers.some((provider) => provider.id === "uts-college"));
+  assert.ok(finishedYear12.providers.some((provider) => provider.id === "uts-college"));
+  assert.notDeepEqual(
+    leftYear11.providers.map((provider) => provider.id),
+    finishedYear12.providers.map((provider) => provider.id)
+  );
+});
+
+test("provider recommendations explain the complete route and link to official information", () => {
+  const result = buildPathwayResults({ goal: "business", situation: "year12-no-atar" });
+
+  assert.ok(result.providers.length >= 3);
+  for (const provider of result.providers) {
+    assert.match(provider.why, /\S/);
+    assert.match(provider.program, /\S/);
+    assert.equal(provider.steps.length, 3);
+    assert.match(provider.requirements, /\S/);
+    assert.match(provider.evidence, /\S/);
+    assert.match(provider.officialUrl, /^https:\/\//);
+  }
+});
+
+test("creative and defence situations surface the relevant specialist provider routes", () => {
+  const creative = buildPathwayResults({ goal: "animation", situation: "creative" });
+  const defence = buildPathwayResults({ goal: "army officer cyber security", situation: "year10" });
+
+  assert.ok(creative.providers.some((provider) => provider.id === "sydney-pathways"));
+  assert.ok(creative.providers.some((provider) => provider.id === "uts-college"));
+  assert.deepEqual(defence.providers.map((provider) => provider.id), ["adfa"]);
+});
