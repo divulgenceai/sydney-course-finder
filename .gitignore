@@ -13,6 +13,7 @@ assets/logo-option-*.svg
 .superpowers/
 
 .env*
+!.env.example
 
 # Local tooling and generated Android outputs
 .codex-server/
