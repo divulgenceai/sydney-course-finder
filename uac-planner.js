@@ -317,11 +317,15 @@ function renderEarlyStageNotice() {
 
 function renderEarlyInstitutionCard(entry) {
   const provider = providerById.get(entry.institution.providerId);
+  const logo = entry.institution.logo || provider?.logo || "";
   const routes = entry.routes;
   return `
     <article class="early-institution-card">
       <header>
-        ${provider?.logo ? `<img src="${escapeAttribute(provider.logo)}" alt="" loading="lazy" />` : `<span class="early-provider-mark" aria-hidden="true">${escapeHtml(initials(entry.institution.name))}</span>`}
+        <span class="early-provider-logo">
+          <span class="early-provider-mark" aria-hidden="true">${escapeHtml(initials(entry.institution.name))}</span>
+          ${logo ? `<img src="${escapeAttribute(logo)}" alt="${escapeAttribute(entry.institution.name)} logo" loading="lazy" decoding="async" />` : ""}
+        </span>
         <div><h3>${escapeHtml(entry.institution.name)}</h3><p>${routes.length} verified route${routes.length === 1 ? "" : "s"}</p></div>
       </header>
       ${entry.institution.note ? `<p class="early-institution-note">${escapeHtml(entry.institution.note)}</p>` : ""}
@@ -345,11 +349,13 @@ function renderEarlyRoute(route) {
       <details>
         <summary>Who can apply and what to check</summary>
         <p><strong>Best fit:</strong> ${escapeHtml(route.audience)}</p>
+        ${route.courses?.length ? `<p><strong>Sydney courses currently listed:</strong> ${route.courses.map(escapeHtml).join(" · ")}</p>` : ""}
         ${route.note ? `<p><strong>Important:</strong> ${escapeHtml(route.note)}</p>` : ""}
       </details>
       <div class="early-route-actions">
         <a class="match-btn" href="${escapeAttribute(route.applyUrl)}" target="_blank" rel="noopener">${escapeHtml(route.actionLabel || "Start application")} ${externalIcon()}</a>
         ${route.infoUrl && route.infoUrl !== route.applyUrl ? `<a class="secondary-btn" href="${escapeAttribute(route.infoUrl)}" target="_blank" rel="noopener">Requirements ${externalIcon()}</a>` : ""}
+        ${route.courseUrl ? `<a class="secondary-btn" href="${escapeAttribute(route.courseUrl)}" target="_blank" rel="noopener">Sydney courses ${externalIcon()}</a>` : ""}
       </div>
     </section>
   `;
@@ -558,7 +564,7 @@ function updateCourseSuggestions() {
 }
 
 function bindPlannerLogoFallbacks(root) {
-  root.querySelectorAll(".preference-provider-logo img").forEach((image) => {
+  root.querySelectorAll(".preference-provider-logo img, .early-provider-logo img").forEach((image) => {
     if (image.dataset.fallbackBound === "true") return;
     image.dataset.fallbackBound = "true";
     const reveal = () => image.classList.add("is-loaded");
@@ -592,6 +598,7 @@ function updateEarlyResults() {
   if (count) count.textContent = `${results.length} institution${results.length === 1 ? "" : "s"}`;
   if (output) {
     output.innerHTML = results.length ? results.map(renderEarlyInstitutionCard).join("") : renderEarlyEmptyState();
+    bindPlannerLogoFallbacks(output);
     if (!prefersReducedMotion()) output.animate([{ opacity: 0.78 }, { opacity: 1 }], { duration: 150, easing: "ease-out" });
   }
 }

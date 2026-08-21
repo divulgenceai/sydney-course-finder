@@ -15,6 +15,7 @@ const guideIncomeCache = new WeakMap();
 let guidePrewarmStarted = false;
 let guidePrewarmIndex = 0;
 let guidePersistTimer = 0;
+let guideReadinessFrame = 0;
 let guideRestoreHandled = false;
 let guideDeckReviewOpen = false;
 let guideDeckReviewEditing = false;
@@ -510,7 +511,7 @@ function renderGuide(options = {}) {
 function renderGuideReadiness() {
   const hasYear = Boolean(guideState.year);
   const hasGoal = Boolean(String(guideState.dreamJob || guideState.dreamCourse || "").trim());
-  const hasDetail = guideState.subjectsWithMarks.some((row) => String(row.subject || "").trim() && String(row.mark || "").trim())
+  const hasDetail = guideState.subjectsWithMarks.some((row) => guideSubjectRowHasValue(row))
     || (guideState.schoolPerformance && guideState.schoolPerformance !== "Not sure yet")
     || Boolean(String(guideState.passions || "").trim());
   const readyCount = [hasYear, hasGoal, hasDetail].filter(Boolean).length;
@@ -687,7 +688,6 @@ function renderGuideSubjectMarks() {
 function renderGuideSubjectRow(row, index) {
   const selectedSubject = findGuideSubject(row.subject);
   const maxMark = selectedSubject?.units === 1 ? 50 : 100;
-  const projection = projectedMarkForGuideRow(row, selectedSubject);
   return `
     <div class="guide-mark-row" data-guide-row="${row.id}">
       <label class="guide-field">
@@ -698,14 +698,49 @@ function renderGuideSubjectRow(row, index) {
         </select>
       </label>
       ${renderGuideTermGrid(row, maxMark, index)}
-      <div class="guide-row-summary">
-        <span>Projected mark</span>
-        <strong>${projection.hasMarks ? `${escapeHtml(formatNumber(projection.mark, 1))}/${maxMark}` : "No marks yet"}</strong>
-        <small>${escapeHtml(projection.note)}</small>
-      </div>
+      ${renderGuideRowSummary(row, selectedSubject)}
       <button type="button" class="clear-btn guide-row-remove" data-guide-remove-subject="${row.id}" ${guideState.subjectsWithMarks.length <= 1 ? "disabled" : ""}>Remove</button>
     </div>
   `;
+}
+
+function renderGuideRowSummary(row, subject = findGuideSubject(row.subject)) {
+  const maxMark = subject?.units === 1 ? 50 : 100;
+  const projection = projectedMarkForGuideRow(row, subject);
+  return `
+    <div class="guide-row-summary" aria-live="polite">
+      <span>Projected mark</span>
+      <strong>${projection.hasMarks ? `${escapeHtml(formatNumber(projection.mark, 1))}/${maxMark}` : "No marks yet"}</strong>
+      <small>${escapeHtml(projection.note)}</small>
+    </div>
+  `;
+}
+
+function syncGuideSubjectRow(row, rowElement, options = {}) {
+  if (!row || !rowElement) return;
+  const subject = findGuideSubject(row.subject);
+  const maxMark = subject?.units === 1 ? 50 : 100;
+  if (options.updateLimits !== false) {
+    rowElement.querySelectorAll("[data-guide-term-key]").forEach((input) => {
+      input.max = String(maxMark);
+      input.placeholder = `/${maxMark}`;
+      const numeric = Number(input.value);
+      if (input.value !== "" && Number.isFinite(numeric) && numeric > maxMark) {
+        input.value = String(maxMark);
+        if (input.dataset.guideTermKey) row[input.dataset.guideTermKey] = input.value;
+      }
+    });
+  }
+  const current = rowElement.querySelector(".guide-row-summary");
+  if (current) {
+    const holder = document.createElement("div");
+    holder.innerHTML = renderGuideRowSummary(row, subject).trim();
+    if (holder.firstElementChild) current.replaceWith(holder.firstElementChild);
+  }
+  if (options.animate === false) return;
+  rowElement.classList.remove("is-updated");
+  requestAnimationFrame(() => rowElement.classList.add("is-updated"));
+  window.setTimeout(() => rowElement.classList.remove("is-updated"), 320);
 }
 
 function renderGuideTermGrid(row, maxMark, index) {
@@ -1265,6 +1300,7 @@ function bindGuideEvents() {
     if (target.dataset.guideTermRow) {
       const row = guideState.subjectsWithMarks.find((item) => item.id === target.dataset.guideTermRow);
       if (row && target.dataset.guideTermKey) row[target.dataset.guideTermKey] = target.value;
+      syncGuideSubjectRow(row, target.closest("[data-guide-row]"), { updateLimits: false, animate: false });
       scheduleGuideProgressSave();
       return;
     }
@@ -1284,8 +1320,8 @@ function bindGuideEvents() {
     if (target.dataset.guideSubjectRow) {
       const row = guideState.subjectsWithMarks.find((item) => item.id === target.dataset.guideSubjectRow);
       if (row) row.subject = target.value;
-      persistGuideProgress();
-      renderGuide({ preserveScroll: true });
+      syncGuideSubjectRow(row, target.closest("[data-guide-row]"));
+      scheduleGuideProgressSave();
       return;
     }
     if (!target.name) return;
@@ -1371,7 +1407,9 @@ function bindGuideEvents() {
 }
 
 function scheduleGuideReadinessSync() {
-  requestAnimationFrame(() => {
+  if (guideReadinessFrame) return;
+  guideReadinessFrame = requestAnimationFrame(() => {
+    guideReadinessFrame = 0;
     const current = guideApp.querySelector(".guide-readiness");
     if (!current) return;
     const holder = document.createElement("div");

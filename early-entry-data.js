@@ -201,16 +201,21 @@ window.earlyEntryCatalogue = {
       id: "LATROBE",
       name: "La Trobe University",
       aliases: ["La Trobe", "Aspire"],
+      logo: "https://en.wikipedia.org/wiki/Special:Redirect/file/La_Trobe_University_logo.svg",
+      note: "La Trobe is headquartered in Victoria, but it operates a Sydney CBD campus with undergraduate Business, Cybersecurity and Information Technology courses.",
       routes: [{
-        name: "Aspire programs",
+        name: "Aspire early offer program — Sydney course check",
         type: "Direct",
-        audience: "Current Year 12 students applying through Community Contribution, Academic Impact or Everyday Impact.",
-        assessment: "The route may assess volunteering and leadership, Year 11 results, or broader future impact; prerequisites still apply.",
-        dateSummary: "Applications close 4 September; conditional offers are released in October 2026.",
+        audience: "Current Year 12 students considering an Aspire-eligible La Trobe course. Confirm that the chosen course is offered at Sydney before applying.",
+        assessment: "Choose the Community, Academic or Everyday stream. Assessment can use volunteering and leadership, Year 11 results, or a diploma/pathway application; course eligibility and prerequisites still apply.",
+        dateSummary: "Applications close 4 September; conditional offers are released from 6 October 2026.",
         windows: [{ open: "2026-04-01", close: "2026-09-04", closeLabel: "Closes 4 Sep" }],
-        applyUrl: "https://www.latrobe.edu.au/study/aspire",
+        applyUrl: "https://applyaspire.latrobe.edu.au/",
         infoUrl: "https://www.latrobe.edu.au/study/aspire",
-        actionLabel: "Choose an Aspire route"
+        courseUrl: "https://www.latrobe.edu.au/sydney/study/courses",
+        courses: ["Bachelor of Business", "Bachelor of Cybersecurity", "Bachelor of Information Technology"],
+        note: "For a Sydney Bachelor degree, current Year 12 applicants apply through UAC and select the Sydney campus. Aspire availability can differ by course, so verify the selected Sydney course inside the Aspire application.",
+        actionLabel: "Open Aspire application"
       }]
     },
     {
