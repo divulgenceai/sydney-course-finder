@@ -516,6 +516,7 @@ test("Saving and comparing courses remain independent without removal scroll jum
 test("Course search exposes essential filters, collapsed advanced filters and useful empty actions", () => {
   const app = read("app.js");
   const css = read("styles.css");
+  const theme = read("theme.js");
 
   for (const label of ["Search matching", "Study area", "Estimated ATAR", "Provider", "Campus", "Course duration", "Mode"]) {
     assert.match(app, new RegExp(`"${label}"`));
@@ -530,6 +531,8 @@ test("Course search exposes essential filters, collapsed advanced filters and us
   assert.match(app, /Browse all study areas/);
   assert.match(app, /Reset all filters/);
   assert.match(app, /querySelectorAll\('\[data-action="close-course-filters"\]'\)/);
+  assert.match(theme, /sibling === options\.backdrop/);
+  assert.match(theme, /backdrop: panel\.previousElementSibling\?\.matches\('\.course-filter-scrim'\)/);
   assert.match(css, /@media \(min-width: 821px\)[\s\S]*\.search-form \.mobile-filter-toggle[\s\S]*display:\s*flex/);
   assert.match(css, /\.course-filter-panel\.is-open\s*{[\s\S]*visibility:\s*visible/);
   assert.match(css, /html:has\(\.course-filter-panel\.is-open\) \.compare-tray,[\s\S]*visibility:\s*hidden/);
