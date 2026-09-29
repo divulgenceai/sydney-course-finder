@@ -563,7 +563,11 @@
   function buildPersonalPlanView(input = {}, snapshot = null, now = new Date()) {
     const state = createGuideState(input);
     const milestones = buildPlanMilestones(state, now);
-    const plan = snapshot && typeof snapshot === "object" ? snapshot : null;
+    const plan = snapshot && typeof snapshot === "object" ? { ...snapshot } : null;
+    // Old saved plans may contain jobs selected from broad summary text.
+    if (plan?.primary && !/\b(medicine|surgery|clinical medicine)\b/i.test(plan.primary.name || '')) {
+      plan.jobs = (plan.jobs || []).filter((job) => !/^medical practitioner$/i.test(job.title || ''));
+    }
     if (!plan?.primary?.name) {
       return {
         ...milestones,

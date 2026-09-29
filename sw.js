@@ -1,6 +1,8 @@
-const CACHE_NAME = "sydney-course-finder-app-v67";
+const CACHE_NAME = "sydney-course-finder-app-v78";
 const ROUTE_FALLBACKS = {
   "/": "/index.html",
+  "/universities": "/universities.html",
+  "/library": "/library.html",
   "/index": "/index.html",
   "/guide": "/guide.html",
   "/pathways": "/pathways.html",
@@ -25,20 +27,9 @@ const APP_SHELL = [
   "/index.html",
   "/styles.css",
   "/mobile.css",
+  "/stress-fixes.css",
   "/theme.js",
-  "/asset-refresh-v67.js",
-  "/toolkit.js",
-  "/course-details.js",
-  "/app.js",
-  "/advisor.html",
-  "/advisor.js",
-  "/university-forms.html",
-  "/university-forms-data.js",
-  "/university-forms.js",
-  "/uac-planner.html",
-  "/early-entry-data.js",
-  "/uac-planner.js",
-  "/vendor/pdf-lib.min.js",
+  "/asset-refresh-v78.js",
   "/manifest.webmanifest",
   "/assets/logo-light.svg",
   "/assets/logo-dark.svg",
@@ -62,7 +53,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith('sydney-course-finder-app-') && key !== CACHE_NAME).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });
@@ -86,7 +77,8 @@ self.addEventListener("fetch", (event) => {
 
   if (isAppShellAsset(url)) {
     event.respondWith(cacheFirstThenRefresh(request));
-    event.waitUntil(refreshCache(request).catch(() => undefined));
+    // Versioned URLs are immutable. Avoid downloading each asset twice on first use.
+    if (!url.searchParams.has('v')) event.waitUntil(refreshCache(request).catch(() => undefined));
     return;
   }
 

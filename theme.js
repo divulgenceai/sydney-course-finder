@@ -2,6 +2,11 @@
   const storageKey = "sydneyCourseFinder.theme";
   const guidePlanSnapshotKey = "sydneyCourseFinder.guidePlanSnapshot";
   const appSurfaceKey = "sydneyCourseFinder.appSurface";
+  const localProviderLogos = new Set(["AIT", "AMPA", "ACAP", "AIE", "ACU", "ACPE", "CA", "AIM", "AVON", "CSU", "CQU", "EXLSI", "GU", "ICMS", "JMC", "MQ", "MIT", "NAS", "SAE", "SCU", "TUA", "UC", "UON", "UND", "USYD", "UTS", "UOW", "UNSW", "UNSWC", "UTSC", "WS"]);
+  function providerLogo(id, fallback) {
+    const code = String(id || "").toUpperCase();
+    return localProviderLogos.has(code) ? `./assets/providers/${code.toLowerCase()}.svg` : fallback;
+  }
   const root = document.documentElement;
   const logoSources = {
     light: "./assets/logo-light.svg",
@@ -41,8 +46,8 @@
   const mobilePrimaryDestinations = {
     Courses: "./#courses",
     Tools: "./#tools",
-    Universities: "./#providers",
-    Saved: "./#saved",
+    Universities: "./universities",
+    Saved: "./library",
     About: "./#about"
   };
   const mobilePrimaryItems = mobilePrimaryLabels.map((label) => ({
@@ -209,8 +214,8 @@
     return `
       <a href="./#courses">Courses</a>
       <a href="./#tools">Tools</a>
-      <a href="./#providers">Universities</a>
-      <a href="./#saved">Saved${saved ? ` (${saved})` : ""}</a>
+      <a href="./universities">Universities</a>
+      <a href="./library">Saved${saved ? ` (${saved})` : ""}</a>
       <a href="./#about">About</a>
     `;
   }
@@ -240,6 +245,8 @@
       "/plan"
     ]);
     if (toolPaths.has(path)) return "Tools";
+    if (path === '/universities') return 'Universities';
+    if (path === '/library') return 'Saved';
     if (path === "/" && homeScrollSection) return homeScrollSection;
     if (location.hash === "#providers") return "Universities";
     if (location.hash === "#tools") return "Tools";
@@ -399,7 +406,7 @@
   }
 
   function markUiReady() {
-    window.setTimeout(() => root.classList.add("ui-ready"), 460);
+    window.setTimeout(() => root.classList.add("ui-ready"), 180);
   }
 
   function pulseFastSectionJump() {
@@ -430,7 +437,7 @@
     markNavPressed(link);
     root.classList.add("is-route-pending");
     window.clearTimeout(routePendingTimer);
-    routePendingTimer = window.setTimeout(() => root.classList.remove("is-route-pending"), 2200);
+    routePendingTimer = window.setTimeout(() => root.classList.remove("is-route-pending"), 900);
   }
 
   function setMobileNavExpanded(expanded) {
@@ -464,7 +471,7 @@
     if (sameDocument && target.hash) {
       const hash = target.hash;
       if (current.hash === hash) {
-        document.querySelector(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        document.querySelector(hash)?.scrollIntoView({ behavior: "instant", block: "start" });
       } else {
         location.hash = hash;
       }
@@ -686,6 +693,7 @@
   function enhanceAndroidSelects(scope = document) {
     if (appSurface !== "android" || !isMobileNavViewport()) return;
     scope.querySelectorAll("select:not([data-app-select-ready])").forEach((select) => {
+      if (select.closest('[data-course-filter-panel], [role="dialog"]')) return;
       select.dataset.appSelectReady = "true";
       select.classList.add("app-native-select");
       const trigger = document.createElement("button");
@@ -716,6 +724,79 @@
       .replaceAll("'", "&#39;");
   }
 
+  let activeDialog = null;
+
+  function closeDialog(restoreFocus = true) {
+    if (!activeDialog) return;
+    const previous = activeDialog;
+    activeDialog = null;
+    previous.inertElements.forEach(([element, inert]) => { element.inert = inert; });
+    if (restoreFocus) {
+      const trigger = previous.returnFocus?.isConnected ? previous.returnFocus : document.querySelector(previous.returnSelector || '[data-action="toggle-course-filters"]');
+      trigger?.focus({ preventScroll: true });
+    }
+  }
+
+  function openDialog(element, options = {}) {
+    if (!element) return;
+    if (activeDialog?.element === element) return;
+    const returnFocus = activeDialog?.returnFocus || document.activeElement;
+    const returnSelector = options.returnSelector || activeDialog?.returnSelector;
+    const focusAction = activeDialog?.element?.contains(document.activeElement) ? document.activeElement?.dataset.action : null;
+    closeDialog(false);
+    const inertElements = [];
+    let branch = element;
+    while (branch && branch !== document.body) {
+      for (const sibling of branch.parentElement?.children || []) {
+        if (sibling === branch || /^(SCRIPT|STYLE|LINK)$/.test(sibling.tagName)) continue;
+        inertElements.push([sibling, sibling.inert]);
+        sibling.inert = true;
+      }
+      branch = branch.parentElement;
+    }
+    element.tabIndex = -1;
+    activeDialog = { element, returnFocus, returnSelector, inertElements, onClose: options.onClose };
+    const field = focusAction ? element.querySelector(`[data-action="${CSS.escape(focusAction)}"]`) : null;
+    (field || element.querySelector('button, input, select, textarea, a[href]') || element).focus({ preventScroll: true });
+  }
+
+  function syncFilterDialog() {
+    const panel = document.querySelector('[data-course-filter-panel]');
+    const isModal = panel?.classList.contains('is-open') && matchMedia('(max-width: 820px)').matches;
+    if (isModal) {
+      panel.setAttribute('role', 'dialog');
+      panel.setAttribute('aria-modal', 'true');
+      panel.setAttribute('aria-label', 'Filter courses');
+      openDialog(panel, {
+        returnSelector: '[data-action="toggle-course-filters"]',
+        onClose: () => document.querySelector('[data-action="close-course-filters"]')?.click()
+      });
+    } else {
+      if (activeDialog?.element.matches('[data-course-filter-panel]')) closeDialog();
+      panel?.removeAttribute('role');
+      panel?.removeAttribute('aria-modal');
+    }
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (!activeDialog) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      activeDialog.onClose?.();
+    } else if (event.key === 'Tab') {
+      const { element } = activeDialog;
+      const focusable = [...element.querySelectorAll('button, a[href], input, select, textarea, [tabindex]')]
+        .filter((item) => !item.disabled && item.tabIndex >= 0 && item.getClientRects().length && !item.closest('[inert]'));
+      const index = focusable.indexOf(document.activeElement);
+      if (!focusable.length || (event.shiftKey ? index <= 0 : index < 0 || index === focusable.length - 1)) {
+        event.preventDefault();
+        (focusable[event.shiftKey ? focusable.length - 1 : 0] || element).focus();
+      }
+    }
+  }, true);
+  window.addEventListener('resize', syncFilterDialog);
+
   function bind(scope = document) {
     syncButtons();
     syncBrandAssets(currentTheme());
@@ -731,6 +812,7 @@
     enhanceAndroidSelects(scope);
     window.courseFinderToolkit?.enhance?.(scope);
     syncMobilePrimaryCurrent();
+    syncFilterDialog();
   }
 
   function handleMobileBack() {
@@ -813,6 +895,10 @@
   });
 
   window.courseFinderTheme = {
+    providerLogo,
+    openDialog,
+    closeDialog,
+    syncFilterDialog,
     current: currentTheme,
     apply: applyTheme,
     toggle: toggleTheme,

@@ -9,8 +9,14 @@ const providerCourseCounts = allCourses.reduce((counts, course) => {
 }, new Map());
 const allProviders = (window.uacProviders || []).map((provider) => ({
   ...provider,
+  logo: window.courseFinderTheme?.providerLogo(provider.id, provider.logo) || provider.logo,
+  sectorInfo: window.courseFinderProviderSectors?.get(provider.id) || { sector: "unclassified", label: "Provider type under review" },
   courseCount: providerCourseCounts.get(provider.id) || 0
 }));
+const providerSectorGroups = [...(window.courseFinderProviderSectors?.groups || [])];
+if (allProviders.some(provider => provider.sectorInfo.sector === "unclassified")) {
+  providerSectorGroups.push({ id: "unclassified", title: "Other providers", shortTitle: "Under review", description: "Provider type is being checked; these courses remain available." });
+}
 const meta = window.uacImportMeta || {};
 const courseTextCache = new WeakMap();
 const primaryCourseTextCache = new WeakMap();
@@ -27,6 +33,7 @@ let searchIndexWarmupScheduled = false;
 let incomeWarmupIndex = 0;
 let incomeWarmupScheduled = false;
 let renderPass = 0;
+let courseResultSettleTimer = 0;
 
 const levelLabels = {
   undergraduate: "Undergraduate",
@@ -170,20 +177,50 @@ const providerCurrentStanding = {
   }
 };
 
-const providerAliases = [
-  { id: "WS", label: "Western Sydney University", aliases: ["wsu", "western sydney university", "western sydney uni", "western sydney"] },
-  { id: "UTS", label: "University of Technology Sydney", aliases: ["uts", "university of technology sydney", "technology sydney"] },
-  { id: "UTSC", label: "UTS College", aliases: ["uts college", "uts insearch", "insearch"] },
-  { id: "UNSW", label: "UNSW", aliases: ["unsw", "university of new south wales", "new south wales uni"] },
-  { id: "UNSWC", label: "UNSW College", aliases: ["unsw college", "unsw global"] },
-  { id: "USYD", label: "University of Sydney", aliases: ["usyd", "sydney uni", "sydney university", "university of sydney"] },
-  { id: "MQ", label: "Macquarie University", aliases: ["mq", "macquarie", "macquarie university"] },
-  { id: "ACU", label: "Australian Catholic University", aliases: ["acu", "australian catholic university"] },
-  { id: "SCU", label: "Southern Cross University", aliases: ["scu", "southern cross", "southern cross university"] },
-  { id: "CQU", label: "CQUniversity", aliases: ["cqu", "cquniversity", "central queensland university"] },
-  { id: "ICMS", label: "International College of Management, Sydney", aliases: ["icms", "international college of management"] },
-  { id: "AIT", label: "Academy of Interactive Technology", aliases: ["ait", "academy of interactive technology"] }
-];
+const providerAliasOverrides = {
+  AIT: ["academy of interactive technology"],
+  AMPA: ["academy of music and performing arts"],
+  ACAP: ["australian college of applied professions", "acap university college"],
+  AIE: ["aie institute", "academy of interactive entertainment"],
+  ACU: ["australian catholic university", "australian catholic uni"],
+  ACPE: ["australian college of physical education"],
+  CA: ["collarts", "australian college of the arts"],
+  AIM: ["australian institute of music"],
+  AVON: ["avu", "avondale", "avondale university"],
+  CSU: ["charles sturt", "charles sturt university"],
+  CQU: ["cquniversity", "central queensland university", "cq university"],
+  EXLSI: ["excelsia", "excelsia university college"],
+  GU: ["griffith", "griffith university"],
+  ICMS: ["international college of management", "international college of management sydney"],
+  JMC: ["jmc academy"],
+  MQ: ["mqu", "macquarie", "macquarie university", "macquarie uni"],
+  MIT: ["mit sydney", "melbourne institute of technology", "melbourne institute of technology sydney"],
+  NAS: ["national art school"],
+  SPJGM: ["sp jain", "s p jain", "sp jain global", "s p jain school of global management"],
+  SAE: ["sae", "sae university college"],
+  SCU: ["southern cross", "southern cross university"],
+  TUA: ["torrens", "torrens university", "torrens university australia"],
+  UC: ["canberra uni", "university of canberra"],
+  UON: ["newcastle uni", "newcastle university", "university of newcastle"],
+  UND: ["unda", "notre dame", "notre dame university", "university of notre dame australia"],
+  USYD: ["sydney uni", "sydney university", "university of sydney"],
+  UTS: ["university of technology sydney", "technology sydney"],
+  UOW: ["wollongong uni", "wollongong university", "university of wollongong"],
+  UNSW: ["university of new south wales", "new south wales uni", "unsw sydney"],
+  UNSWC: ["unsw college", "unsw global"],
+  UTSC: ["uts college", "uts insearch", "insearch"],
+  WS: ["wsu", "western sydney university", "western sydney uni", "western sydney"]
+};
+
+const providerAliases = allProviders.map((provider) => ({
+  id: provider.id,
+  label: provider.name,
+  aliases: [...new Set([
+    cleanSearchText(provider.id),
+    cleanSearchText(provider.name),
+    ...(providerAliasOverrides[provider.id] || []).map(cleanSearchText)
+  ].filter(Boolean))]
+}));
 
 const rankCodeMeanings = {
   NC: "New course; no published selection-rank profile yet.",
@@ -244,6 +281,10 @@ const searchAliases = {
   social: ["social work", "community", "human services", "welfare"],
   "social work": ["social work", "community", "human services", "welfare"]
 };
+
+const titlePreciseSearchIntents = new Set([
+  "computer science"
+]);
 
 const searchIntentAliases = [
   ["comp sci", "computer science"],
@@ -377,6 +418,7 @@ const courseTypeOptions = [
 ];
 const studyAreaOptions = ["All study areas", ...topicOptions.filter((topic) => topic.label !== "All interests").map((topic) => topic.label)];
 const searchSortOptions = ["Relevance", "Closest campus", "Study area fit", "Lowest selection rank", "Highest selection rank", "Income potential"];
+const searchMatchOptions = ["Smart relevance", "Exact title results"];
 const durationOptions = ["Any duration", "1 year or less", "2 years", "3 years", "4 years or more"];
 const prerequisiteOptions = ["Any prerequisite status", "No listed prerequisites", "Has subject prerequisites", "Has additional entry criteria"];
 const pathwayFilterOptions = ["Any pathway status", "Pathway mentioned", "Direct degree results"];
@@ -596,6 +638,7 @@ const state = {
   campus: "All campuses",
   income: "Any income",
   sort: "Relevance",
+  matchMode: "Smart relevance",
   locationQuery: "",
   estimatedAtar: "",
   duration: "Any duration",
@@ -673,12 +716,14 @@ function syncCampusWithProvider() {
 
 function render() {
   if (renderPass > 0) app.classList.add("is-state-update");
+  const cataloguePage = location.pathname.replace(/\.html$/, '').replace(/\/$/, '');
+  const dedicatedCatalogue = cataloguePage === '/universities' || cataloguePage === '/library';
   syncCampusWithProvider();
-  const results = filteredCourses();
+  const results = dedicatedCatalogue ? [] : filteredCourses();
   const searchActive = hasActiveCourseSearch();
   const campusOptions = campusOptionsForProvider(state.provider);
-  const savedCourses = savedCourseList();
-  const compareCourses = compareCourseList();
+  const savedCourses = cataloguePage === '/universities' ? [] : savedCourseList();
+  const compareCourses = cataloguePage === '/universities' ? [] : compareCourseList();
   app.innerHTML = `
     <a class="skip-link" href="#courses">Skip to course search</a>
     <header class="topbar">
@@ -698,6 +743,7 @@ function render() {
     ${renderAppProgress()}
 
     <main id="main-content">
+      ${!dedicatedCatalogue ? `
       <section class="hero course-finder-hero" aria-labelledby="page-title">
         <div class="hero-copy">
           <h1 id="page-title"><span class="desktop-only">Find the right Sydney university course</span><span class="mobile-only">Find your Sydney course</span></h1>
@@ -741,20 +787,24 @@ function render() {
           <a href="./advisor">Find a direction <span aria-hidden="true">→</span></a>
         </aside>
       </section>
+      ` : ''}
 
+      ${cataloguePage !== '/library' ? `
       <section id="providers" class="panel">
         <div class="panel-head">
           <div>
             <h2>Universities</h2>
-            <p>Browse Sydney universities and providers, with an overall site profile and a separate score for the area each provider is strongest in.</p>
+            <p>Compare public and private institutions in separate lists. Each has an overall site profile and a study-area fit score.</p>
           </div>
           <span>${allProviders.length} providers</span>
         </div>
-        ${renderProviderScoreExplainer()}
-        ${renderTopProviderBlock()}
-        <div class="provider-grid">${rankedProviders.map(renderProvider).join("")}</div>
+        ${cataloguePage === '/universities' ? renderProviderScoreExplainer() + renderTopProviderBlock() : ''}
+        ${renderProviderDirectory(cataloguePage === '/universities')}
+        ${cataloguePage !== '/universities' ? '<a class="secondary-btn" href="./universities">Browse all universities and providers →</a>' : ''}
       </section>
+      ` : ''}
 
+      ${cataloguePage !== '/universities' ? `
       <section id="saved" class="panel saved-panel">
         <div class="panel-head">
           <div>
@@ -775,10 +825,13 @@ function render() {
           ${savedCourses.length ? `<button class="clear-btn" type="button" data-action="clear-saved">Clear saved</button>` : ""}
         </div>
         <div class="course-list compact saved-course-list">
-          ${savedCourses.length ? savedCourses.map((course, index) => renderCourse(course, "", index)).join("") : renderSavedEmpty()}
+          ${savedCourses.length ? (cataloguePage === '/library' ? savedCourses : savedCourses.slice(0, 3)).map((course, index) => renderCourse(course, "", index)).join("") : renderSavedEmpty()}
         </div>
+        ${cataloguePage !== '/library' ? '<a class="secondary-btn" href="./library">Open full course library →</a>' : ''}
       </section>
+      ` : ''}
 
+      ${!dedicatedCatalogue ? `
       <section id="about" class="panel about-panel">
         <div class="panel-head">
           <div>
@@ -792,8 +845,9 @@ function render() {
           <div><strong>Official confirmation</strong><span>Every result links to UAC or the provider. Previous entry results never guarantee a future offer.</span></div>
         </div>
       </section>
+      ` : ''}
     </main>
-    ${renderCompareTray(compareCourses)}
+    ${!dedicatedCatalogue ? renderCompareTray(compareCourses) : ''}
     <footer class="site-footer" id="faq">
       <div>
         <strong>Sydney Course Finder</strong>
@@ -810,6 +864,16 @@ function render() {
       </nav>
     </footer>
   `;
+  if (cataloguePage === '/universities' || cataloguePage === '/library') {
+    const targetId = cataloguePage === '/universities' ? 'providers' : 'saved';
+    const heading = app.querySelector(`#${targetId} h2`);
+    if (heading) { const h1 = document.createElement('h1'); h1.textContent = heading.textContent; heading.replaceWith(h1); }
+    app.querySelectorAll('a[href^="#"]').forEach((link) => {
+      if (link.hash !== `#${targetId}` && !app.querySelector(link.hash || '#main-content')) link.setAttribute('href', `./${link.hash}`);
+    });
+    const skip = app.querySelector('.skip-link');
+    if (skip) { skip.href = `#${targetId}`; skip.textContent = 'Skip to content'; }
+  }
   bindEvents();
   window.courseFinderTheme?.bind?.(app);
   renderPass += 1;
@@ -825,7 +889,7 @@ function renderCourseSearchPanel(
       <div class="panel-head">
         <div>
           <h2 id="course-search-title">Search courses</h2>
-          <p>Start with a course, career or university, then narrow the results. Filters work even when the search box is empty.</p>
+          <p>Start with a course, career or university. Open Filters only when needed. Filters work even when the search box is empty.</p>
         </div>
         <span class="result-count" role="status" aria-live="polite">${searchActive ? `${number(results.length)} results` : "Ready to search"}</span>
       </div>
@@ -850,9 +914,10 @@ function renderCourseSearchPanel(
             <strong>Filter courses</strong>
             <span>${activeCourseFilterCount()} active</span>
           </div>
-          <button type="button" data-action="clear">Reset</button>
+          <button type="button" data-action="clear">Reset all filters</button>
         </div>
         <div class="filters essential-filters">
+          ${select("matchMode", "Search matching", searchMatchOptions, state.matchMode)}
           ${select("area", "Study area", studyAreaOptions, state.area)}
           ${numberControl("estimatedAtar", "Estimated ATAR", state.estimatedAtar, "Optional", 0, 99.95, 0.05)}
           ${select("provider", "Provider", providers, state.provider)}
@@ -876,7 +941,6 @@ function renderCourseSearchPanel(
           ${renderDistanceNote()}
         </details>
         <div class="filter-foot">
-          <button class="clear-btn" type="button" data-action="clear">Reset all filters</button>
           <small>Admission figures are historical and may change each intake.</small>
         </div>
         <button class="mobile-filter-done" type="button" data-action="close-course-filters">${searchActive ? `Show ${number(results.length)} courses` : "Done"}</button>
@@ -886,6 +950,7 @@ function renderCourseSearchPanel(
         <span>A selection rank may include adjustments and is not always the same as an ATAR. Prerequisites and additional criteria can still affect admission.</span>
       </div>
       <div class="course-results-region">
+        ${String(state.estimatedAtar).trim() ? `<p class="filter-atar-note" role="status">Historical selection ranks up to <strong>${Math.min(99.95, Number(state.estimatedAtar) + (state.allowAtarStretch ? 5 : 0)).toFixed(2)}</strong>. Courses without a published numeric rank remain included for an official check. This filters past ranks; it does not predict admission.</p>` : ""}
         ${searchActive && results.length ? renderSearchFieldLeaders(results) : ""}
         <div class="course-list">
           ${renderProcessStrip("search", "Searching courses")}
@@ -944,8 +1009,8 @@ function renderNoResults() {
       <strong>No exact matches yet</strong>
       <p>Keep your goal and loosen one constraint, or explore a realistic alternative.</p>
       <div class="empty-actions">
-        <button type="button" data-action="relax-filter">Remove one filter</button>
-        <button type="button" data-action="show-atar-stretch">Show courses slightly above my ATAR</button>
+        ${nextFilterToRemove() ? `<button type="button" data-action="relax-filter">Remove ${escapeHtml(nextFilterToRemove()[2])} filter</button>` : ""}
+        ${String(state.estimatedAtar).trim() ? '<button type="button" data-action="show-atar-stretch">Show courses up to 5 rank points above my ATAR</button>' : ""}
         <button type="button" data-action="show-pathways">View pathway courses</button>
         <button type="button" data-action="browse-study-areas">Browse all study areas</button>
         <button type="button" data-action="clear">Reset all filters</button>
@@ -959,12 +1024,9 @@ function renderCompareTray(compareCourses) {
   const mobileStatus = `${compareCourses.length} selected`;
   return `
     <aside class="compare-tray" data-compare-count="${compareCourses.length}" aria-label="Courses being compared">
-      <div>
-        <strong><span class="desktop-only">${compareCourses.length} of 3 comparing</span><span class="mobile-only">${mobileStatus}</span></strong>
-        <span>${compareCourses.map((course) => escapeHtml(shortCourseName(course.name))).join(" · ")}</span>
-      </div>
+      <strong>${compareCourses.length} of 3 comparing</strong>
+      <div class="compare-selections">${compareCourses.map((course) => `<div class="compare-selection"><span title="${escapeHtml(course.name)}">${escapeHtml(shortCourseName(course.name))}</span><button type="button" data-remove-compare="${escapeHtml(course.id)}" aria-label="Remove ${escapeHtml(course.name)} from comparison">×</button></div>`).join("")}</div>
       <div class="compare-tray-actions">
-        ${compareCourses.map((course) => `<button type="button" data-remove-compare="${escapeHtml(course.id)}" aria-label="Remove ${escapeHtml(course.name)} from comparison">×</button>`).join("")}
         <a href="#saved" aria-label="Compare ${compareCourses.length} courses"><span class="desktop-only">Compare ${compareCourses.length}</span><span class="mobile-only">Compare</span></a>
       </div>
       <p class="sr-only" aria-live="polite">${escapeHtml(state.compareMessage)}</p>
@@ -1015,6 +1077,7 @@ function runProcessing(key, action, after = null) {
     app.classList.add("is-results-updating");
     document.documentElement.classList.add("is-course-results-transition");
     const transition = document.startViewTransition(commit);
+    transition.ready.catch(() => undefined); // Rapid changes may skip the animation; the update still commits.
     transition.updateCallbackDone.then(
       () => requestAnimationFrame(restore),
       () => requestAnimationFrame(restore)
@@ -1022,13 +1085,31 @@ function runProcessing(key, action, after = null) {
     const cleanUpTransition = () => {
       app.classList.remove("is-results-updating");
       document.documentElement.classList.remove("is-course-results-transition");
+      settleCourseResults();
     };
     transition.finished.then(cleanUpTransition, cleanUpTransition);
     return;
   }
 
   commit();
-  requestAnimationFrame(restore);
+  requestAnimationFrame(() => {
+    restore();
+    if (key === "search") settleCourseResults();
+  });
+}
+
+function settleCourseResults() {
+  if (prefersReducedMotion()) return;
+  const region = app.querySelector(".course-results-region");
+  if (!region) return;
+  window.clearTimeout(courseResultSettleTimer);
+  region.classList.remove("is-result-settling");
+  requestAnimationFrame(() => {
+    region.classList.add("is-result-settling");
+    courseResultSettleTimer = window.setTimeout(() => {
+      region.classList.remove("is-result-settling");
+    }, 360);
+  });
 }
 
 function renderPreservingViewport(anchorSelector = "") {
@@ -1129,6 +1210,7 @@ function hasActiveCourseFilters() {
     || state.pathway !== "Any pathway status"
     || state.guaranteedEntry !== "Any guaranteed-entry status"
     || state.degreeStructure !== "Any degree structure"
+    || (state.matchMode !== "Smart relevance" && Boolean(cleanSearchText(state.query)))
     || Boolean(cleanSearchText(state.locationQuery));
 }
 
@@ -1152,6 +1234,7 @@ function activeCourseFilterCount() {
     state.guaranteedEntry !== "Any guaranteed-entry status",
     state.degreeStructure !== "Any degree structure",
     state.sort !== "Relevance",
+    state.matchMode !== "Smart relevance" && Boolean(cleanSearchText(state.query)),
     Boolean(cleanSearchText(state.locationQuery))
   ].filter(Boolean).length;
 }
@@ -1170,8 +1253,9 @@ function advancedCourseFilterCount() {
   ].filter(Boolean).length;
 }
 
-function relaxOneCourseFilter() {
+function nextFilterToRemove() {
   const resetOrder = [
+    ["matchMode", "Smart relevance", "exact title"],
     ["guaranteedEntry", "Any guaranteed-entry status"],
     ["prerequisite", "Any prerequisite status"],
     ["pathway", "Any pathway status"],
@@ -1185,14 +1269,16 @@ function relaxOneCourseFilter() {
     ["area", "All study areas"],
     ["level", "All levels"]
   ];
+  resetOrder.push(["estimatedAtar", "", "estimated ATAR"], ["locationQuery", "", "distance"], ["sort", "Relevance", "sort order"]);
   const active = resetOrder.find(([key, fallback]) => state[key] !== fallback);
+  return active ? [active[0], active[1], active[2] || String(state[active[0]])] : null;
+}
+
+function relaxOneCourseFilter() {
+  const active = nextFilterToRemove();
   if (active) {
     state[active[0]] = active[1];
-  } else if (state.estimatedAtar) {
-    state.allowAtarStretch = true;
-  } else if (state.query) {
-    state.query = state.query.split(/\s+/).slice(0, -1).join(" ");
-    state.draft = state.query;
+    if (active[0] === 'provider') syncCampusWithProvider();
   }
   state.visible = coursePageSize();
   state.openCourseIds.clear();
@@ -1221,12 +1307,13 @@ function filteredCourses() {
     state.guaranteedEntry,
     state.degreeStructure,
     state.sort,
+    state.matchMode,
     origin ? origin.label : cleanSearchText(state.locationQuery)
   ].join("|");
   if (filteredCourseCache.key === cacheKey) return filteredCourseCache.results;
   const ranked = allCourses
     .filter((course) => {
-      const queryMatch = !query || courseSearchMatch(course, queryPlan);
+      const queryMatch = !query || (courseSearchMatch(course, queryPlan) && courseMatchesSearchMode(course, queryPlan));
       const levelMatch = state.level === "All levels" || courseLevels(course).some((level) => levelLabels[level] === state.level);
       const typeMatch = state.courseType === "All course types" || courseTypeLabel(course) === state.courseType;
       const areaMatch = courseMatchesStudyArea(course, state.area);
@@ -1258,6 +1345,7 @@ function filteredCourses() {
     .map((course) => ({
       course,
       score: searchScore(course, queryPlan),
+      specificity: searchIntentSpecificity(course, queryPlan),
       areaScore: studyAreaSortScore(course),
       distance: origin ? courseDistanceKm(course, origin) : null,
       incomeScore: courseIncomeOutcomes(course)[0]?.max || 0
@@ -1271,7 +1359,7 @@ function filteredCourses() {
 }
 
 function promoteFieldLeaderCourses(courses, queryPlan) {
-  if (state.sort !== "Relevance" || state.provider !== "All providers" || queryPlan?.provider) return courses;
+  if (state.matchMode !== "Smart relevance" || state.sort !== "Relevance" || state.provider !== "All providers" || queryPlan?.provider) return courses;
   const topic = state.area !== "All study areas"
     ? topicOptions.find((item) => item.label === state.area)
     : queryPlan?.contentQuery
@@ -1318,8 +1406,8 @@ function fieldLeaderCourseFitScore(course, query) {
 
 function courseMatchesEstimatedAtar(course) {
   const estimate = Number(state.estimatedAtar);
-  if (!Number.isFinite(estimate) || estimate <= 0) return true;
-  const rank = numericRank(course.atar);
+  if (!String(state.estimatedAtar).trim() || !Number.isFinite(estimate)) return true;
+  const rank = numericRank(courseSelectionRankValue(course));
   if (rank === null) return true;
   const allowance = state.allowAtarStretch ? 5 : 0;
   return rank <= Math.min(99.95, estimate + allowance);
@@ -1393,6 +1481,9 @@ function courseMatchesDegreeStructure(course, option) {
 }
 
 function compareSearchEntries(a, b) {
+  if (state.sort !== "Relevance" && b.specificity !== a.specificity) {
+    return b.specificity - a.specificity;
+  }
   if (hasIncomeOnlySearch() && state.sort === "Relevance") {
     if (b.incomeScore !== a.incomeScore) return b.incomeScore - a.incomeScore;
   }
@@ -1618,7 +1709,7 @@ function renderCourse(course, matchLine = "", index = 0, showFieldSignal = false
     <article class="course-item course-result-card ${open ? "is-expanded" : ""}" style="--item-delay:${Math.min(index, 8) * 26}ms" data-course-id="${escapeHtml(course.id)}">
       <div class="course-card-head">
         <div class="course-provider">
-          <img src="${escapeHtml(course.providerLogo)}" alt="" loading="lazy" decoding="async" />
+          <img src="${escapeHtml(window.courseFinderTheme?.providerLogo(course.providerId, course.providerLogo) || course.providerLogo)}" alt="" loading="lazy" decoding="async" />
           <span>${escapeHtml(course.university)}</span>
           ${fieldSignal && fieldSignal.score >= 80 ? `
             <small class="course-field-signal">
@@ -1666,7 +1757,7 @@ function renderCourse(course, matchLine = "", index = 0, showFieldSignal = false
         </div>
         <div class="course-card-actions">
           <button type="button" data-save-course="${escapeHtml(course.id)}" aria-pressed="${saved}">${saved ? "Saved" : "Save"}</button>
-          <button type="button" data-compare-course="${escapeHtml(course.id)}" aria-pressed="${comparing}">${comparing ? "Comparing" : "Compare"}</button>
+          <button type="button" data-compare-course="${escapeHtml(course.id)}" aria-pressed="${comparing}" ${!comparing && state.compareIds.length >= 3 ? 'disabled title="Comparison is full. Remove a course to add another."' : ''}>${comparing ? "Comparing" : state.compareIds.length >= 3 ? "Compare full (3/3)" : "Compare"}</button>
           <button type="button" data-toggle-course="${escapeHtml(course.id)}" aria-expanded="${open}">${open ? "Hide details" : "View details"}</button>
         </div>
       </div>
@@ -1840,7 +1931,7 @@ function renderCourseDetail(course, saved, comparing) {
         <a href="${escapeHtml(course.uacUrl)}" target="_blank" rel="noreferrer">${escapeHtml(primaryCourseLinkLabel(course))} ${icon("external")}</a>
         ${course.officialUrl ? `<a href="${escapeHtml(course.officialUrl)}" target="_blank" rel="noreferrer">Course website ${icon("external")}</a>` : ""}
         <button type="button" data-save-course="${escapeHtml(course.id)}">${saved ? "Remove from saved" : "Save course"}</button>
-        <button type="button" data-compare-course="${escapeHtml(course.id)}">${comparing ? "Remove from compare" : "Add to compare"}</button>
+        <button type="button" data-compare-course="${escapeHtml(course.id)}" ${!comparing && state.compareIds.length >= 3 ? 'disabled title="Remove a compared course before adding another"' : ''}>${comparing ? "Remove from compare" : state.compareIds.length >= 3 ? "Compare full (3/3)" : "Add to compare"}</button>
       </div>
     </div>
   `;
@@ -2067,7 +2158,8 @@ function renderCompareLibrary(compareCourses) {
         <span><i class="is-advantage"></i> Useful advantage</span>
         <span><i class="is-same"></i> Same</span>
       </div>
-      <div class="compare-scroll" tabindex="0" aria-label="Scrollable course comparison">
+      <p class="compare-scroll-hint">Scroll sideways to compare all courses →</p>
+      <div class="compare-scroll" tabindex="0" role="region" aria-label="Scrollable course comparison">
         <table class="course-compare-table" style="--compare-columns:${compareCourses.length}" aria-describedby="compareGuidance">
           <caption class="sr-only">Comparison of ${compareCourses.length} selected university courses by admission, study and pathway details.</caption>
           <thead>
@@ -2359,21 +2451,28 @@ function renderTopProviderBlock() {
       <div class="top-provider-head">
         <div>
           <span class="eyebrow">Specialised rankings</span>
-          <h3 id="specialistProviderTitle">Top 3 by study area</h3>
-          <p>Field-specific strength and relevant Sydney course availability, kept separate from the overall profile.</p>
+          <h3 id="specialistProviderTitle">Top matches by study area</h3>
+          <p>Up to three matches in each sector, ranked separately by field-specific fit and relevant course availability.</p>
         </div>
         ${select("providerTopic", "Study area", areas, state.providerTopic)}
       </div>
-      <div class="top-provider-grid">${renderTopProviders()}</div>
+      ${providerSectorGroups.map(group => `
+        <section class="specialist-sector" aria-labelledby="specialist-${group.id}">
+          <h4 id="specialist-${group.id}">${escapeHtml(group.title)}</h4>
+          <div class="top-provider-grid" data-specialist-sector="${group.id}">${renderTopProviders(group.id)}</div>
+        </section>
+      `).join("")}
+      <p class="rating-note" data-provider-topic-status role="status">Showing ${escapeHtml(state.providerTopic)} matches in separate public and private lists.</p>
       <p class="rating-note">Specialised fit is a Course Finder planning score for this study area, not a general university ranking. Use it to find a strong shortlist, then compare the actual courses.</p>
     </section>
   `;
 }
 
-function renderTopProviders() {
+function renderTopProviders(sector) {
   const topic = topicOptions.find((item) => item.label === state.providerTopic) || topicOptions[1];
   const quality = providerQuality[topic.label] || {};
   const rows = allProviders
+    .filter(provider => provider.sectorInfo.sector === sector)
     .map((provider) => {
       const courses = allCourses.filter((course) => course.providerId === provider.id);
       const relevant = courses.filter((course) => topicMatch(course, topic));
@@ -2385,6 +2484,7 @@ function renderTopProviders() {
     .sort((a, b) => b.score - a.score || b.count - a.count || a.provider.name.localeCompare(b.provider.name))
     .slice(0, 3);
 
+  if (!rows.length) return '<p class="empty-note">No matching courses in this sector for this study area.</p>';
   return rows.map((row, index) => `
     <a class="top-provider-card" style="--item-delay:${Math.min(index, 8) * 22}ms" href="${escapeHtml(row.provider.website)}" target="_blank" rel="noreferrer">
       <span>${index + 1}</span>
@@ -2396,11 +2496,32 @@ function renderTopProviders() {
   `).join("");
 }
 
+function renderProviderDirectory(fullDirectory) {
+  return `
+    <nav class="provider-sector-nav" aria-label="Jump to provider sector">
+      ${providerSectorGroups.map(group => `<a href="#provider-sector-${group.id}">${escapeHtml(group.shortTitle)} <span>${allProviders.filter(provider => provider.sectorInfo.sector === group.id).length}</span></a>`).join("")}
+    </nav>
+    ${providerSectorGroups.map(group => {
+      const providers = rankedProviders.filter(provider => provider.sectorInfo.sector === group.id);
+      return `
+        <section class="provider-sector-block" id="provider-sector-${group.id}" aria-labelledby="provider-sector-title-${group.id}">
+          <header class="provider-sector-heading">
+            <div><h3 id="provider-sector-title-${group.id}">${escapeHtml(group.title)}</h3><p>${escapeHtml(group.description)}</p></div>
+            <span>${fullDirectory ? providers.length : Math.min(3, providers.length)} of ${providers.length} providers</span>
+          </header>
+          <div class="provider-grid">${(fullDirectory ? providers : providers.slice(0, 3)).map(renderProvider).join("")}</div>
+        </section>`;
+    }).join("")}
+    <p class="provider-sector-note">Grouped by institution type and control, not tuition fees or HECS-HELP eligibility. Public university-controlled colleges are labelled separately. Scores rank providers within each list; they are not official league-table positions.</p>
+  `;
+}
+
 function renderProvider(provider, index = 0) {
   const profile = providerProfile(provider);
   const link = provider.website || "#courses";
   return `
     <a class="provider-card" style="--item-delay:${Math.min(index, 8) * 22}ms" href="${escapeHtml(link)}" ${provider.website ? 'target="_blank" rel="noreferrer"' : ""}>
+      <div class="provider-sector-label"><b aria-label="Site profile position ${index + 1} within this sector">#${index + 1}</b><span>${escapeHtml(provider.sectorInfo.label)}</span></div>
       <div class="provider-card-heading">
         <img src="${escapeHtml(provider.logo)}" alt="${escapeHtml(provider.name)} logo" loading="lazy" decoding="async" />
         <div>
@@ -3063,6 +3184,7 @@ function bindCourseSearchSurface(scope) {
     panel?.classList.toggle("is-open", open);
     if (open && panel) panel.scrollTop = 0;
     scope.querySelector('[data-action="toggle-course-filters"]')?.setAttribute("aria-expanded", String(open));
+    window.courseFinderTheme?.syncFilterDialog?.();
   };
   scope.querySelector('[data-action="toggle-course-filters"]')?.addEventListener("click", () => {
     syncMobileFilterPanel(!state.mobileFiltersOpen);
@@ -3080,6 +3202,7 @@ function bindCourseSearchSurface(scope) {
   });
 
   [
+    "matchMode",
     "level",
     "courseType",
     "area",
@@ -3158,9 +3281,9 @@ function bindCourseSearchSurface(scope) {
 
   scope.querySelectorAll('[data-action="clear"]').forEach((button) => {
     button.addEventListener("click", () => {
+      const inFilters = Boolean(button.closest('[data-course-filter-panel]'));
       runProcessing("search", () => {
-        state.draft = "";
-        state.query = "";
+        if (!inFilters) { state.draft = ""; state.query = ""; }
         state.level = "All levels";
         state.courseType = "All course types";
         state.area = "All study areas";
@@ -3169,6 +3292,7 @@ function bindCourseSearchSurface(scope) {
         state.campus = "All campuses";
         state.income = "Any income";
         state.sort = "Relevance";
+        state.matchMode = "Smart relevance";
         state.locationQuery = "";
         state.estimatedAtar = "";
         state.duration = "Any duration";
@@ -3179,7 +3303,7 @@ function bindCourseSearchSurface(scope) {
         state.advancedFiltersOpen = false;
         state.allowAtarStretch = false;
   state.visible = coursePageSize();
-        state.mobileFiltersOpen = false;
+        state.mobileFiltersOpen = inFilters;
         state.openCourseIds.clear();
       });
     });
@@ -3207,7 +3331,7 @@ function bindCourseSearchSurface(scope) {
   });
   scope.querySelector('[data-action="show-atar-stretch"]')?.addEventListener("click", () => {
     runProcessing("search", () => {
-      if (!state.estimatedAtar) state.estimatedAtar = "75";
+      if (!String(state.estimatedAtar).trim()) return;
       state.allowAtarStretch = true;
       state.sort = "Lowest selection rank";
     });
@@ -3236,7 +3360,7 @@ function bindCourseSearchSurface(scope) {
       if (!id) return;
       if (state.openCourseIds.has(id)) state.openCourseIds.delete(id);
       else state.openCourseIds.add(id);
-      renderCourseSearchPreservingViewport(`[data-course-id="${CSS.escape(id)}"]`);
+      renderPreservingViewport(`#${courseItem.closest('section[id]')?.id || 'courses'} [data-course-id="${CSS.escape(id)}"]`);
     });
     if (state.openCourseIds.has(courseItem.dataset.courseId) && initialCourse) {
       hydrateCourseDetail(courseItem, initialCourse);
@@ -3275,6 +3399,7 @@ function bindEvents() {
     panel?.classList.toggle("is-open", open);
     if (open && panel) panel.scrollTop = 0;
     app.querySelector('[data-action="toggle-course-filters"]')?.setAttribute("aria-expanded", String(open));
+    window.courseFinderTheme?.syncFilterDialog?.();
   };
   app.querySelector('[data-action="toggle-course-filters"]')?.addEventListener("click", () => {
     syncMobileFilterPanel(!state.mobileFiltersOpen);
@@ -3289,6 +3414,7 @@ function bindEvents() {
   });
 
   [
+    "matchMode",
     "level",
     "courseType",
     "area",
@@ -3375,9 +3501,9 @@ function bindEvents() {
 
   app.querySelectorAll('[data-action="clear"]').forEach((button) => {
     button.addEventListener("click", () => {
+      const inFilters = Boolean(button.closest('[data-course-filter-panel]'));
       runProcessing("search", () => {
-        state.draft = "";
-        state.query = "";
+        if (!inFilters) { state.draft = ""; state.query = ""; }
         state.level = "All levels";
         state.courseType = "All course types";
         state.area = "All study areas";
@@ -3386,6 +3512,7 @@ function bindEvents() {
         state.campus = "All campuses";
         state.income = "Any income";
         state.sort = "Relevance";
+        state.matchMode = "Smart relevance";
         state.locationQuery = "";
         state.estimatedAtar = "";
         state.duration = "Any duration";
@@ -3396,7 +3523,7 @@ function bindEvents() {
         state.advancedFiltersOpen = false;
         state.allowAtarStretch = false;
   state.visible = coursePageSize();
-        state.mobileFiltersOpen = false;
+        state.mobileFiltersOpen = inFilters;
         state.openCourseIds.clear();
       });
     });
@@ -3424,7 +3551,7 @@ function bindEvents() {
   });
   app.querySelector('[data-action="show-atar-stretch"]')?.addEventListener("click", () => {
     runProcessing("search", () => {
-      if (!state.estimatedAtar) state.estimatedAtar = "75";
+      if (!String(state.estimatedAtar).trim()) return;
       state.allowAtarStretch = true;
       state.sort = "Lowest selection rank";
     });
@@ -3454,7 +3581,7 @@ function bindEvents() {
       if (!id) return;
       if (state.openCourseIds.has(id)) state.openCourseIds.delete(id);
       else state.openCourseIds.add(id);
-      renderCourseSearchPreservingViewport(`[data-course-id="${CSS.escape(id)}"]`);
+      renderPreservingViewport(`#${courseItem.closest('section[id]')?.id || 'courses'} [data-course-id="${CSS.escape(id)}"]`);
     });
     if (state.openCourseIds.has(courseItem.dataset.courseId) && initialCourse) hydrateCourseDetail(courseItem, initialCourse);
   });
@@ -3518,7 +3645,11 @@ function bindEvents() {
 
   app.querySelector('[data-action="providerTopic"]')?.addEventListener("change", (event) => {
     state.providerTopic = event.target.value;
-    render();
+    app.querySelectorAll('[data-specialist-sector]').forEach(grid => {
+      grid.innerHTML = renderTopProviders(grid.dataset.specialistSector);
+    });
+    const status = app.querySelector('[data-provider-topic-status]');
+    if (status) status.textContent = `Showing ${state.providerTopic} matches in separate public and private lists.`;
   });
 
   app.querySelector('[data-action="add-subject"]')?.addEventListener("change", (event) => {
@@ -3605,6 +3736,8 @@ function bindEvents() {
 
 function bindCourseActionButtons(root) {
   root.querySelectorAll("[data-save-course]").forEach((button) => {
+    if (button.dataset.saveBound) return;
+    button.dataset.saveBound = 'true';
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -3623,6 +3756,8 @@ function bindCourseActionButtons(root) {
   });
 
   root.querySelectorAll("[data-compare-course]").forEach((button) => {
+    if (button.dataset.compareBound) return;
+    button.dataset.compareBound = 'true';
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -3699,7 +3834,7 @@ function scrollToHashTarget(id, behavior = "smooth") {
   const targetTop = target.getBoundingClientRect().top + window.scrollY - topOffset;
   window.scrollTo({
     top: Math.max(0, targetTop),
-    behavior: prefersReducedMotion() ? "auto" : behavior
+    behavior: prefersReducedMotion() || Math.abs(targetTop - window.scrollY) > window.innerHeight ? "instant" : behavior
   });
 }
 
@@ -4109,6 +4244,40 @@ function searchScore(course, queryOrPlan) {
   return score;
 }
 
+function searchIntentSpecificity(course, queryOrPlan) {
+  const plan = typeof queryOrPlan === "object" && queryOrPlan
+    ? queryOrPlan
+    : searchQueryPlan(queryOrPlan);
+  const query = plan.contentQuery;
+  if (!query) return 0;
+  const fields = courseSearchFields(course);
+  const title = fields.title;
+  if (title === query || exactDegreeTitle(title, query)) return 6;
+  if ([
+    `bachelor of ${query}`,
+    `master of ${query}`,
+    `doctor of ${query}`,
+    `diploma of ${query}`,
+    `diploma in ${query}`,
+    `associate degree in ${query}`,
+    `undergraduate certificate in ${query}`
+  ].some((prefix) => title.startsWith(prefix))) return 5;
+  if (phraseMatch(title, query)) return 4;
+  if (plan.contentTokens.length > 1 && plan.contentTokens.every((word) => tokenSetMatch(fields.titleTokens, word))) return 3;
+  if ((searchAliases[query] || []).some((alias) => phraseMatch(title, alias))) return 2;
+  if (phraseMatch(fields.primary, query) || aliasMatch(fields.primary, query)) return 1;
+  return 0;
+}
+
+function courseMatchesSearchMode(course, queryOrPlan) {
+  if (state.matchMode !== "Exact title results") return true;
+  const plan = typeof queryOrPlan === "object" && queryOrPlan
+    ? queryOrPlan
+    : searchQueryPlan(queryOrPlan);
+  if (!plan.contentQuery) return true;
+  return searchIntentSpecificity(course, plan) >= 4;
+}
+
 function courseSearchMatch(course, queryOrPlan) {
   const plan = typeof queryOrPlan === "object" && queryOrPlan
     ? queryOrPlan
@@ -4121,6 +4290,9 @@ function courseSearchMatch(course, queryOrPlan) {
   const words = plan.contentTokens;
   const topic = topicForQuery(query);
   const incomeMinimum = incomeMinimumFromQuery(query);
+  if (titlePreciseSearchIntents.has(query)) {
+    return searchIntentSpecificity(course, plan) >= 3;
+  }
   if (phraseMatch(primaryText, query)) return true;
   if (aliasMatch(primaryText, query)) return true;
   if (words.length > 1 && words.every((word) => tokenSetMatch(fields.primaryTokens, word))) return true;

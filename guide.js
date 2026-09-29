@@ -440,7 +440,7 @@ function renderGuide(options = {}) {
         <div>
           <p class="eyebrow">Student planning</p>
           <h1>Guide</h1>
-          <p>Start with your year and one career or degree idea. Add marks or preferences only when you want a more precise plan.</p>
+          <p>Start with your year. Add a career, degree, subject or interest when you want a more specific plan.</p>
         </div>
         <dl class="stats">
           <div><dt>Courses</dt><dd>${number(guideCourses.length)}</dd></div>
@@ -454,7 +454,7 @@ function renderGuide(options = {}) {
         <div class="panel-head">
           <div>
             <h2>Build your plan</h2>
-            <p>Three useful answers are enough to begin. Everything else is optional refinement.</p>
+            <p>Your year sets the timeline. Every other answer is optional and makes the recommendation more personal.</p>
           </div>
           <span>UAC data · ${escapeHtml(formatGuideDate(guideMeta.importedAt))}</span>
         </div>
@@ -463,7 +463,7 @@ function renderGuide(options = {}) {
           ${renderGuideReadiness()}
           <div class="guide-question-grid guide-core-grid">
             ${renderGuideSelect("year", "What year are you in?", guideYears, guideState.year)}
-            ${renderGuideInput("dreamJob", "Career or degree goal", "text", "Example: software engineer, nursing, computer science", guideState.dreamJob)}
+            ${renderGuideInput("dreamJob", "Career or degree goal (optional)", "text", "Example: software engineer, nursing, computer science", guideState.dreamJob)}
             ${guideState.year === "Year 10 or below" ? renderGuideSelect("schoolPerformance", "How are you tracking at school?", guideSchoolLevels, guideState.schoolPerformance) : ""}
           </div>
           <div class="guide-quick" aria-label="Quick goals">
@@ -514,14 +514,15 @@ function renderGuideReadiness() {
   const hasDetail = guideState.subjectsWithMarks.some((row) => guideSubjectRowHasValue(row))
     || (guideState.schoolPerformance && guideState.schoolPerformance !== "Not sure yet")
     || Boolean(String(guideState.passions || "").trim());
+  const hasDirectionClue = hasGoal || hasDetail || guideState.deckAnswers.some(Boolean);
   const readyCount = [hasYear, hasGoal, hasDetail].filter(Boolean).length;
   return `
-    <div class="guide-readiness" aria-label="Plan readiness: ${readyCount} of 3 useful details added">
-      <div><strong>${hasGoal ? "Ready to build" : "Add a goal to begin"}</strong><span>${readyCount} of 3 useful details</span></div>
+    <div class="guide-readiness" aria-label="Plan readiness: ${readyCount} of 3 helpful details added">
+      <div><strong>${hasDirectionClue ? "Ready to build" : "Add any optional direction clue"}</strong><span>${readyCount} of 3 helpful details</span></div>
       <ol>
         <li class="${hasYear ? "is-ready" : ""}"><span>${hasYear ? "✓" : "1"}</span><b>School year</b></li>
-        <li class="${hasGoal ? "is-ready" : ""}"><span>${hasGoal ? "✓" : "2"}</span><b>Career or degree</b></li>
-        <li class="${hasDetail ? "is-ready" : ""}"><span>${hasDetail ? "✓" : "3"}</span><b>Marks or interests <small>optional</small></b></li>
+        <li class="${hasGoal ? "is-ready" : ""}"><span>${hasGoal ? "✓" : "2"}</span><b>Career or degree <small>optional</small></b></li>
+        <li class="${hasDetail ? "is-ready" : ""}"><span>${hasDetail ? "✓" : "3"}</span><b>Subjects or interests <small>optional</small></b></li>
       </ol>
     </div>
   `;
@@ -2335,11 +2336,11 @@ function courseIncomeOutcomes(course) {
   const fields = guideCourseFields(course);
   const scored = preparedGuideJobProfiles
     .map((profile) => {
+      if (profile.title === 'Medical practitioner' && !/\b(medicine|surgery|clinical medicine)\b/i.test(fields.title)) return { ...profile, score: 0 };
       const titleHit = fields.title.includes(profile.cleanTitle) ? 20 : 0;
       const keywordHits = profile.cleanKeywords.reduce((sum, keyword) => {
         if (fieldPhraseMatch(fields, "careers", keyword)) return sum + 16;
         if (fieldPhraseMatch(fields, "title", keyword)) return sum + 10;
-        if (fieldPhraseMatch(fields, "primary", keyword)) return sum + 4;
         return sum;
       }, 0);
       return { ...profile, score: titleHit + keywordHits };

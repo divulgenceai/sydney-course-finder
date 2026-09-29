@@ -5,6 +5,61 @@ const myPlanStorageKeys = {
   guide: "sydneyCourseFinder.guideProgress",
   guidePlan: "sydneyCourseFinder.guidePlanSnapshot"
 };
+const stageProgressKey = 'sydneyCourseFinder.planStageProgress';
+let currentPlan = null;
+
+function stageKey(stage) {
+  const identity = currentPlan?.linearStages?.flatMap((item) => item.items || []).find((item) => item.kind === 'course')?.id || 'guide';
+  return `${identity}:${stage.phase || stage.title}`;
+}
+
+function readStageProgress() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(stageProgressKey) || '{}');
+    return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
+  } catch { return {}; }
+}
+
+function updatePlanProgress() {
+  const saved = readStageProgress();
+  const stages = currentPlan?.linearStages || [];
+  const count = stages.filter((stage) => saved[stageKey(stage)]?.complete).length;
+  const label = myPlanApp.querySelector('[data-plan-progress]');
+  if (label) label.textContent = `${count} of ${stages.length} stages complete`;
+  const bar = myPlanApp.querySelector('progress');
+  if (bar) bar.value = count;
+}
+
+myPlanApp.addEventListener('change', (event) => {
+  const control = event.target.closest('[data-stage-progress]');
+  if (!control) return;
+  const saved = readStageProgress();
+  const key = control.dataset.stageProgress;
+  saved[key] = { ...saved[key], [control.type === 'checkbox' ? 'complete' : 'deadline']: control.type === 'checkbox' ? control.checked : control.value };
+  try {
+    localStorage.setItem(stageProgressKey, JSON.stringify(saved));
+    control.closest('.linear-plan-stage')?.classList.toggle('is-complete', Boolean(saved[key].complete));
+    updatePlanProgress();
+  } catch { myPlanApp.querySelector('[data-plan-notice]').textContent = 'Your browser could not save progress. Allow local storage to keep changes.'; }
+});
+
+myPlanApp.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-plan-add-course]');
+  if (!button) return;
+  const live = myPlanApp.querySelector('[data-plan-notice]');
+  try {
+    const key = 'sydneyCourseFinder.uacPreferenceDraft';
+    const draft = JSON.parse(localStorage.getItem(key) || '{}') || {};
+    const ids = Array.isArray(draft.preferences) ? [...new Set(draft.preferences)].slice(0, 5) : [];
+    const id = button.dataset.planAddCourse;
+    if (ids.includes(id)) { live.textContent = 'This course is already in your UAC draft.'; return; }
+    if (ids.length >= 5) { live.textContent = 'Your UAC draft has five courses. Open the planner to replace or reorder one.'; return; }
+    if (!myPlanCourses.some((course) => course.id === id)) { live.textContent = 'This course is no longer in the catalogue. Search the UAC planner for its current listing.'; return; }
+    localStorage.setItem(key, JSON.stringify({ ...draft, targetAtar: draft.targetAtar ?? '', preferences: [...ids, id], updatedAt: new Date().toISOString() }));
+    live.textContent = `Added to preference ${ids.length + 1}. Open the UAC planner to put courses in your genuine preference order.`;
+    button.textContent = 'Added to UAC draft';
+  } catch { live.textContent = 'Your browser could not save this course. Please check local storage settings.'; }
+});
 
 renderMyPlanPage();
 
@@ -12,6 +67,7 @@ function renderMyPlanPage() {
   const guideState = loadGuideProgress();
   const guideSnapshot = loadGuidePlanSnapshot();
   const plan = window.SubjectHelperLogic?.buildPersonalPlanView?.(guideState || {}, guideSnapshot, new Date());
+  currentPlan = plan;
   const hasProgress = hasSavedGuideProgress(guideState);
 
   myPlanApp.innerHTML = `
@@ -26,6 +82,7 @@ function renderMyPlanPage() {
   `;
 
   window.courseFinderTheme?.bind?.(myPlanApp);
+  updatePlanProgress();
 }
 
 function renderMyPlanTopbar() {
@@ -78,16 +135,21 @@ function renderPersonalLinearPlan(plan) {
         </div>
         <a class="help-link" href="./guide#guide-form">Adjust in Guide</a>
       </div>
+      <div class="plan-progress"><strong data-plan-progress role="status"></strong><progress max="${stages.length}" value="0" aria-label="Plan completion"></progress></div>
       <ol class="linear-plan-road">
         ${stages.map(renderLinearPlanStage).join("")}
       </ol>
+      <p role="status" aria-live="polite" data-plan-notice></p>
+      <a class="secondary-btn" href="./uac-planner">Edit my UAC preference draft →</a>
     </section>
   `;
 }
 
 function renderLinearPlanStage(stage, index) {
+  const key = stageKey(stage);
+  const saved = readStageProgress()[key] || {};
   return `
-    <li class="linear-plan-stage" style="--item-delay:${Math.min(index, 8) * 34}ms">
+    <li class="linear-plan-stage ${saved.complete ? 'is-complete' : ''}" style="--item-delay:${Math.min(index, 8) * 34}ms">
       <div class="linear-stage-marker">
         <span>${index + 1}</span>
       </div>
@@ -99,6 +161,10 @@ function renderLinearPlanStage(stage, index) {
         </div>
         <div class="linear-stage-items">
           ${(stage.items || []).map((item) => renderLinearStageItem(item, stage)).join("")}
+        </div>
+        <div class="plan-stage-controls">
+          <label><input type="checkbox" data-stage-progress="${escapeHtml(key)}" ${saved.complete ? 'checked' : ''}> Mark this stage complete</label>
+          <label>My target date <input type="date" data-stage-progress="${escapeHtml(key)}" value="${escapeHtml(saved.deadline || '')}" aria-label="Target date for ${escapeHtml(stage.phase || stage.title)}"></label>
         </div>
       </article>
     </li>
@@ -116,6 +182,7 @@ function renderLinearStageItem(item, stage) {
         ${item.meta ? `<span>${escapeHtml(item.meta)}</span>` : ""}
         ${item.text ? `<p>${escapeHtml(item.text)}</p>` : ""}
         ${isJobs ? renderJobSiteLinks() : ""}
+        ${item.kind === 'course' && item.id ? `<button class="secondary-btn" type="button" data-plan-add-course="${escapeHtml(item.id)}">Add to UAC planner</button>` : ''}
       </div>
     </section>
   `;

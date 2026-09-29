@@ -2,6 +2,7 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
+const securityHeaders = require('./security-headers');
 
 const root = __dirname;
 loadLocalEnv(path.join(root, ".env"));
@@ -24,11 +25,16 @@ const mimeTypes = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".webp": "image/webp",
-  ".pdf": "application/pdf"
+  ".pdf": "application/pdf",
+  ".xml": "application/xml; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8"
 };
 
 http.createServer((req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host || `${host}:${port}`}`);
+  applySecurityHeaders(res);
+  let url;
+  try { url = new URL(req.url, `http://${req.headers.host || `${host}:${port}`}`); decodeURIComponent(url.pathname); }
+  catch { res.writeHead(400, { 'Content-Type': 'text/plain' }); res.end('Bad request'); return; }
 
   if (url.pathname === "/api/ai") {
     aiHandler(req, res);
@@ -59,7 +65,7 @@ http.createServer((req, res) => {
   const ext = path.extname(filePath).toLowerCase();
   const stat = fs.statSync(filePath);
   const etag = `W/"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
-  const versionedAsset = ext !== ".html" && url.searchParams.has("v");
+  const versionedAsset = ['.js', '.mjs', '.css', '.json'].includes(ext) && /^\d+$/.test(url.searchParams.get('v') || '');
   const cacheControl = versionedAsset
     ? "public, max-age=31536000, immutable"
     : ext === ".html"
@@ -103,6 +109,14 @@ http.createServer((req, res) => {
   console.log(`Sydney Course Finder running at http://${host}:${port}`);
 });
 
+function applySecurityHeaders(res) {
+  Object.entries(securityHeaders).forEach(([key, value]) => res.setHeader(key, value));
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+}
+
 function preferredEncoding(header, ext, size) {
   if (size < 1024 || ![".html", ".js", ".mjs", ".css", ".json", ".webmanifest", ".svg"].includes(ext)) return "";
   const accepted = String(header || "").toLowerCase();
@@ -134,7 +148,9 @@ function parseEnvValue(value) {
 
 function resolveFile(pathname) {
   const clean = decodeURIComponent(pathname).replace(/\\/g, "/");
-  const route = clean === "/"
+  if (clean.split('/').some((part) => part.startsWith('.')) || /^\/(api|tests|tools|tmp|node_modules|android)\//i.test(clean)) return '';
+  if (/\/(server\.js|security-headers\.js|package(?:-lock)?\.json|vercel\.json|README\.md)$/i.test(clean)) return '';
+  const route = clean === '/universities' || clean === '/library' ? `${clean}.html` : clean === "/"
     ? "/index.html"
     : clean === "/guide"
       ? "/guide.html"
@@ -164,6 +180,7 @@ function resolveFile(pathname) {
   const candidate = path.resolve(root, `.${route}`);
   const relative = path.relative(root, candidate);
   if (relative.startsWith("..") || path.isAbsolute(relative)) return "";
+  if (!Object.hasOwn(mimeTypes, path.extname(candidate).toLowerCase())) return '';
   if (!fs.existsSync(candidate) || !fs.statSync(candidate).isFile()) return "";
   return candidate;
 }
