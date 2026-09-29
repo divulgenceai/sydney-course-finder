@@ -748,7 +748,8 @@
     let branch = element;
     while (branch && branch !== document.body) {
       for (const sibling of branch.parentElement?.children || []) {
-        if (sibling === branch || /^(SCRIPT|STYLE|LINK)$/.test(sibling.tagName)) continue;
+        // Keep the modal's backdrop clickable while the rest of the page is inert.
+        if (sibling === branch || sibling === options.backdrop || /^(SCRIPT|STYLE|LINK)$/.test(sibling.tagName)) continue;
         inertElements.push([sibling, sibling.inert]);
         sibling.inert = true;
       }
@@ -769,6 +770,7 @@
       panel.setAttribute('aria-label', 'Filter courses');
       openDialog(panel, {
         returnSelector: '[data-action="toggle-course-filters"]',
+        backdrop: panel.previousElementSibling?.matches('.course-filter-scrim') ? panel.previousElementSibling : null,
         onClose: () => document.querySelector('[data-action="close-course-filters"]')?.click()
       });
     } else {
