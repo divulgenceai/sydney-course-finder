@@ -402,6 +402,7 @@ function refreshPathwaysPage({ scrollToRoutes = false } = {}) {
   pathwaysApp.classList.add("is-results-updating");
   document.documentElement.classList.add("is-pathway-results-transition");
   const transition = document.startViewTransition(update);
+  transition.ready.catch(() => undefined);
   transition.updateCallbackDone.then(
     () => requestAnimationFrame(afterUpdate),
     () => requestAnimationFrame(afterUpdate)

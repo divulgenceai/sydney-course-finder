@@ -21,6 +21,18 @@ test("Subject Helper presents one automatic job-or-degree search", () => {
   assert.doesNotMatch(source, /Check my subjects/);
 });
 
+test("Subject Helper interprets diverse fictional inspirations without treating harm as a career", () => {
+  const source = read("subject-helper.js");
+
+  for (const alias of ["bruce wayne", "peter parker", "tony stark", "joker", "barry allen", "matt murdock", "clark kent", "black panther", "wonder woman", "sherlock holmes", "hermione granger"]) {
+    assert.match(source.toLowerCase(), new RegExp(alias.replace(/\s+/g, "\\s+")));
+  }
+  assert.match(source, /not the vigilante part/i);
+  assert.match(source, /never as encouragement to copy harmful behaviour/i);
+  assert.match(source, /forensics, justice, intelligence and leadership/i);
+  assert.match(source, /engineering, robotics and advanced technology/i);
+});
+
 test("Income search remains available as an advanced course filter", () => {
   const source = read("app.js");
   assert.match(source, /select\("income", "Income goal"/);
@@ -256,8 +268,8 @@ test("Course search keeps every record while full details load lazily", () => {
 
   for (const file of htmlFiles) {
     const html = read(file);
-    assert.match(html, /uac-courses-lite\.js\?v=15/);
-    assert.match(html, /course-details\.js\?v=13/);
+    assert.match(html, /uac-courses-lite\.js\?v=\d+/);
+    assert.match(html, /course-details\.js\?v=\d+/);
   }
 
   assert.match(generator, /fullCourses\.map/);
@@ -276,7 +288,7 @@ test("Site is installable as an Android-friendly PWA", () => {
   const htmlFiles = ["index.html", "guide.html", "pathways.html", "no-atar.html", "atar-compass.html", "atar-calculator.html", "calculator.html", "subject-helper.html", "subjects.html", "my-plan.html", "advisor.html", "university-forms.html", "uac-planner.html"];
   const manifest = JSON.parse(read("manifest.webmanifest"));
   const serviceWorker = read("sw.js");
-  const assetRefresh = read("asset-refresh-v67.js");
+  const assetRefresh = read("asset-refresh-v78.js");
   const theme = read("theme.js");
   const server = read("server.js");
 
@@ -293,7 +305,7 @@ test("Site is installable as an Android-friendly PWA", () => {
   assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192" && icon.type === "image/png"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512" && icon.purpose === "maskable"));
   assert.match(serviceWorker, /CACHE_NAME/);
-  assert.match(serviceWorker, /sydney-course-finder-app-v67/);
+  assert.match(serviceWorker, /sydney-course-finder-app-v\d+/);
   assert.match(serviceWorker, /async function cacheFirstThenRefresh[\s\S]*cache\.match\(request\)/);
   assert.match(serviceWorker, /request\.mode === "navigate"[\s\S]*networkFirst\(request/);
   assert.match(serviceWorker, /ROUTE_FALLBACKS/);
@@ -373,10 +385,10 @@ test("Pages avoid render-blocking third-party font requests", () => {
   for (const file of htmlFiles) {
     const html = read(file);
     assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
-    assert.match(html, /asset-refresh-v67\.js/);
-    assert.match(html, /mobile\.css\?v=67/);
-    assert.match(html, /theme\.js\?v=67/);
-    assert.match(html, /styles\.css\?v=67/);
+    assert.match(html, /asset-refresh-v\d+\.js/);
+    assert.match(html, /mobile\.css\?v=\d+/);
+    assert.match(html, /theme\.js\?v=\d+/);
+    assert.match(html, /styles\.css\?v=\d+/);
   }
 });
 
@@ -399,6 +411,25 @@ test("Planning toolkit exposes every tool and merges ATAR matching into course d
   assert.match(vercel, /"destination":\s*"\/advisor\.html"/);
 });
 
+test("Guide optionality and dark planning signals remain clear", () => {
+  const guide = read("guide.js");
+  const styles = read("styles.css");
+  const mobile = read("mobile.css");
+  const theme = read("theme.js");
+
+  assert.match(guide, /Career or degree goal \(optional\)/);
+  assert.match(guide, /Career or degree <small>optional<\/small>/);
+  assert.doesNotMatch(guide, /Add a goal to begin/);
+  assert.match(styles, /data-theme="dark"\] \.advisor-band\.reach[\s\S]*?#180609/);
+  assert.match(styles, /data-theme="dark"\] \.advisor-band\.target[\s\S]*?#170f03/);
+  assert.match(styles, /data-theme="dark"\] \.advisor-band\.safer[\s\S]*?#03150e/);
+  assert.doesNotMatch(styles, /\.preference-suggestions button\s*\{[^}]*content-visibility:\s*auto/s);
+  assert.match(mobile, /\.guide-readiness ol\s*\{\s*grid-template-columns:\s*1fr/);
+  assert.match(mobile, /\.preference-suggestions\s*\{[\s\S]*?position:\s*static/);
+  assert.doesNotMatch(mobile, /\.preference-suggestions\s*\{[^}]*position:\s*fixed/s);
+  assert.match(theme, /routePendingTimer = window\.setTimeout\([^,]+, 900\)/);
+});
+
 test("Mobile startup only prefetches the five primary destinations", () => {
   const theme = read("theme.js");
   assert.match(theme, /function prefetchVisibleShellLinks[\s\S]*link\.dataset\.mobilePrimary === "true"/);
@@ -410,7 +441,7 @@ test("Mobile navigation uses five direct destinations without an overflow menu",
   const theme = read("theme.js");
   const css = read("styles.css");
 
-  assert.match(theme, /const mobilePrimaryDestinations = \{[\s\S]*Courses: "\.\/#courses"[\s\S]*Tools: "\.\/#tools"[\s\S]*Universities: "\.\/#providers"[\s\S]*Saved: "\.\/#saved"[\s\S]*About: "\.\/#about"/);
+  assert.match(theme, /const mobilePrimaryDestinations = \{[\s\S]*Courses: "\.\/#courses"[\s\S]*Tools: "\.\/#tools"[\s\S]*Universities: "\.\/universities"[\s\S]*Saved: "\.\/library"[\s\S]*About: "\.\/#about"/);
   assert.match(theme, /mobilePrimaryItems\.forEach/);
   assert.match(theme, /nav\.appendChild\(link\)/);
   assert.doesNotMatch(theme, /data-action = "toggle-mobile-nav"/);
@@ -486,16 +517,21 @@ test("Course search exposes essential filters, collapsed advanced filters and us
   const app = read("app.js");
   const css = read("styles.css");
 
-  for (const label of ["Study area", "Estimated ATAR", "Provider", "Campus", "Course duration", "Mode"]) {
+  for (const label of ["Search matching", "Study area", "Estimated ATAR", "Provider", "Campus", "Course duration", "Mode"]) {
     assert.match(app, new RegExp(`"${label}"`));
   }
+  assert.match(app, /const searchMatchOptions = \["Smart relevance", "Exact title results"\]/);
+  assert.match(app, /function courseMatchesSearchMode[\s\S]*searchIntentSpecificity\(course, plan\) >= 4/);
+  assert.match(app, /state\.matchMode !== "Smart relevance"[\s\S]*state\.sort !== "Relevance"/);
   assert.match(app, /<details class="advanced-filter-disclosure"/);
-  assert.match(app, /Remove one filter/);
-  assert.match(app, /Show courses slightly above my ATAR/);
+  assert.match(app, /nextFilterToRemove/);
+  assert.match(app, /Show courses up to 5 rank points above my ATAR/);
   assert.match(app, /View pathway courses/);
   assert.match(app, /Browse all study areas/);
   assert.match(app, /Reset all filters/);
   assert.match(app, /querySelectorAll\('\[data-action="close-course-filters"\]'\)/);
+  assert.match(css, /@media \(min-width: 821px\)[\s\S]*\.search-form \.mobile-filter-toggle[\s\S]*display:\s*flex/);
+  assert.match(css, /\.course-filter-panel\.is-open\s*{[\s\S]*visibility:\s*visible/);
   assert.match(css, /html:has\(\.course-filter-panel\.is-open\) \.compare-tray,[\s\S]*visibility:\s*hidden/);
 });
 
@@ -532,6 +568,11 @@ test("Course search handles provider acronyms, keywords and spelling mistakes", 
   const styles = read("styles.css");
 
   assert.match(source, /function providerSearchIntent/);
+  assert.match(source, /const providerAliasOverrides = \{/);
+  assert.match(source, /ACU:\s*\["australian catholic university"/);
+  assert.match(source, /UOW:\s*\["wollongong uni"/);
+  assert.match(source, /UND:\s*\["unda", "notre dame"/);
+  assert.match(source, /cleanSearchText\(provider\.id\)/);
   assert.match(source, /tokenise\(b\.alias\)\.length - tokenise\(a\.alias\)\.length/);
   assert.match(source, /function boundedDamerauLevenshtein/);
   assert.match(source, /function correctSearchToken/);
@@ -543,6 +584,8 @@ test("Course search handles provider acronyms, keywords and spelling mistakes", 
   assert.match(source, /engineer:\s*\["engineering"/);
   assert.match(source, /coding:\s*\["coding", "programming", "software"/);
   assert.match(source, /\["cs", "computer science"\]/);
+  assert.match(source, /const titlePreciseSearchIntents = new Set\(\[[\s\S]*?"computer science"/);
+  assert.match(source, /titlePreciseSearchIntents\.has\(query\)[\s\S]*?searchIntentSpecificity\(course, plan\) >= 3/);
   assert.match(source, /function expandSearchIntentQuery/);
   assert.match(source, /wasExpanded:\s*expansion\.query !== cleanQuery/);
   assert.match(source, /Understood <strong>/);
@@ -555,6 +598,9 @@ test("Course search promotes recognised field strength and updates results in pl
   const styles = read("styles.css");
 
   assert.match(source, /function renderSearchFieldLeaders/);
+  assert.match(source, /function searchIntentSpecificity/);
+  assert.match(source, /specificity:\s*searchIntentSpecificity\(course, queryPlan\)/);
+  assert.match(source, /state\.sort !== "Relevance" && b\.specificity !== a\.specificity/);
   assert.match(source, /Course relevance comes first\. Field strength then helps order similar matches\./);
   assert.match(source, /signal\.score \* 520/);
   assert.match(source, /document\.startViewTransition/);
@@ -564,6 +610,8 @@ test("Course search promotes recognised field strength and updates results in pl
   assert.match(styles, /view-transition-name:\s*course-search-results/);
   assert.match(styles, /\.search-field-leaders/);
   assert.match(styles, /html\.is-course-results-transition::view-transition-old\(root\)/);
+  assert.match(styles, /\.course-results-region\.is-result-settling/);
+  assert.match(styles, /@keyframes courseResultSettle/);
   assert.match(styles, /\.app-shell\.is-state-update \.panel/);
 });
 
@@ -587,19 +635,20 @@ test("Dark mode uses a true black page background with stronger contrast", () =>
   for (const block of darkBodyBlocks) {
     assert.doesNotMatch(block, /linear-gradient\(135deg/);
   }
-  const darkVars = css.match(/:root\[data-theme="dark"\]\s*{[\s\S]*?}/)?.[0] || "";
-  assert.match(darkVars, /--accent:\s*#2563eb/);
+  const darkVars = [...css.matchAll(/:root\[data-theme="dark"\]\s*{[\s\S]*?}/g)].at(-1)?.[0] || "";
+  assert.match(darkVars, /--accent:\s*#173f8f/);
   assert.doesNotMatch(darkVars, /--accent:\s*#60a5fa/);
 });
 
 test("Dark mode uses black-and-white primary buttons while keeping blue accents", () => {
   const css = read("styles.css");
-  const darkVars = css.match(/:root\[data-theme="dark"\]\s*{[\s\S]*?}/)?.[0] || "";
+  const darkVars = [...css.matchAll(/:root\[data-theme="dark"\]\s*{[\s\S]*?}/g)].at(-1)?.[0] || "";
   const primaryButtonBlock = css.match(/:root\[data-theme="dark"\]\s+\.search-form button,\s*\n:root\[data-theme="dark"\]\s+\.match-btn,[\s\S]*?:root\[data-theme="dark"\]\s+\.help-link\s*{[\s\S]*?}/)?.[0] || "";
   const secondaryButtonBlock = css.match(/:root\[data-theme="dark"\]\s+\.secondary-btn,[\s\S]*?:root\[data-theme="dark"\]\s+\.pathway-hero-actions\s+\.secondary-btn\s*{[\s\S]*?}/)?.[0] || "";
   const routeLinkBlock = css.match(/:root\[data-theme="dark"\]\s+\.simple-route-head a,[\s\S]*?:root\[data-theme="dark"\]\s+\.useful-route-links a\s*{[\s\S]*?}/)?.[0] || "";
 
-  assert.match(darkVars, /--accent:\s*#2563eb/);
+  assert.match(darkVars, /--accent:\s*#173f8f/);
+  assert.match(darkVars, /--product-blue:\s*#173f8f/);
   assert.match(primaryButtonBlock, /border-color:\s*#ffffff/);
   assert.match(primaryButtonBlock, /background:\s*#ffffff/);
   assert.match(primaryButtonBlock, /color:\s*#020617/);
@@ -642,7 +691,8 @@ test("University profiles explain overall and specialised scores", () => {
   assert.match(app, /Sydney Course Finder planning scores/);
   assert.match(app, /not official university rankings/i);
   assert.match(app, /providerProfileCache/);
-  assert.match(app, /Top 3 by study area/);
+  assert.match(app, /Top matches by study area/);
+  assert.match(app, /renderTopProviders\(group\.id\)/);
   assert.match(app, /Specialised rankings/);
   assert.match(app, /providerCurrentStanding/);
   assert.match(app, /QS 2027: #1 in Australia and #19 globally/);
@@ -784,7 +834,7 @@ test("ATAR calculator keeps the useful scaling planner without duplicate explain
   assert.match(source, /calculator-table-head/);
   assert.match(source, /Historical aggregate contribution/);
   assert.match(source, /Scaling details and what-if planner/);
-  assert.match(source, /<details class="atar-analysis-details">/);
+  assert.match(source, /<details class="atar-analysis-details calculator-analysis" open>/);
   assert.doesNotMatch(source, /Subject scaling and contribution guide/);
   assert.doesNotMatch(source, /How the estimate works/);
   assert.doesNotMatch(source, /<details class="panel calculator-disclosure">/);
@@ -859,6 +909,29 @@ test("Site polish defines softer radius, shadows and easing tokens", () => {
   assert.match(rootVars, /--ease:\s*cubic-bezier\(0\.16,\s*1,\s*0\.3,\s*1\)/);
   assert.match(darkVars, /--shadow-soft:\s*0 18px 42px/);
   assert.match(darkVars, /--shadow-lift:\s*0 24px 58px/);
+});
+
+test("Mobile ATAR analysis stays single-column and uses compact subject metrics", () => {
+  const css = read("styles.css");
+  const finalGuard = css.split(/\/\* v\d+ cascade guard: these rules must stay last\. \*\//)[1] || "";
+
+  assert.match(finalGuard, /@media\s*\(max-width:\s*820px\)[\s\S]*?\.atar-smart-planner,[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)\s*!important/);
+  assert.match(finalGuard, /\.subject-impact-meta\s*{[\s\S]*?display:\s*grid/);
+  assert.match(finalGuard, /\.subject-impact-meta span\s*{[\s\S]*?border:\s*0/);
+  assert.match(css, /\.calculator-model-note\s*{[\s\S]*?border-top:\s*4px solid var\(--accent\)/);
+});
+
+test("Static and API responses define baseline security headers", () => {
+  const server = read("server.js");
+  const vercel = read("vercel.json");
+  const ai = read("api/ai.js");
+
+  for (const header of ["X-Content-Type-Options", "Referrer-Policy", "X-Frame-Options", "Permissions-Policy"]) {
+    assert.match(server, new RegExp(header));
+    assert.match(vercel, new RegExp(header));
+  }
+  assert.match(ai, /Content-Type must be application\/json/);
+  assert.match(ai, /MAX_BODY_BYTES/);
 });
 
 test("Site polish adds aligned surfaces and smooth staggered motion without refresh jitter", () => {

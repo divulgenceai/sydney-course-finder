@@ -373,8 +373,8 @@ function openFormEditor(formId) {
 function renderNoProviderForms(provider) {
   return `
     <div class="forms-no-public-documents">
-      <strong>No stable public PDF was verified</strong>
-      <p>${escapeHtml(provider.note)} The official source button is safer than presenting an old or guessed document.</p>
+      <strong>${provider.forms.length ? "No forms match these filters" : "No stable public PDF was verified"}</strong>
+      <p>${provider.forms.length ? "Clear the search or change the form type to see this provider’s documents." : escapeHtml(provider.note)}</p>
       <a class="match-btn" href="${escapeAttribute(provider.hubUrl || provider.website)}" target="_blank" rel="noreferrer">Open official provider site ↗</a>
     </div>
   `;
@@ -419,8 +419,10 @@ async function openPdfEditor(formId) {
   };
   renderEditor();
   document.documentElement.classList.add("forms-editor-open");
+  const requestEditor = formsState.editor;
   try {
     const response = await fetch(`./api/form-proxy?id=${encodeURIComponent(formId)}`, { cache: "no-store" });
+    if (formsState.editor !== requestEditor) return;
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
       throw new Error(payload.error || `Could not load the PDF (${response.status})`);
@@ -431,6 +433,7 @@ async function openPdfEditor(formId) {
     const pdfjs = await import("./vendor/pdf.min.mjs");
     pdfjs.GlobalWorkerOptions.workerSrc = "./vendor/pdf.worker.min.mjs";
     const pdfJsDocument = await pdfjs.getDocument({ data: originalBytes.slice(), verbosity: 0 }).promise;
+    if (formsState.editor !== requestEditor) { await pdfJsDocument.destroy(); return; }
     formsState.editor = {
       ...formsState.editor,
       status: "ready",
@@ -445,7 +448,7 @@ async function openPdfEditor(formId) {
     fillMatchingFields(false);
     await renderEditorPage();
   } catch (error) {
-    if (!formsState.editor || formsState.editor.form.id !== formId) return;
+    if (formsState.editor !== requestEditor) return;
     formsState.editor.status = "error";
     formsState.editor.error = String(error?.message || "The official PDF could not be opened.");
     renderEditor();
@@ -457,6 +460,7 @@ function renderEditor() {
   const editor = formsState.editor;
   if (!root) return;
   if (!editor) {
+    window.courseFinderTheme?.closeDialog?.();
     root.innerHTML = "";
     document.documentElement.classList.remove("forms-editor-open");
     return;
@@ -478,6 +482,7 @@ function renderEditor() {
     </section>
   `;
   bindEditorEvents();
+  window.courseFinderTheme?.openDialog?.(root.querySelector('[role="dialog"]'), { onClose: closePdfEditor });
 }
 
 function renderEditorBody(editor) {
@@ -568,7 +573,7 @@ function renderQuestionnaireEditor(editor) {
               <label class="forms-questionnaire-question${count > question.maxWords ? " is-over-limit" : ""}">
                 <span><strong>${escapeHtml(question.title)}</strong><i data-question-word-count="${escapeAttribute(question.id)}">${count} / ${question.maxWords} words</i></span>
                 <small>${escapeHtml(question.prompt)}</small>
-                <textarea rows="8" data-questionnaire-answer="${escapeAttribute(question.id)}" placeholder="Write your own response here…">${escapeHtml(editor.answers[question.id] || "")}</textarea>
+                <textarea rows="8" maxlength="5000" wrap="soft" spellcheck="true" data-questionnaire-answer="${escapeAttribute(question.id)}" placeholder="Write your own response here…">${escapeHtml(editor.answers[question.id] || "")}</textarea>
               </label>
             `;
           }).join("")}
@@ -632,6 +637,18 @@ function previewValue(value) {
 function previewAnswer(value) {
   const text = String(value || "").trim();
   return text ? escapeHtml(text).replace(/\n/g, "<br />") : "<em>Your response will appear here as you type.</em>";
+}
+
+function updatePreviewAnswer(preview, value) {
+  if (!preview) return;
+  const text = String(value || "").trim();
+  if (text) {
+    preview.textContent = text;
+    return;
+  }
+  const empty = document.createElement("em");
+  empty.textContent = "Your response will appear here as you type.";
+  preview.replaceChildren(empty);
 }
 
 function countWords(value) {
@@ -710,7 +727,7 @@ function bindEditorEvents() {
         if (counter) counter.textContent = `${count} / ${question.maxWords} words`;
         textarea.closest(".forms-questionnaire-question")?.classList.toggle("is-over-limit", count > question.maxWords);
         const preview = root.querySelector(`[data-questionnaire-preview-answer="${cssEscape(questionId)}"]`);
-        if (preview) preview.innerHTML = previewAnswer(textarea.value);
+        updatePreviewAnswer(preview, textarea.value);
         updateQuestionnaireDownloadState(root, editor);
       });
     });
@@ -726,10 +743,23 @@ function bindEditorEvents() {
   root.querySelectorAll("[data-profile-field]").forEach((input) => {
     input.addEventListener("input", () => {
       if (!formsState.editor) return;
-      formsState.editor.profile[input.dataset.profileField] = input.value;
+      const editor = formsState.editor;
+      const key = input.dataset.profileField;
+      const previous = String(editor.profile[key] || '').trim();
+      editor.profile[key] = input.value;
+      editor.pdfFields.forEach((field) => {
+        if (field.type !== 'text' || profileKeyForPdfField(field.name) !== key) return;
+        const existing = String(editor.fieldValues[field.name] || '').trim();
+        // Keep a manually customised document answer; only update empty or linked values.
+        if (existing && existing !== previous) return;
+        editor.fieldValues[field.name] = input.value.trim();
+        const control = root.querySelector(`[data-pdf-field="${cssEscape(field.name)}"]`);
+        if (control) control.value = input.value.trim();
+      });
       persistFormProfile();
       root.querySelector(`[data-place-profile="${cssEscape(input.dataset.profileField)}"]`)?.toggleAttribute("disabled", !input.value.trim());
       renderPlacementMarkers();
+      schedulePdfPreview();
     });
   });
   root.querySelector("[data-remember-profile]")?.addEventListener("change", (event) => {
@@ -870,13 +900,26 @@ async function buildQuestionnairePdfBytes(editor) {
     ["UAC reference number", editor.profile.uacReference]
   ];
   details.forEach(([label, value]) => {
-    ensureSpace(30);
-    page.drawText(safePdfText(label), { x: margin, y, size: 9, font: bold, color: muted });
-    page.drawText(safePdfText(value), { x: margin + 135, y, size: 10.5, font: regular, color: ink, maxWidth: contentWidth - 135 });
-    y -= 18;
-    page.drawLine({ start: { x: margin, y: y + 5 }, end: { x: pageWidth - margin, y: y + 5 }, thickness: 0.6, color: line });
+    const valueLines = wrapPdfText(safePdfText(value), regular, 10.5, contentWidth - 135);
+    let offset = 0;
+    // y is the row's top edge. Text sits inside it, not on a neighbouring rule.
+    // Wrap long names/email addresses; extremely long details continue on a new page.
+    while (offset < valueLines.length) {
+      ensureSpace(42);
+      const capacity = Math.max(1, Math.floor((y - margin - 18) / 15));
+      const rowLines = valueLines.slice(offset, offset + capacity);
+      const baseline = y - 18;
+      page.drawText(safePdfText(label), { x: margin, y: baseline, size: 9, font: bold, color: muted });
+      rowLines.forEach((text, index) => {
+        if (text) page.drawText(text, { x: margin + 135, y: baseline - index * 15, size: 10.5, font: regular, color: ink });
+      });
+      y -= Math.max(34, rowLines.length * 15 + 18);
+      page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.6, color: line });
+      offset += rowLines.length;
+      if (offset < valueLines.length) addPage();
+    }
   });
-  y -= 10;
+  y -= 24;
 
   editor.form.questions.forEach((question) => {
     ensureSpace(95);
@@ -885,7 +928,7 @@ async function buildQuestionnairePdfBytes(editor) {
     drawLines(editor.answers[question.id], { font: regular, size: 10, lineHeight: 14.5, after: 12 });
     ensureSpace(8);
     page.drawLine({ start: { x: margin, y: y + 4 }, end: { x: pageWidth - margin, y: y + 4 }, thickness: 0.7, color: line });
-    y -= 10;
+    y -= 18;
   });
 
   pdfDoc.setTitle("UTS Engineering and IT Questionnaire responses");
@@ -899,7 +942,8 @@ function wrapPdfText(value, font, size, maxWidth) {
   const paragraphs = String(value || "").replace(/\r/g, "").split("\n");
   const lines = [];
   paragraphs.forEach((paragraph, paragraphIndex) => {
-    const words = paragraph.trim().split(/\s+/).filter(Boolean);
+    const words = paragraph.trim().split(/\s+/).filter(Boolean)
+      .flatMap((word) => splitOversizedPdfWord(word, font, size, maxWidth));
     let line = "";
     words.forEach((word) => {
       const candidate = line ? `${line} ${word}` : word;
@@ -914,6 +958,23 @@ function wrapPdfText(value, font, size, maxWidth) {
     if (!words.length || paragraphIndex < paragraphs.length - 1) lines.push("");
   });
   return lines.length ? lines : [""];
+}
+
+function splitOversizedPdfWord(word, font, size, maxWidth) {
+  if (!word || font.widthOfTextAtSize(word, size) <= maxWidth) return [word];
+  const chunks = [];
+  let chunk = "";
+  for (const character of word) {
+    const candidate = `${chunk}${character}`;
+    if (chunk && font.widthOfTextAtSize(candidate, size) > maxWidth) {
+      chunks.push(chunk);
+      chunk = character;
+    } else {
+      chunk = candidate;
+    }
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks;
 }
 
 function safePdfText(value) {
@@ -1045,13 +1106,12 @@ async function refreshPdfPreview() {
 
 function describePdfFields(form) {
   return form.getFields().map((field) => {
-    const typeName = field.constructor?.name || "PDFField";
     const name = field.getName();
-    const type = typeName === "PDFCheckBox" ? "checkbox"
-      : typeName === "PDFDropdown" ? "dropdown"
-        : typeName === "PDFRadioGroup" ? "radio"
-          : typeName === "PDFOptionList" ? "option-list"
-            : typeName === "PDFSignature" ? "signature"
+    const type = field instanceof window.PDFLib.PDFCheckBox ? "checkbox"
+      : field instanceof window.PDFLib.PDFDropdown ? "dropdown"
+        : field instanceof window.PDFLib.PDFRadioGroup ? "radio"
+          : field instanceof window.PDFLib.PDFOptionList ? "option-list"
+            : field instanceof window.PDFLib.PDFSignature ? "signature"
               : "text";
     let value = "";
     let options = [];

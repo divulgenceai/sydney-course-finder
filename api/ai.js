@@ -22,6 +22,11 @@ module.exports = async function aiHandler(req, res) {
     return;
   }
 
+  if (!String(req.headers?.["content-type"] || "").toLowerCase().startsWith("application/json")) {
+    sendJson(res, 415, { ok: false, error: "Content-Type must be application/json" });
+    return;
+  }
+
   try {
     const payload = await readJson(req);
     const result = await generateAiReply(payload);
@@ -671,6 +676,8 @@ function sendJson(res, status, body) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
   res.end(JSON.stringify(body));
 }
 

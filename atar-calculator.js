@@ -123,6 +123,10 @@ function renderCalculator() {
             ${renderEstimateSummary(estimate)}
           </aside>
         </div>
+        <details class="atar-analysis-details calculator-analysis" open>
+          <summary><span><strong>Scaling details and what-if planner</strong><small>Subject strengths and useful mark-lift scenarios</small></span><i aria-hidden="true">⌄</i></summary>
+          <div data-role="analysis">${renderEstimateAnalysis(estimate)}</div>
+        </details>
       </section>
     </main>
   `;
@@ -253,15 +257,11 @@ function renderEstimateSummary(estimate) {
       <p>${target ? `About ${formatNumber(Math.max(0, target.aggregateGap), 1)} more scaled aggregate points from the best 10 units.` : "Enter marks for English and enough subjects to reach 10 eligible units."}</p>
     </div>
     ${estimate.warnings.length ? `<ul class="calc-warnings">${estimate.warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>` : ""}
-    <details class="atar-analysis-details">
-      <summary><span><strong>Scaling details and what-if planner</strong><small>See subject strengths, weak points and mark-lift scenarios</small></span><i aria-hidden="true">⌄</i></summary>
-      <div>
-        ${renderSubjectFocusCard(estimate)}
-        ${renderAtarSmartPlanner(estimate)}
-        ${renderSubjectImpactList(estimate)}
-      </div>
-    </details>
   `;
+}
+
+function renderEstimateAnalysis(estimate) {
+  return `${renderSubjectFocusCard(estimate)}${renderAtarSmartPlanner(estimate)}${renderSubjectImpactList(estimate)}`;
 }
 
 function englishUnitCount(estimate) {
@@ -507,7 +507,7 @@ function renderSubjectImpactList(estimate) {
           </div>
           <div class="subject-impact-meta">
             <span>Historical contribution <strong>${formatNumber(entry.listScaled, 1)} / ${entry.listMax}</strong></span>
-            <span>Neutral-contribution HSC mark <strong>${formatBreakEven(entry.subject)}</strong></span>
+            <span>Break-even HSC mark <strong>${formatBreakEven(entry.subject)}</strong></span>
             <span>${entry.listUnits}/${entry.effectiveUnits} unit${entry.effectiveUnits === 1 ? "" : "s"} ${estimate.ready ? "counted" : "entered"}</span>
           </div>
           <p>${subjectImpactSentence(entry)}</p>
@@ -836,6 +836,8 @@ function updateEstimateDom() {
   const estimate = calculateEstimate(calculatorState.rows);
   const summary = calculatorApp.querySelector("[data-role='summary']");
   if (summary) summary.innerHTML = renderEstimateSummary(estimate);
+  const analysis = calculatorApp.querySelector("[data-role='analysis']");
+  if (analysis) analysis.innerHTML = renderEstimateAnalysis(estimate);
 
   calculatorApp.querySelectorAll("[data-row-id]").forEach((rowElement) => {
     const row = calculatorState.rows.find((item) => item.id === rowElement.dataset.rowId);

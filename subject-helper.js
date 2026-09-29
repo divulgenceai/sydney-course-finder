@@ -374,7 +374,10 @@ function renderSubjectHelperProcessStrip() {
 function renderSmartLookupResult(query, intent, matches) {
   if (!query) return renderEmptyState();
   const creativeFallback = fictionalIntentFallback(query);
-  if ((!intent || intent.kind === "none" || !matches.length) && creativeFallback) {
+  // Named fictional characters are deliberate creative searches. Handle them
+  // before fuzzy course matching can mistake a short alias for an ordinary
+  // degree or career keyword.
+  if (creativeFallback) {
     return renderCreativeFallbackResult(query, creativeFallback);
   }
   if (!intent || intent.kind === "none" || !matches.length) return renderNoMatch(query);
@@ -431,30 +434,51 @@ function fictionalIntentFallback(query) {
   const clean = cleanSearchText(query);
   const fallbackMap = [
     {
-      test: /\b(spider[\s-]?man|spiderman|batman|superhero|hero|vigilante)\b/,
-      label: "public safety, justice and emergency response",
-      search: "criminology police justice paramedic security",
-      confidence: 46,
-      copy: "That sounds fictional, so I am reading it as protecting people, handling pressure and responding to risk.",
+      test: /\b(batman|bruce wayne|dark knight|caped crusader)\b/,
+      label: "forensics, justice, intelligence and leadership",
+      search: "criminology forensic science law intelligence security business",
+      confidence: 58,
+      copy: "I am reading the Batman idea as investigation, forensic evidence, strategy, public safety and leading complex organisations — not the vigilante part.",
       careers: [
-        { title: "Police officer", range: "$70k-$120k" },
-        { title: "Paramedic", range: "$75k-$120k" },
-        { title: "Defence or emergency-response role", range: "$70k-$130k" }
+        { title: "Forensic investigator", range: "$75k-$125k" },
+        { title: "Intelligence analyst", range: "$80k-$135k" },
+        { title: "Detective or police officer", range: "$75k-$125k" },
+        { title: "Business or operations leader", range: "$90k-$180k+" }
       ],
       subjects: [
-        ["English Advanced", "priority", "Strong writing, evidence and communication help in justice, policing and public safety pathways."],
-        ["Legal Studies", "priority", "Best fit for criminology, law enforcement, policy and justice systems."],
-        ["Health and Movement Science (HMS)", "useful", "Useful for fitness, public safety, emergency response and people-focused work."],
-        ["Biology", "useful", "Helpful if the path shifts toward paramedicine, health science or forensic science."],
-        ["Mathematics Standard 2", "useful", "Keeps entry flexible and supports statistics, evidence and operational decision-making."]
+        ["Legal Studies", "priority", "Directly relevant to justice, evidence, rights and law-enforcement systems."],
+        ["English Advanced", "priority", "Supports analytical writing, case reasoning, persuasion and leadership communication."],
+        ["Biology", "useful", "Helpful for forensic science and understanding physical evidence."],
+        ["Mathematics Advanced", "useful", "Useful for data, technology, finance and evidence-based decisions."],
+        ["Business Studies", "useful", "Fits the Bruce Wayne side: organisations, strategy, finance and management."]
       ]
     },
     {
-      test: /\b(iron man|tony stark|inventor|robot hero|robotics hero)\b/,
+      test: /\b(spider[\s-]?man|spiderman|peter parker|miles morales|spider gwen|gwen stacy)\b/,
+      label: "science, engineering, media and community service",
+      search: "biomedical science engineering physics chemistry journalism paramedic",
+      confidence: 57,
+      copy: "I am reading Spider-Man as experimental science, engineering problem-solving, photography or media, and helping people under pressure.",
+      careers: [
+        { title: "Biomedical or materials scientist", range: "$75k-$130k" },
+        { title: "Engineer", range: "$80k-$150k" },
+        { title: "Science journalist or photographer", range: "$65k-$120k" },
+        { title: "Paramedic or emergency responder", range: "$75k-$125k" }
+      ],
+      subjects: [
+        ["Chemistry", "priority", "Strong preparation for materials, biomedical and laboratory science."],
+        ["Physics", "priority", "Useful for engineering, mechanics and understanding how systems behave."],
+        ["Mathematics Advanced", "priority", "Keeps science and engineering pathways open."],
+        ["Biology", "useful", "Fits biomedical, genetics and life-science directions."],
+        ["English Advanced", "useful", "Supports journalism, communication and university reports."]
+      ]
+    },
+    {
+      test: /\b(iron[\s-]?man|tony stark|inventor|robot hero|robotics hero)\b/,
       label: "engineering, robotics and advanced technology",
       search: "engineering robotics software mechatronics computer science",
-      confidence: 52,
-      copy: "I am reading this as building technology, robotics and high-pressure problem solving.",
+      confidence: 62,
+      copy: "I am reading Iron Man as invention, robotics, engineering, software, entrepreneurship and high-pressure technical problem solving.",
       careers: [
         { title: "Mechatronics engineer", range: "$80k-$145k" },
         { title: "Robotics engineer", range: "$85k-$150k" },
@@ -466,6 +490,121 @@ function fictionalIntentFallback(query) {
         ["Engineering Studies", "useful", "Directly relevant to design, prototyping and applied engineering."],
         ["Software Engineering", "useful", "Useful for robotics, automation and technical product work."],
         ["English Advanced", "useful", "Helps with reports, presentations and project communication."]
+      ]
+    },
+    {
+      test: /\b(joker|the joker|harley quinn|harleen quinzel)\b/,
+      label: "psychology, criminology, law and creative storytelling",
+      search: "psychology criminology law forensic science creative writing film",
+      confidence: 48,
+      copy: "I am treating this as an interest in criminal behaviour, psychology, justice and complex fictional characters — never as encouragement to copy harmful behaviour.",
+      careers: [
+        { title: "Psychologist", range: "$85k-$145k" },
+        { title: "Criminologist or policy analyst", range: "$75k-$130k" },
+        { title: "Forensic mental-health professional", range: "$90k-$155k" },
+        { title: "Writer, filmmaker or character designer", range: "$60k-$140k+" }
+      ],
+      subjects: [
+        ["English Advanced", "priority", "Best fit for analysing motives, narratives and persuasive communication."],
+        ["Legal Studies", "priority", "Useful for crime, justice, rights and legal systems."],
+        ["Biology", "useful", "Supports psychology, neuroscience and mental-health pathways."],
+        ["Society and Culture", "useful", "Helps examine behaviour, identity and social systems."],
+        ["Visual Arts", "useful", "Relevant if the interest is character design, film or visual storytelling."]
+      ]
+    },
+    {
+      test: /\b(flash|barry allen|wally west|quick silver|quicksilver)\b/,
+      label: "forensic science, physics and emergency response",
+      search: "forensic science physics chemistry criminology paramedic",
+      confidence: 55,
+      copy: "I am reading the speedster idea as forensic investigation, physics, fast decision-making and emergency response.",
+      careers: [
+        { title: "Forensic scientist", range: "$75k-$125k" },
+        { title: "Physicist or research scientist", range: "$80k-$145k" },
+        { title: "Paramedic", range: "$75k-$125k" }
+      ],
+      subjects: [
+        ["Physics", "priority", "The strongest match for motion, energy and physical systems."],
+        ["Chemistry", "priority", "Useful for forensic laboratory work and evidence analysis."],
+        ["Mathematics Advanced", "priority", "Important for physics, modelling and science degrees."],
+        ["Legal Studies", "useful", "Adds justice-system context for forensic and policing pathways."],
+        ["English Advanced", "useful", "Supports reports, evidence summaries and professional communication."]
+      ]
+    },
+    {
+      test: /\b(daredevil|matt murdock|she hulk|jennifer walters|phoenix wright)\b/,
+      label: "law, advocacy and justice",
+      search: "law legal studies criminology human rights advocacy",
+      confidence: 62,
+      copy: "I am reading this as courtroom advocacy, justice, helping clients and making strong evidence-based arguments.",
+      careers: [
+        { title: "Solicitor or barrister", range: "$80k-$180k+" },
+        { title: "Policy or human-rights adviser", range: "$85k-$145k" },
+        { title: "Criminal justice professional", range: "$75k-$130k" }
+      ],
+      subjects: [
+        ["English Advanced", "priority", "Strong reading, writing and argument skills are central to law."],
+        ["Legal Studies", "priority", "Direct insight into legal institutions, rights and cases."],
+        ["Modern History", "useful", "Builds source analysis, evidence and structured essay skills."],
+        ["Society and Culture", "useful", "Helpful for policy, people and social justice questions."],
+        ["Mathematics Standard 2", "useful", "Keeps numeracy and broad entry options covered."]
+      ]
+    },
+    {
+      test: /\b(superman|clark kent|lois lane|supergirl|kara danvers)\b/,
+      label: "journalism, public service and emergency leadership",
+      search: "journalism communication law international relations emergency management",
+      confidence: 54,
+      copy: "I am reading this as journalism, truth-seeking, public responsibility and helping communities during emergencies.",
+      careers: [
+        { title: "Journalist or communications specialist", range: "$65k-$125k" },
+        { title: "Emergency-management officer", range: "$80k-$135k" },
+        { title: "Public-policy adviser", range: "$85k-$145k" }
+      ],
+      subjects: [
+        ["English Advanced", "priority", "Strong fit for journalism, investigation and public communication."],
+        ["Legal Studies", "useful", "Supports public-interest, policy and justice pathways."],
+        ["Modern History", "useful", "Builds research, evidence and context."],
+        ["Society and Culture", "useful", "Helpful for understanding communities and public issues."],
+        ["Geography", "useful", "Relevant to disasters, cities and emergency planning."]
+      ]
+    },
+    {
+      test: /\b(black panther|t challa|tchalla|shuri|wakanda)\b/,
+      label: "engineering, science, diplomacy and leadership",
+      search: "engineering materials science computer science international relations business",
+      confidence: 61,
+      copy: "I am reading this as advanced technology, materials science, responsible leadership, culture and international diplomacy.",
+      careers: [
+        { title: "Materials or biomedical engineer", range: "$85k-$150k" },
+        { title: "Software or systems engineer", range: "$85k-$155k" },
+        { title: "Diplomat or policy adviser", range: "$85k-$150k" }
+      ],
+      subjects: [
+        ["Mathematics Advanced", "priority", "Keeps engineering, computing and science pathways open."],
+        ["Physics", "priority", "Strong for engineering, energy and advanced technology."],
+        ["Chemistry", "useful", "Relevant to materials and biomedical science."],
+        ["Software Engineering", "useful", "Fits systems, coding and technology design."],
+        ["English Advanced", "useful", "Supports leadership, policy and international communication."]
+      ]
+    },
+    {
+      test: /\b(captain america|steve rogers|wonder woman|diana prince)\b/,
+      label: "defence, international relations and public leadership",
+      search: "international relations law defence security history public policy",
+      confidence: 55,
+      copy: "I am reading this as service, leadership, international affairs, ethics, defence and protecting communities.",
+      careers: [
+        { title: "Defence officer", range: "$75k-$145k" },
+        { title: "International-relations or policy adviser", range: "$85k-$150k" },
+        { title: "Emergency-services leader", range: "$85k-$145k" }
+      ],
+      subjects: [
+        ["English Advanced", "priority", "Supports leadership, policy writing and communication."],
+        ["Modern History", "priority", "Useful for conflict, diplomacy and international context."],
+        ["Legal Studies", "useful", "Relevant to rights, government and justice."],
+        ["Society and Culture", "useful", "Builds understanding of people, ethics and institutions."],
+        ["Health and Movement Science (HMS)", "useful", "Useful for defence, fitness and emergency-service directions."]
       ]
     },
     {
@@ -485,6 +624,82 @@ function fictionalIntentFallback(query) {
         ["Health and Movement Science (HMS)", "useful", "Relevant for exercise science, sport and human performance."],
         ["Mathematics Advanced", "useful", "Supports science, statistics and competitive health pathways."],
         ["English Advanced", "useful", "Useful for essays, professional communication and applications."]
+      ]
+    },
+    {
+      test: /\b(thor|loki|god of thunder|asgard|asgardian)\b/,
+      label: "physics, history, mythology and leadership",
+      search: "physics history archaeology literature international relations",
+      confidence: 46,
+      copy: "I am reading this as an interest in energy and physics, mythology and ancient cultures, or leadership under pressure.",
+      careers: [
+        { title: "Physicist or energy engineer", range: "$80k-$150k" },
+        { title: "Historian, archaeologist or museum professional", range: "$65k-$120k" },
+        { title: "Writer or screen storyteller", range: "$60k-$140k+" }
+      ],
+      subjects: [
+        ["Physics", "priority", "Best fit for energy, electricity and physical systems."],
+        ["Mathematics Advanced", "useful", "Supports physics and engineering pathways."],
+        ["Ancient History", "priority", "Strong match for mythology, civilisations and archaeology."],
+        ["English Advanced", "useful", "Helpful for literature, storytelling and research writing."],
+        ["Visual Arts", "useful", "Relevant to design, film and world-building."]
+      ]
+    },
+    {
+      test: /\b(sherlock holmes|sherlock|hercule poirot|nancy drew|detective conan)\b/,
+      label: "investigation, forensic science and analytical reasoning",
+      search: "forensic science criminology psychology law data science",
+      confidence: 64,
+      copy: "I am reading this as close observation, evidence, logic, human behaviour and solving difficult investigations.",
+      careers: [
+        { title: "Forensic scientist", range: "$75k-$125k" },
+        { title: "Detective or intelligence analyst", range: "$80k-$140k" },
+        { title: "Psychologist or behavioural researcher", range: "$85k-$145k" }
+      ],
+      subjects: [
+        ["Chemistry", "priority", "Useful for forensic analysis and laboratory evidence."],
+        ["Biology", "priority", "Relevant to DNA, anatomy and biological evidence."],
+        ["Legal Studies", "useful", "Adds justice, evidence and procedure context."],
+        ["Mathematics Advanced", "useful", "Builds logic, statistics and data analysis."],
+        ["English Advanced", "useful", "Supports precise reports and reasoned arguments."]
+      ]
+    },
+    {
+      test: /\b(hermione granger|hermione|professor x|charles xavier|jean grey)\b/,
+      label: "research, education, psychology and public policy",
+      search: "psychology education research law public policy science",
+      confidence: 50,
+      copy: "I am reading this as academic curiosity, research, teaching, psychology and using knowledge to help others.",
+      careers: [
+        { title: "Teacher or academic researcher", range: "$80k-$145k" },
+        { title: "Psychologist", range: "$85k-$145k" },
+        { title: "Policy adviser", range: "$85k-$150k" }
+      ],
+      subjects: [
+        ["English Advanced", "priority", "Strong research, argument and communication preparation."],
+        ["Biology", "useful", "Supports psychology, neuroscience and research pathways."],
+        ["Mathematics Advanced", "useful", "Keeps science, statistics and research options open."],
+        ["Legal Studies", "useful", "Relevant to policy, rights and advocacy."],
+        ["Society and Culture", "useful", "Helpful for psychology, education and social research."]
+      ]
+    },
+    {
+      test: /\b(superhero|hero|vigilante|masked hero|comic book hero)\b/,
+      label: "public safety, justice and emergency response",
+      search: "criminology police justice paramedic security",
+      confidence: 42,
+      copy: "That is a broad fictional clue, so I am reading it as protecting people, handling pressure, solving problems and responding to risk.",
+      careers: [
+        { title: "Police officer", range: "$70k-$120k" },
+        { title: "Paramedic", range: "$75k-$120k" },
+        { title: "Defence or emergency-response role", range: "$70k-$130k" }
+      ],
+      subjects: [
+        ["English Advanced", "priority", "Strong writing, evidence and communication help in justice and public safety pathways."],
+        ["Legal Studies", "priority", "Best fit for law enforcement, policy and justice systems."],
+        ["Health and Movement Science (HMS)", "useful", "Useful for fitness, public safety and emergency response."],
+        ["Biology", "useful", "Helpful for paramedicine, health science or forensic science."],
+        ["Mathematics Standard 2", "useful", "Supports statistics, evidence and operational decisions."]
       ]
     }
   ];
@@ -983,6 +1198,7 @@ function runSubjectHelperProcessing(delay = 160) {
   subjectHelperApp.classList.add("is-results-updating");
   document.documentElement.classList.add("is-subject-results-transition");
   const transition = document.startViewTransition(update);
+  transition.ready.catch(() => undefined);
   const cleanUpTransition = () => {
     subjectHelperApp.classList.remove("is-results-updating");
     document.documentElement.classList.remove("is-subject-results-transition");

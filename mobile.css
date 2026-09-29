@@ -893,12 +893,14 @@
   }
 
   .preference-suggestions {
-    position: fixed;
-    top: calc(var(--mobile-header-height) + env(safe-area-inset-top) + 10px);
-    right: 12px;
-    left: 12px;
-    max-height: min(65vh, 520px);
+    position: static;
+    top: auto;
+    right: auto;
+    left: auto;
+    max-height: min(48vh, 340px);
+    margin-top: 7px;
     border-radius: 8px;
+    box-shadow: none;
   }
 
   .preference-suggestions button {
@@ -1157,6 +1159,22 @@
 }
 
 @media (max-width: 430px) {
+  .focus-groups,
+  .subject-impact-title {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .subject-impact-head {
+    display: grid !important;
+    align-items: start !important;
+  }
+
+  .subject-impact-title span {
+    justify-self: start;
+    max-width: none !important;
+    text-align: left !important;
+  }
+
   .early-entry-filters {
     grid-template-columns: 1fr;
   }
@@ -1767,6 +1785,8 @@
     column-gap: 10px;
     row-gap: 4px;
     min-height: 74px;
+    padding: 11px 12px;
+    overflow: hidden;
   }
 
   .preference-suggestions button > .preference-provider-logo {
@@ -1780,6 +1800,7 @@
   .preference-suggestions button > span:nth-child(2) {
     grid-column: 2;
     grid-row: 1;
+    overflow: hidden;
   }
 
   .preference-suggestions button > span:last-child {
@@ -1788,6 +1809,75 @@
     display: flex;
     flex-wrap: wrap;
     gap: 4px 10px;
+    overflow: hidden;
+  }
+}
+
+/* v68: compact, unclipped mobile planning controls. */
+@media (max-width: 820px) {
+  .guide-readiness ol {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-readiness li {
+    grid-template-columns: 24px minmax(0, 1fr);
+    min-height: 36px;
+    align-items: center;
+    justify-items: stretch;
+    padding: 4px 0;
+    border-left: 0;
+    border-top: 1px solid var(--tool-line);
+  }
+
+  .guide-readiness li b {
+    min-width: 0;
+  }
+
+  .preference-suggestions {
+    max-width: 100%;
+    overscroll-behavior: contain;
+  }
+
+  .preference-suggestions button strong,
+  .preference-suggestions button small,
+  .preference-suggestions button b {
+    max-width: 100%;
+  }
+
+  .preference-suggestions button strong {
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .calculator-uac-page .row-breakdown {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+    margin-top: 2px;
+    padding: 10px 11px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 7px;
+  }
+
+  .calculator-uac-page .row-breakdown > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .calculator-uac-page .calc-scaled-output {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .calculator-uac-page .calc-scaled-output strong {
+    flex: none;
+  }
+
+  .calculator-uac-page .calc-break-even-note {
+    overflow-wrap: anywhere;
   }
 }
 

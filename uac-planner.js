@@ -810,6 +810,7 @@ function numericSelectionRank(course) {
 }
 
 function numericTargetAtar() {
+  if (plannerState.targetAtar == null || !String(plannerState.targetAtar).trim()) return null;
   const value = Number(plannerState.targetAtar);
   return Number.isFinite(value) && value >= 0 && value <= 99.95 ? value : null;
 }
@@ -825,7 +826,7 @@ function loadPreferenceDraft() {
     plannerState.preferences = Array.isArray(parsed.preferences)
       ? parsed.preferences.filter((id) => courseById.has(id)).slice(0, 5)
       : [];
-    plannerState.targetAtar = parsed.targetAtar === undefined ? "" : String(parsed.targetAtar);
+    plannerState.targetAtar = parsed.targetAtar == null ? "" : String(parsed.targetAtar);
     plannerState.institution = plannerInstitutions.includes(parsed.institution) ? parsed.institution : "All institutions";
   } catch {
     plannerState.preferences = [];

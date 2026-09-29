@@ -95,7 +95,8 @@ test("University Forms is wired into Tools, clean routes and the offline shell",
   assert.match(server, /clean === "\/university-forms" \|\| clean === "\/forms"/);
   assert.match(vercel, /"source":\s*"\/university-forms"/);
   assert.match(worker, /"\/university-forms":\s*"\/university-forms\.html"/);
-  assert.match(worker, /"\/university-forms-data\.js"/);
+  assert.match(worker, /cacheFirstThenRefresh/);
+  assert.doesNotMatch(worker.match(/const APP_SHELL = \[[\s\S]*?\];/)[0], /pdf-lib|university-forms-data/);
   assert.ok(manifest.shortcuts.some((shortcut) => shortcut.url === "/university-forms"));
 });
 
@@ -115,4 +116,18 @@ test("PDF completion is local-first and warns about signatures and official subm
   assert.match(proxy, /private, no-store/);
   assert.match(proxy, /PDF_MAGIC/);
   assert.match(proxy, /MAX_PDF_BYTES/);
+});
+
+test("Questionnaire answers wrap safely in the preview and generated PDF", () => {
+  const source = read("university-forms.js");
+  const css = read("styles.css");
+
+  assert.match(source, /maxlength="5000"/);
+  assert.match(source, /wrap="soft"/);
+  assert.match(source, /function splitOversizedPdfWord/);
+  assert.match(source, /flatMap\(\(word\) => splitOversizedPdfWord/);
+  assert.match(source, /preview\.textContent = text/);
+  assert.doesNotMatch(source, /if \(preview\) preview\.innerHTML = previewAnswer/);
+  assert.match(css, /\.forms-questionnaire-preview-questions p\s*{[\s\S]*?overflow-wrap:\s*anywhere/);
+  assert.match(css, /\.forms-questionnaire-preview-questions p\s*{[\s\S]*?white-space:\s*pre-wrap/);
 });
